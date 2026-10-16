@@ -14,7 +14,7 @@ A responsive English vocabulary quiz app for Cloudflare Workers + D1. Includes E
    | Build command | Leave empty |
    | Deploy command | `npx wrangler deploy` |
 
-4. Deploy. Wrangler automatically provisions the `DB` D1 binding on the first deployment. The first API request creates the tables and adds a 20-word starter set. No manual SQL migration is needed. The deploy token must have permission to provision D1 databases.
+4. Deploy. Wrangler automatically provisions the `DB` D1 binding on the first deployment. The first API request creates the tables. New installations start with no word sets. No manual SQL migration is needed. The deploy token must have permission to provision D1 databases.
 5. Set the runtime secret **`ADMIN_PASSWORD`** to a strong password of **at least 12 characters**. In your deployed Worker's **Settings → Variables and Secrets**, add a **Secret** with that name and deploy the change. This must be a Worker runtime secret, not only a build environment variable.
 6. Open the Worker URL. Everyone can practice and export word sets. Open **Edit** and enter the password to create, import, change, or delete shared sets.
 
@@ -44,6 +44,19 @@ The shipped configuration intentionally omits a database ID to enable automatic 
 ```
 
 Keep the same binding/database for later deployments to preserve word sets. If auto-provisioning is unavailable for your account or token, create a D1 database in the dashboard, then use the explicit binding above. Do not change the database just to update application code.
+
+## Settings and appearance
+
+Open **Settings** from the sidebar or the gear button in the mobile header.
+
+- Appearance: **Auto**, **Light**, or **Dark**. Auto follows the device theme. Your choice is remembered on this browser and applied before the page is painted.
+- Language: **Auto**, **English**, or **日本語**.
+- Sound: enable or disable quiz effects.
+- Word sets and backups: **Import**, **Export**, and editing tools. Unlock Edit before importing or creating a set. **New set** appears only inside Settings while Edit is unlocked.
+
+Practice cards contain no export checkboxes or New set buttons. The editor keeps backup and creation actions in Settings as well. Focus outlines and focus shadows are suppressed throughout the interface, including modal headings and buttons.
+
+When upgrading from version 1.0, the untouched automatically generated starter set is removed once. A starter set that was edited or renamed is preserved, along with all user-created and imported sets. No example sets are automatically added afterward.
 
 ## Sound files
 
@@ -87,16 +100,16 @@ The quiz content is public to visitors who can access the Worker URL. The editin
 
 ### Export
 
-On the Practice page, select the checkbox on one or more set cards, then choose **Export selected**.
+Open **Settings → Export**, select one or more word sets, then choose **Export selected**.
 
 - One set downloads as one `.json` file.
 - Multiple sets download as a ZIP containing one JSON file per set.
 - Select all exports the complete collection.
-- Edit has **Export draft** to download the current draft, including unsaved changes. An incomplete draft can be backed up but must be completed before it can be imported.
+- Settings has **Export draft** while a draft is open to download the current draft, including unsaved changes. An incomplete draft can be backed up but must be completed before it can be imported.
 
 ### Import
 
-Unlock Edit, choose **Import**, then select one or more JSON/ZIP files. Review the preview and select the sets you want to add. Importing always creates new copies and never overwrites existing sets. Sets are imported together as one database batch. If any selected set is invalid, the whole batch is rejected.
+Unlock Edit, open **Settings → Import**, then select one or more JSON/ZIP files. Review the preview and select the sets you want to add. Importing always creates new copies and never overwrites existing sets. Sets are imported together as one database batch. If any selected set is invalid, the whole batch is rejected.
 
 Supported JSON format:
 
@@ -136,21 +149,20 @@ npm test
 npx wrangler deploy --dry-run
 ```
 
-Tests cover randomized nonrepeating quizzes, distinct distractors, duplicate-meaning handling, bilingual message parity, ZIP/JSON round trips, password authentication and rate limiting, D1 writes and revisions, atomic import validation, and simulated UI flows. Real Safari layout/audio playback and a live Cloudflare account deployment must be checked in the target environment.
+Tests cover randomized nonrepeating quizzes, distinct distractors, duplicate-meaning handling, bilingual message parity, ZIP/JSON round trips, password authentication and rate limiting, D1 writes and revisions, atomic import validation, simulated UI flows, theme switching, modal focus styling, and safe removal of the legacy example. Real Safari layout/audio playback and a live Cloudflare account deployment must be checked in the target environment.
 
 ## Project layout
 
 ```text
 src/worker.js             Worker API, authentication, D1 persistence
-src/seed.js               Starter vocabulary
 public/index.html         Application shell
 public/app.js             Quiz, editor, import/export, sound, celebration
 public/core.js            Shared validation and quiz rules
 public/i18n.js            English/Japanese UI messages
-public/styles.css         Responsive styles
+public/styles.css         Responsive light/dark styles
+public/theme.js           Theme setup before the first paint
 public/assets/audio/      Your three optional MP3 files
 public/vendor/            Bundled fflate module and license
-examples/                 Example word-set JSON
 wrangler.jsonc            Workers deployment and D1 binding
 ```
 

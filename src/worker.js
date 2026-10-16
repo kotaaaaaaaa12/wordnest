@@ -1,5 +1,4 @@
 import { validateSet } from '../public/core.js';
-import { seed } from './seed.js';
 const initialized = new WeakMap();
 const encoder = new TextEncoder();
 const MAX_BODY = 2 * 1024 * 1024;
@@ -12,10 +11,17 @@ async function initialize(db) {
       db.prepare('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY)'),
       db.prepare('CREATE TABLE IF NOT EXISTS login_limits (key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires INTEGER NOT NULL)')
     ]);
-    await db.batch([
-      db.prepare("INSERT OR IGNORE INTO sets (id,title,words,updated_at) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM metadata WHERE key='seeded')").bind('starter-essentials', seed.title, JSON.stringify(seed.words), new Date().toISOString()),
-      db.prepare("INSERT OR IGNORE INTO metadata (key) VALUES ('seeded')")
-    ]);
+    const migrated = await db.prepare("SELECT key FROM metadata WHERE key='remove-default-example-v2'").first();
+    if (!migrated) {
+      const example = await db.prepare("SELECT * FROM sets WHERE id='starter-essentials' AND revision=1").first();
+      const statements = [];
+      if (example && example.title === 'English Essentials · 1–20') {
+        const hash = [...await digest(example.words)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+        if (hash === 'c1bb017001b0c9de9a79aa61bb84c8f4d4d9a3efee953bde681bfcb1fe6e0b9f') statements.push(db.prepare('DELETE FROM sets WHERE id=? AND revision=1 AND title=? AND words=?').bind(example.id, example.title, example.words));
+      }
+      statements.push(db.prepare("INSERT OR IGNORE INTO metadata (key) VALUES ('remove-default-example-v2')"));
+      await db.batch(statements);
+    }
   })().catch(error => { initialized.delete(db); throw error; }));
   await initialized.get(db);
 }

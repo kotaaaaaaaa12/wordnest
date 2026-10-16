@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createQuiz, isCorrect, normalize, questionPool, validateSet, parseImport, portable } from '../public/core.js';
 import { messages } from '../public/i18n.js';
-import { seed } from '../src/seed.js';
+import { seed } from './fixture.js';
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate';
 test('all question counts are unique and contain exactly four distinct answer choices',()=>{
   for(let round=0;round<100;round++)for(const count of [1,5,10,15,20]){
