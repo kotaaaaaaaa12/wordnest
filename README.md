@@ -54,7 +54,7 @@ Open **Settings** from the sidebar or the gear button in the mobile header.
 - Sound: enable or disable quiz effects.
 - Word sets and backups: **Import**, **Export**, and editing tools. Unlock Edit before importing or creating a set. **New set** appears only inside Settings while Edit is unlocked.
 
-Practice cards contain no export checkboxes or New set buttons. The editor keeps backup and creation actions in Settings as well. Focus outlines and focus shadows are suppressed throughout the interface, including modal headings and buttons.
+Practice cards contain no export checkboxes or New set buttons. The editor keeps backup and creation actions in Settings as well. Focus outlines and focus shadows are suppressed throughout the interface, including modal headings and buttons. Direction cards have no sticky hover highlight, and pointer clicks do not leave the selected button focused.
 
 When upgrading from version 1.0, the untouched automatically generated starter set is removed once. A starter set that was edited or renamed is preserved, along with all user-created and imported sets. No example sets are automatically added afterward.
 
@@ -76,10 +76,12 @@ The application requests them as `/assets/audio/correct.mp3`, etc. Missing audio
 2. Choose **Flashcards** or **Quiz**.
 3. Choose **EN → JP** or **JP → EN**. For a quiz, EN → JP uses four choices and JP → EN uses a typed English answer.
 4. For a quiz, choose **5**, **10**, **15**, **All**, or **Custom**. Counts greater than the available unique questions are disabled.
-5. Answer once, review the correct answer and optional explanation, then continue. “I don't know” counts as incorrect.
+5. Answer within **15 seconds per question**, review the correct answer and optional explanation, then continue. “I don't know” counts as incorrect.
 6. Review the score and every question. A perfect score triggers the celebration.
 
 Questions are shuffled without replacement. EN → JP uses three distinct meanings from other entries in the same set. It requires at least four distinct meanings; smaller sets still support JP → EN. An English word may appear only once within a set. In JP → EN, identical Japanese meanings form one question, and every English word mapped to that meaning is accepted. Therefore, the unique question count can differ between modes.
+
+The timer appears above each question with a shrinking green-to-yellow-to-red bar and a small remaining-seconds display. Answering stops the clock; explanations have no time limit. Timing continues while Settings or a confirmation dialog is open and while the page is in the background. If time runs out, the question is marked incorrect, the answer is revealed, and Next becomes available. A late click or typed submission cannot count as correct after the deadline. Every new question starts with a fresh 15 seconds. Flashcards have no time limit.
 
 Typed answers ignore capitalization, surrounding/repeated spaces, full-width Latin characters, and curly-versus-straight apostrophes. Spelling otherwise needs to match. Enter one accepted English word or phrase, not a slash-separated list.
 
@@ -178,7 +180,7 @@ npm test
 npx wrangler deploy --dry-run
 ```
 
-Tests cover randomized nonrepeating quizzes, distinct distractors, duplicate-meaning handling, bilingual message parity, ZIP/JSON round trips, password authentication and rate limiting, D1 writes and revisions, atomic import validation, simulated UI flows, theme switching, modal focus styling, flashcard directions and ordering, swipe/cancel/keyboard navigation, and safe removal of the legacy example. Real Safari layout/audio playback and a live Cloudflare account deployment must be checked in the target environment.
+Tests cover randomized nonrepeating quizzes, distinct distractors, duplicate-meaning handling, bilingual message parity, ZIP/JSON round trips, password authentication and rate limiting, D1 writes and revisions, atomic import validation, simulated UI flows, theme switching, modal focus styling, flashcard directions and ordering, swipe/cancel/keyboard navigation, safe removal of the legacy example, and deadline-based quiz timeouts including background resumption and late submissions. Real Safari layout/audio playback and a live Cloudflare account deployment must be checked in the target environment.
 
 ## Project layout
 
@@ -188,6 +190,7 @@ public/index.html         Application shell
 public/app.js             Quiz, editor, import/export, sound, celebration
 public/core.js            Shared validation and quiz rules
 public/i18n.js            English/Japanese UI messages
+public/icons.js           Selected, bundled Lucide SVG icons
 public/styles.css         Responsive light/dark styles
 public/theme.js           Theme setup before the first paint
 public/assets/audio/      Your three optional MP3 files
@@ -202,3 +205,5 @@ wrangler.jsonc            Workers deployment and D1 binding
 - [Wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/)
 
 fflate is distributed under its MIT license, included in `public/vendor/fflate-LICENSE.txt`.
+
+The interface uses selected [Lucide](https://lucide.dev/) SVG icons with a consistent 24-unit grid and rounded 1.8-unit strokes. Only the icons used by this app are bundled; no CDN or icon font is loaded. Lucide and inherited Feather license notices are included in `public/vendor/lucide-LICENSE.txt`. After changing the selected icon list, run `npm run build:icons` and commit the generated module and favicon.

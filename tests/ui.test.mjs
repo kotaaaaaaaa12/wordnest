@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
+import { icon } from '../public/icons.js';
 import * as core from '../public/core.js';
 import { messages, translator } from '../public/i18n.js';
 import * as zip from 'fflate';
@@ -12,7 +13,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 test('UI: edit, quizzes, flashcards and gestures, theme settings, ZIP and JSON transfers',async()=>{
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/#/',runScripts:'outside-only',pretendToBeVisual:true});
   const w=dom.window;let sets=[{...structuredClone(seed),id:'seed',revision:1}],authed=false,confettiPlays=0,orderRevision=0;const downloads=[];
-  Object.assign(w,core,{messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
+  Object.assign(w,core,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
   w.Audio=class{constructor(url){this.url=url;}play(){if(this.url.includes('confetti'))confettiPlays++;return Promise.resolve();}};
   w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){}});w.HTMLElement.prototype.scrollIntoView=()=>{};
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
