@@ -19,13 +19,24 @@ test('D1 API: bootstrap, auth, CRUD, conflict control, import and session protec
     result=await request('/api/sets','POST',set,cookie,{Origin:'https://attacker.example'});assert.equal(result.response.status,403);
     result=await request('/api/sets','POST',{sets:[set,{...set,title:'Second set'}]},cookie);assert.equal(result.response.status,201);assert.equal(result.data.sets.length,2);
     const saved=result.data.sets[0];assert.equal(saved.revision,1);
+    assert.deepEqual(result.data.orderedIds,result.data.sets.map(s=>s.id));
+    const originalIds=result.data.sets.map(s=>s.id),reversed=[...originalIds].reverse(),initialOrderRevision=result.data.orderRevision;
+    result=await request('/api/sets/order','PUT',{ids:reversed,revision:initialOrderRevision});assert.equal(result.response.status,401);
+    result=await request('/api/sets/order','PUT',{ids:[saved.id,saved.id],revision:initialOrderRevision},cookie);assert.equal(result.response.status,400);
+    result=await request('/api/sets/order','PUT',{ids:[saved.id],revision:initialOrderRevision},cookie);assert.equal(result.response.status,409);
+    result=await request('/api/sets/order','PUT',{ids:[saved.id,'missing-id'],revision:initialOrderRevision},cookie);assert.equal(result.response.status,409);
+    result=await request('/api/sets/order','PUT',{ids:reversed,revision:initialOrderRevision},cookie);assert.equal(result.response.status,200);const orderRevision=result.data.orderRevision;
+    result=await request('/api/sets');assert.deepEqual(result.data.sets.map(s=>s.id),reversed);assert.equal(result.data.orderRevision,orderRevision);
+    result=await request('/api/sets/order','PUT',{ids:originalIds,revision:initialOrderRevision},cookie);assert.equal(result.response.status,409);
+
     result=await request(`/api/sets/${saved.id}`,'PUT',{...set,title:'Updated',revision:1},cookie);assert.equal(result.data.set.revision,2);
     result=await request(`/api/sets/${saved.id}`,'PUT',{...set,revision:1},cookie);assert.equal(result.response.status,409);
     result=await request(`/api/sets/${saved.id}?revision=1`,'DELETE',undefined,cookie);assert.equal(result.response.status,409);
-    result=await request('/api/sets');assert.equal(result.data.sets.find(s=>s.id===saved.id).title,'Updated');
+    result=await request('/api/sets');assert.equal(result.data.sets.find(s=>s.id===saved.id).title,'Updated');assert.deepEqual(result.data.sets.map(s=>s.id),reversed);assert.equal(result.data.orderRevision,orderRevision);
     result=await request(`/api/sets/${saved.id}?revision=2`,'DELETE',undefined,cookie);assert.equal(result.response.status,200);
     result=await request('/api/sets','POST',{sets:[set,{title:'Bad',words:[]}]},cookie);assert.equal(result.response.status,400);
-    result=await request('/api/sets');assert.equal(result.data.sets.length,1);
+    result=await request('/api/sets');assert.equal(result.data.sets.length,1);assert.ok(result.data.orderRevision>orderRevision);
+    result=await request('/api/sets/order','PUT',{ids:reversed,revision:orderRevision},cookie);assert.equal(result.response.status,409);
     result=await request('/api/session','GET',undefined,cookie.slice(0,-4)+'oops');assert.equal(result.data.authenticated,false);
     result=await request('/api/logout','POST',{},cookie);assert.match(result.response.headers.get('set-cookie'),/Max-Age=0/);
     for(let i=0;i<11;i++)result=await request('/api/login','POST',{password:'wrong'});assert.equal(result.response.status,429);

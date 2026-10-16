@@ -111,6 +111,20 @@ After choosing **Flashcards** and a direction, choose **Original order**, **Reve
 
 The quiz content is public to visitors who can access the Worker URL. The editing password protects modifications; it does not hide the vocabulary data.
 
+## Delete and reorder word sets
+
+Unlock **Edit**, then open **Manage sets**.
+
+- Use the up/down buttons to change the display order, then choose **Save order**. The saved order applies to the Practice page, Edit list, and export picker on every browser after loading the current collection.
+- Saving a word's content does not move its set. New sets and imported sets are added above the existing collection.
+- Closing with an unsaved order asks whether to discard that order. Saving keeps the management dialog open.
+- The trash button opens a confirmation. Confirming deletes the set immediately, independently of saving the display order. Cancelling an order change does not restore sets already deleted.
+- Deleting the currently edited set also discards that set's draft, with a warning when it has unsaved edits. Drafts for other sets are preserved.
+- The server validates the complete set list and checks the collection revision. A stale reordering request cannot silently overwrite changes from another browser.
+- Existing installations automatically get a persistent display order based on their previous visible order. No manual migration is required.
+
+Deletion is also available through **Settings → Delete set** while a saved set is open in Edit.
+
 ## Export and import
 
 ### Export

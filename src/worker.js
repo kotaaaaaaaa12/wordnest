@@ -9,6 +9,7 @@ async function initialize(db) {
     await db.batch([
       db.prepare('CREATE TABLE IF NOT EXISTS sets (id TEXT PRIMARY KEY, title TEXT NOT NULL, words TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)'),
       db.prepare('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY)'),
+      db.prepare('CREATE TABLE IF NOT EXISTS set_order (id INTEGER PRIMARY KEY CHECK(id=1), ids TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0)'),
       db.prepare('CREATE TABLE IF NOT EXISTS login_limits (key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires INTEGER NOT NULL)')
     ]);
     const migrated = await db.prepare("SELECT key FROM metadata WHERE key='remove-default-example-v2'").first();
@@ -22,6 +23,7 @@ async function initialize(db) {
       statements.push(db.prepare("INSERT OR IGNORE INTO metadata (key) VALUES ('remove-default-example-v2')"));
       await db.batch(statements);
     }
+    await db.prepare('INSERT OR IGNORE INTO set_order (id,ids,revision) SELECT 1,json_group_array(id),0 FROM (SELECT id FROM sets ORDER BY updated_at DESC,id)').run();
   })().catch(error => { initialized.delete(db); throw error; }));
   await initialized.get(db);
 }
@@ -90,10 +92,19 @@ async function api(request, env) {
   }
   if (path === '/api/logout' && method === 'POST') return reply({ ok: true }, 200, { 'Set-Cookie': cookie(request, '', 0) });
   if (path === '/api/sets' && method === 'GET') {
-    const { results } = await env.DB.prepare('SELECT * FROM sets ORDER BY updated_at DESC, id').all();
-    return reply({ sets: results.map(s => ({ id: s.id, title: s.title, words: JSON.parse(s.words), revision: s.revision, updatedAt: s.updated_at })) });
+    const [rows, ordering] = await env.DB.batch([env.DB.prepare('SELECT * FROM sets ORDER BY updated_at DESC,id'), env.DB.prepare('SELECT ids,revision FROM set_order WHERE id=1')]);
+    const order=ordering.results[0], positions=new Map(JSON.parse(order.ids).map((id,index)=>[id,index]));
+    rows.results.sort((a,b)=>(positions.get(a.id)??Number.MAX_SAFE_INTEGER)-(positions.get(b.id)??Number.MAX_SAFE_INTEGER));
+    return reply({ sets: rows.results.map(s => ({ id: s.id, title: s.title, words: JSON.parse(s.words), revision: s.revision, updatedAt: s.updated_at })), orderRevision: order.revision });
   }
   if (!await authenticated(request, env)) return reply({ error: 'unauthorized' }, 401);
+  if (path === '/api/sets/order' && method === 'PUT') {
+    const data=await body(request);
+    if(!Array.isArray(data.ids) || data.ids.length>200 || data.ids.some(id=>typeof id!=='string' || !/^[a-zA-Z0-9-]{1,80}$/.test(id)) || new Set(data.ids).size!==data.ids.length || !Number.isInteger(data.revision) || data.revision<0) return reply({error:'invalidSetOrder'},400);
+    const ids=JSON.stringify(data.ids);
+    const saved=await env.DB.prepare('UPDATE set_order SET ids=?,revision=revision+1 WHERE id=1 AND revision=? AND (SELECT COUNT(*) FROM sets)=? AND NOT EXISTS (SELECT 1 FROM json_each(?) AS item LEFT JOIN sets ON sets.id=item.value WHERE sets.id IS NULL) RETURNING revision').bind(ids,data.revision,data.ids.length,ids).first();
+    return saved ? reply({ok:true,orderRevision:saved.revision}) : reply({error:'orderConflict'},409);
+  }
   if (path === '/api/sets' && method === 'POST') {
     const data = await body(request);
     const incoming = Array.isArray(data.sets) ? data.sets : [data];
@@ -103,8 +114,11 @@ async function api(request, env) {
     if (total + sets.length > 200) return reply({ error: 'setLimit' }, 400);
     const now = new Date().toISOString();
     const created = sets.map(s => ({ ...s, id: crypto.randomUUID(), revision: 1, updatedAt: now }));
-    await env.DB.batch(created.map(s => env.DB.prepare('INSERT INTO sets (id,title,words,updated_at) VALUES (?,?,?,?)').bind(s.id, s.title, JSON.stringify(s.words), now)));
-    return reply({ sets: created }, 201);
+    const results=await env.DB.batch([
+      ...created.map(s => env.DB.prepare('INSERT INTO sets (id,title,words,updated_at) VALUES (?,?,?,?)').bind(s.id, s.title, JSON.stringify(s.words), now)),
+      env.DB.prepare('UPDATE set_order SET ids=(SELECT json_group_array(value) FROM (SELECT value FROM json_each(?) UNION ALL SELECT value FROM json_each(set_order.ids))),revision=revision+1 WHERE id=1 RETURNING ids,revision').bind(JSON.stringify(created.map(s=>s.id)))
+    ]);
+    return reply({ sets: created, orderRevision:results.at(-1).results[0].revision, orderedIds:JSON.parse(results.at(-1).results[0].ids) }, 201);
   }
   const match = path.match(/^\/api\/sets\/([a-zA-Z0-9-]{1,80})$/);
   if (match && method === 'PUT') {
@@ -117,8 +131,11 @@ async function api(request, env) {
   if (match && method === 'DELETE') {
     const revision = Number(url.searchParams.get('revision'));
     if (!Number.isInteger(revision) || revision < 1) throw new Error('invalidImport');
-    const result = await env.DB.prepare('DELETE FROM sets WHERE id=? AND revision=?').bind(match[1], revision).run();
-    return result.meta.changes ? reply({ ok: true }) : reply({ error: 'conflict' }, 409);
+    const results=await env.DB.batch([
+      env.DB.prepare('UPDATE set_order SET ids=(SELECT json_group_array(value) FROM json_each(set_order.ids) WHERE value<>?),revision=revision+1 WHERE id=1 AND EXISTS(SELECT 1 FROM sets WHERE id=? AND revision=?) RETURNING ids,revision').bind(match[1],match[1],revision),
+      env.DB.prepare('DELETE FROM sets WHERE id=? AND revision=?').bind(match[1],revision)
+    ]);
+    return results[1].meta.changes ? reply({ ok:true, orderRevision:results[0].results[0].revision, orderedIds:JSON.parse(results[0].results[0].ids) }) : reply({ error: 'conflict' },409);
   }
   return reply({ error: 'notFound' }, 404);
 }
