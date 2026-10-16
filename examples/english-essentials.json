@@ -1,0 +1,107 @@
+{
+  "format": "wordnest-set",
+  "version": 1,
+  "title": "English Essentials · 1–20",
+  "words": [
+    {
+      "english": "achieve",
+      "meaning": "達成する",
+      "explanation": "She worked hard to achieve her goal."
+    },
+    {
+      "english": "adapt",
+      "meaning": "適応する",
+      "explanation": "It takes time to adapt to a new environment."
+    },
+    {
+      "english": "allow",
+      "meaning": "許可する",
+      "explanation": "This ticket allows you to enter the museum."
+    },
+    {
+      "english": "benefit",
+      "meaning": "利益・恩恵",
+      "explanation": "Regular exercise has many health benefits."
+    },
+    {
+      "english": "challenge",
+      "meaning": "挑戦・難題",
+      "explanation": "Learning a new language is an exciting challenge."
+    },
+    {
+      "english": "compare",
+      "meaning": "比較する",
+      "explanation": "Compare the two pictures."
+    },
+    {
+      "english": "consider",
+      "meaning": "よく考える・検討する",
+      "explanation": "Please consider all the options."
+    },
+    {
+      "english": "create",
+      "meaning": "創造する・作る",
+      "explanation": "We can create something new together."
+    },
+    {
+      "english": "decide",
+      "meaning": "決める",
+      "explanation": "We need to decide where to go."
+    },
+    {
+      "english": "develop",
+      "meaning": "発展させる・開発する",
+      "explanation": "She wants to develop her skills."
+    },
+    {
+      "english": "effort",
+      "meaning": "努力",
+      "explanation": "Your effort will make a difference."
+    },
+    {
+      "english": "explain",
+      "meaning": "説明する",
+      "explanation": "Can you explain the rules?"
+    },
+    {
+      "english": "improve",
+      "meaning": "改善する・上達する",
+      "explanation": "Practice helps you improve."
+    },
+    {
+      "english": "include",
+      "meaning": "含む",
+      "explanation": "The price includes breakfast."
+    },
+    {
+      "english": "notice",
+      "meaning": "気づく",
+      "explanation": "Did you notice the change?"
+    },
+    {
+      "english": "opportunity",
+      "meaning": "機会",
+      "explanation": "This is a great opportunity to learn."
+    },
+    {
+      "english": "provide",
+      "meaning": "提供する",
+      "explanation": "The hotel provides free Wi-Fi."
+    },
+    {
+      "english": "require",
+      "meaning": "必要とする",
+      "explanation": "This task requires patience."
+    },
+    {
+      "english": "support",
+      "meaning": "支援する",
+      "explanation": "My friends support my decision."
+    },
+    {
+      "english": "understand",
+      "meaning": "理解する",
+      "explanation": "I understand what you mean."
+    }
+  ]
+}

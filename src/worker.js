@@ -1,0 +1,130 @@
+import { validateSet } from '../public/core.js';
+import { seed } from './seed.js';
+const initialized = new WeakMap();
+const encoder = new TextEncoder();
+const MAX_BODY = 2 * 1024 * 1024;
+const SESSION_SECONDS = 30 * 86400;
+const reply = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers } });
+async function initialize(db) {
+  if (!initialized.has(db)) initialized.set(db, (async () => {
+    await db.batch([
+      db.prepare('CREATE TABLE IF NOT EXISTS sets (id TEXT PRIMARY KEY, title TEXT NOT NULL, words TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)'),
+      db.prepare('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY)'),
+      db.prepare('CREATE TABLE IF NOT EXISTS login_limits (key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires INTEGER NOT NULL)')
+    ]);
+    await db.batch([
+      db.prepare("INSERT OR IGNORE INTO sets (id,title,words,updated_at) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM metadata WHERE key='seeded')").bind('starter-essentials', seed.title, JSON.stringify(seed.words), new Date().toISOString()),
+      db.prepare("INSERT OR IGNORE INTO metadata (key) VALUES ('seeded')")
+    ]);
+  })().catch(error => { initialized.delete(db); throw error; }));
+  await initialized.get(db);
+}
+async function digest(value) { return new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value))); }
+async function signingKey(password) { return crypto.subtle.importKey('raw', await digest(`wordnest-session:${password}`), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']); }
+function b64(bytes) { return btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', ''); }
+function unb64(value) { return Uint8Array.from(atob(value.replaceAll('-', '+').replaceAll('_', '/')), c => c.charCodeAt(0)); }
+async function session(password) {
+  const data = `${Math.floor(Date.now() / 1000) + SESSION_SECONDS}.${crypto.randomUUID()}`;
+  const signature = await crypto.subtle.sign('HMAC', await signingKey(password), encoder.encode(data));
+  return `${data}.${b64(new Uint8Array(signature))}`;
+}
+async function authenticated(request, env) {
+  if (!env.ADMIN_PASSWORD || env.ADMIN_PASSWORD.length < 12) return false;
+  const token = (request.headers.get('Cookie') || '').split(';').map(v => v.trim()).find(v => v.startsWith('wordnest_session='))?.slice(17);
+  if (!token) return false;
+  try {
+    const [expires, nonce, signature, extra] = token.split('.');
+    if (extra || !nonce || !signature || !/^\d+$/.test(expires) || Number(expires) <= Date.now() / 1000 || Number(expires) > Date.now() / 1000 + SESSION_SECONDS + 60) return false;
+    return crypto.subtle.verify('HMAC', await signingKey(env.ADMIN_PASSWORD), unb64(signature), encoder.encode(`${expires}.${nonce}`));
+  } catch { return false; }
+}
+function cookie(request, token = '', age = SESSION_SECONDS) {
+  return `wordnest_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${age}${new URL(request.url).protocol === 'https:' ? '; Secure' : ''}`;
+}
+async function body(request) {
+  if (!request.headers.get('Content-Type')?.includes('application/json')) throw Object.assign(new Error('jsonRequired'), { status: 415 });
+  if (Number(request.headers.get('Content-Length')) > MAX_BODY) throw Object.assign(new Error('tooLarge'), { status: 413 });
+  const reader = request.body?.getReader();
+  if (!reader) throw new Error('invalidImport');
+  const chunks = []; let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_BODY) { await reader.cancel(); throw Object.assign(new Error('tooLarge'), { status: 413 }); }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size); let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+  try { return JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new Error('invalidImport'); }
+}
+async function api(request, env) {
+  const url = new URL(request.url), path = url.pathname, method = request.method;
+  if (!['GET', 'POST', 'PUT', 'DELETE'].includes(method)) return reply({ error: 'methodNotAllowed' }, 405);
+  if (method !== 'GET' && ((request.headers.get('Origin') && request.headers.get('Origin') !== url.origin) || request.headers.get('Sec-Fetch-Site') === 'cross-site')) return reply({ error: 'forbidden' }, 403);
+  if (!env.DB) return reply({ error: 'databaseMissing' }, 503);
+  await initialize(env.DB);
+  const configured = Boolean(env.ADMIN_PASSWORD && env.ADMIN_PASSWORD.length >= 12);
+  if (path === '/api/session' && method === 'GET') return reply({ authenticated: await authenticated(request, env), configured });
+  if (path === '/api/login' && method === 'POST') {
+    if (!configured) return reply({ error: 'passwordSetup' }, 503);
+    const data = await body(request);
+    const now = Math.floor(Date.now() / 1000), window = Math.floor(now / 900);
+    const ip = request.headers.get('CF-Connecting-IP') || 'local';
+    const key = b64(await digest(`${ip}:${window}`));
+    await env.DB.prepare('DELETE FROM login_limits WHERE expires < ?').bind(now).run();
+    const limit = await env.DB.prepare('INSERT INTO login_limits (key,attempts,expires) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1 RETURNING attempts').bind(key, now + 900).first();
+    if (limit.attempts > 10) return reply({ error: 'tooManyAttempts' }, 429, { 'Retry-After': '900' });
+    const supplied = typeof data.password === 'string' ? data.password : '';
+    const a = await digest(supplied), b = await digest(env.ADMIN_PASSWORD);
+    let difference = 0; for (let i = 0; i < a.length; i++) difference |= a[i] ^ b[i];
+    if (difference !== 0) return reply({ error: 'wrongPassword' }, 401);
+    await env.DB.prepare('DELETE FROM login_limits WHERE key=?').bind(key).run();
+    return reply({ ok: true }, 200, { 'Set-Cookie': cookie(request, await session(env.ADMIN_PASSWORD)) });
+  }
+  if (path === '/api/logout' && method === 'POST') return reply({ ok: true }, 200, { 'Set-Cookie': cookie(request, '', 0) });
+  if (path === '/api/sets' && method === 'GET') {
+    const { results } = await env.DB.prepare('SELECT * FROM sets ORDER BY updated_at DESC, id').all();
+    return reply({ sets: results.map(s => ({ id: s.id, title: s.title, words: JSON.parse(s.words), revision: s.revision, updatedAt: s.updated_at })) });
+  }
+  if (!await authenticated(request, env)) return reply({ error: 'unauthorized' }, 401);
+  if (path === '/api/sets' && method === 'POST') {
+    const data = await body(request);
+    const incoming = Array.isArray(data.sets) ? data.sets : [data];
+    if (!incoming.length || incoming.length > 100) throw new Error('invalidImport');
+    const sets = incoming.map(validateSet);
+    const { total } = await env.DB.prepare('SELECT COUNT(*) AS total FROM sets').first();
+    if (total + sets.length > 200) return reply({ error: 'setLimit' }, 400);
+    const now = new Date().toISOString();
+    const created = sets.map(s => ({ ...s, id: crypto.randomUUID(), revision: 1, updatedAt: now }));
+    await env.DB.batch(created.map(s => env.DB.prepare('INSERT INTO sets (id,title,words,updated_at) VALUES (?,?,?,?)').bind(s.id, s.title, JSON.stringify(s.words), now)));
+    return reply({ sets: created }, 201);
+  }
+  const match = path.match(/^\/api\/sets\/([a-zA-Z0-9-]{1,80})$/);
+  if (match && method === 'PUT') {
+    const data = await body(request), set = validateSet(data);
+    if (!Number.isInteger(data.revision) || data.revision < 1) throw new Error('invalidImport');
+    const result = await env.DB.prepare('UPDATE sets SET title=?,words=?,revision=revision+1,updated_at=? WHERE id=? AND revision=? RETURNING *').bind(set.title, JSON.stringify(set.words), new Date().toISOString(), match[1], data.revision).first();
+    if (!result) return reply({ error: 'conflict' }, 409);
+    return reply({ set: { id: result.id, title: result.title, words: JSON.parse(result.words), revision: result.revision, updatedAt: result.updated_at } });
+  }
+  if (match && method === 'DELETE') {
+    const revision = Number(url.searchParams.get('revision'));
+    if (!Number.isInteger(revision) || revision < 1) throw new Error('invalidImport');
+    const result = await env.DB.prepare('DELETE FROM sets WHERE id=? AND revision=?').bind(match[1], revision).run();
+    return result.meta.changes ? reply({ ok: true }) : reply({ error: 'conflict' }, 409);
+  }
+  return reply({ error: 'notFound' }, 404);
+}
+export default {
+  async fetch(request, env) {
+    if (!new URL(request.url).pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
+    try { return await api(request, env); }
+    catch (error) {
+      const known = ['invalidTitle', 'invalidWords', 'duplicateWord', 'invalidImport', 'jsonRequired', 'tooLarge'];
+      if (known.includes(error.message)) return reply({ error: error.message }, error.status || 400);
+      console.error('API request failed', error.message);
+      return reply({ error: 'serverError' }, 500);
+    }
+  }
+};
