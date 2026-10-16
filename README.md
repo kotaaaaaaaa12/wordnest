@@ -78,6 +78,9 @@ The application requests them as `/assets/audio/correct.mp3`, etc. Missing audio
 4. For a quiz, choose **5**, **10**, **15**, **All**, or **Custom**. Counts greater than the available unique questions are disabled.
 5. Answer within **15 seconds per question**, review the correct answer and optional explanation, then continue. “I don't know” counts as incorrect.
 6. Review the score and every question. A perfect score triggers the celebration.
+7. If at least one answer was incorrect, choose **Retry missed questions** to practice only those questions, including skipped and timed-out answers. Every retry question gets a fresh 15 seconds. The question order and multiple-choice option positions are shuffled; the original distractors and explanations are preserved, even if only one question needs review.
+
+A retry has its own score and is labeled as a mistake retry. If you still miss questions, retry again to narrow the next round to only the remaining mistakes. A perfect retry triggers the celebration and hides the retry button. **Practice again** returns to the full set's question-count picker.
 
 Questions are shuffled without replacement. EN → JP uses three distinct meanings from other entries in the same set. It requires at least four distinct meanings; smaller sets still support JP → EN. An English word may appear only once within a set. In JP → EN, identical Japanese meanings form one question, and every English word mapped to that meaning is accepted. Therefore, the unique question count can differ between modes.
 
