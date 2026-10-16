@@ -43,6 +43,12 @@ export function createQuiz(set, mode, count) {
   if (mode === 'en-ja' && meanings.length < 4) throw new Error('needFour');
   return shuffle(pool).slice(0, count).map(q => ({ ...q, options: mode === 'en-ja' ? shuffle([q.answer, ...shuffle(meanings.filter(m => normalize(m) !== normalize(q.answer))).slice(0, 3)]) : [] }));
 }
+export function createFlashcards(set, mode, order = 'original') {
+  if (!['en-ja', 'ja-en'].includes(mode)) throw new Error('invalidMode');
+  if (!['original', 'reverse', 'random'].includes(order)) throw new Error('invalidOrder');
+  const words = order === 'random' ? shuffle(set.words) : order === 'reverse' ? [...set.words].reverse() : [...set.words];
+  return words.map(word => ({ ...word, front: mode === 'en-ja' ? word.english : word.meaning, back: mode === 'en-ja' ? word.meaning : word.english }));
+}
 export const isCorrect = (question, answer, mode) => mode === 'en-ja' ? normalize(answer) === normalize(question.answer) : question.accepted.some(w => normalize(w) === normalize(answer));
 export const portable = set => ({ format: 'wordnest-set', version: 1, title: set.title, words: set.words });
 export function parseImport(value) {

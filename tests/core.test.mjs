@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createQuiz, isCorrect, normalize, questionPool, validateSet, parseImport, portable } from '../public/core.js';
+import { createQuiz, createFlashcards, isCorrect, normalize, questionPool, validateSet, parseImport, portable } from '../public/core.js';
 import { messages } from '../public/i18n.js';
 import { seed } from './fixture.js';
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate';
@@ -34,4 +34,20 @@ test('single JSON and multiple zipped JSON sets round trip without server IDs',(
 test('every user-facing message exists in both languages',()=>{
   assert.deepEqual(Object.keys(messages.en).sort(),Object.keys(messages.ja).sort());
   for(const key of Object.keys(messages.en)){const tokens=s=>[...s.matchAll(/\{\w+\}/g)].map(m=>m[0]).sort();assert.deepEqual(tokens(messages.en[key]),tokens(messages.ja[key]),key);}
+});
+
+test('flashcards preserve every registered word in both directions and all three orders',()=>{
+  const original=structuredClone(seed);
+  for(const mode of ['en-ja','ja-en']){
+    const forward=createFlashcards(seed,mode,'original');
+    const reverse=createFlashcards(seed,mode,'reverse');
+    assert.equal(forward.length,seed.words.length);
+    assert.deepEqual(forward.map(c=>c.english),seed.words.map(w=>w.english));
+    assert.deepEqual(reverse.map(c=>c.english),seed.words.map(w=>w.english).reverse());
+    for(const card of forward){assert.equal(card.front,mode==='en-ja'?card.english:card.meaning);assert.equal(card.back,mode==='en-ja'?card.meaning:card.english);}
+    for(let i=0;i<100;i++){const random=createFlashcards(seed,mode,'random');assert.equal(new Set(random.map(c=>c.english)).size,seed.words.length);assert.deepEqual(random.map(c=>c.english).sort(),seed.words.map(w=>w.english).sort());}
+  }
+  assert.deepEqual(seed,original);
+  assert.equal(createFlashcards({words:[{english:'one',meaning:'一つ'}]},'en-ja','original').length,1);
+  assert.throws(()=>createFlashcards(seed,'en-ja','other'),/invalidOrder/);
 });

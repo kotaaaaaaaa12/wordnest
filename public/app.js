@@ -1,4 +1,4 @@
-import { normalize, validateSet, questionPool, uniqueMeanings, createQuiz, isCorrect, portable, parseImport } from './core.js';
+import { normalize, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, isCorrect, portable, parseImport } from './core.js';
 import { messages, translator } from './i18n.js';
 import { zipSync, unzipSync, strToU8, strFromU8 } from './vendor/fflate.js';
 const $ = (s, root = document) => root.querySelector(s);
@@ -20,7 +20,7 @@ function applyTheme() {
 }
 applyTheme();
 systemTheme.addEventListener?.('change', () => { if (themeChoice === 'auto') applyTheme(); });
-const state = { sets: [], loaded:false, loadError:'', authenticated:false, configured:true, route:location.hash.startsWith('#/edit')?'edit':'home', screen:'home', selected:new Set(), search:'', setId:null, mode:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
+const state = { sets: [], loaded:false, loadError:'', authenticated:false, configured:true, route:location.hash.startsWith('#/edit')?'edit':'home', screen:'home', selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
 let soundEnabled = storage.get('wordnest-sound','on') === 'on';
 const sounds = Object.fromEntries(['correct','incorrect','confetti'].map(name => { const audio = new Audio(`/assets/audio/${name}.mp3`); audio.preload='auto'; return [name,audio]; }));
 function play(name) { if (!soundEnabled) return; try { sounds[name].currentTime=0; sounds[name].play()?.catch(()=>{}); } catch {} }
@@ -54,6 +54,9 @@ function render() {
   if (state.loadError) content=`<div class="empty"><h2>${e(state.loadError)}</h2>${btn('retry','reload','primary')}</div>`;
   else if (!state.loaded) content=`<div class="loading"><span class="spinner"></span>${t('loading')}</div>`;
   else if (state.route==='edit') content=editor();
+  else if (state.screen==='activity') content=activities();
+  else if (state.screen==='order') content=orders();
+  else if (state.screen==='cards') content=cardsView();
   else if (state.screen==='mode') content=modes();
   else if (state.screen==='count') content=counts();
   else if (state.screen==='quiz') content=quizView();
@@ -68,18 +71,44 @@ function home() {
 }
 const currentSet=()=>state.sets.find(s=>s.id===state.setId);
 function flowTitle(title,help,step) { return `<div class="flow-title"><div class="eyebrow">${e(currentSet()?.title)}</div>${step?`<span class="pill">${t('step',{n:step})}</span>`:''}<h1>${t(title)}</h1><p>${t(help)}</p></div>`; }
+function activities() {
+  return `<section class="flow"><button class="back" data-action="back-home">${icon('back')}${t('chooseSet')}</button>${flowTitle('chooseActivity','activityHelp',1)}<div class="mode-grid"><button class="mode-card" data-action="activity" data-activity="cards"><span class="activity-icon">${icon('book')}</span><h3>${t('flashcards')}</h3><p>${t('flashcardsHelp')}</p></button><button class="mode-card" data-action="activity" data-activity="quiz"><span class="activity-icon">${icon('edit')}</span><h3>${t('quiz')}</h3><p>${t('quizHelp')}</p></button></div></section>`;
+}
 function modes() {
   const set=currentSet(); if(!set) {state.screen='home';return home();}
-  const enough=uniqueMeanings(set).length>=4;
-  return `<section class="flow"><button class="back" data-action="back-home">${icon('back')}${t('chooseSet')}</button>${flowTitle('chooseMode','modeHelp',1)}<div class="mode-grid"><button class="mode-card" data-action="mode" data-mode="en-ja" ${!enough?'disabled':''}><span class="direction">EN<span class="arrow">→</span>JA</span><h3>${t('choice')}</h3><p>${t('choiceHelp')}</p></button><button class="mode-card" data-action="mode" data-mode="ja-en"><span class="direction">JA<span class="arrow">→</span>EN</span><h3>${t('typing')}</h3><p>${t('typingHelp')}</p></button></div>${!enough?`<p class="notice">${t('needFour')}</p>`:''}</section>`;
+  const cards=state.activity==='cards',enough=cards || uniqueMeanings(set).length>=4;
+  return `<section class="flow"><button class="back" data-action="back-activity">${icon('back')}${t('back')}</button>${flowTitle('chooseDirection',cards?'cardDirectionHelp':'modeHelp',2)}<div class="mode-grid"><button class="mode-card" data-action="mode" data-mode="en-ja" ${!enough?'disabled':''}><span class="direction">EN<span class="arrow">→</span>JP</span><h3>${t(cards?'englishFront':'choice')}</h3><p>${t(cards?'englishFrontHelp':'choiceHelp')}</p></button><button class="mode-card" data-action="mode" data-mode="ja-en"><span class="direction">JP<span class="arrow">→</span>EN</span><h3>${t(cards?'japaneseFront':'typing')}</h3><p>${t(cards?'japaneseFrontHelp':'typingHelp')}</p></button></div>${!enough?`<p class="notice">${t('needFour')}</p>`:''}</section>`;
 }
+function orders() {
+  return `<section class="flow"><button class="back" data-action="back-mode">${icon('back')}${t('back')}</button>${flowTitle('chooseOrder','orderHelp',3)}<span class="pill">${state.mode==='en-ja'?'EN → JP':'JP → EN'}</span><div class="order-grid">${['original','reverse','random'].map(order=>`<button class="mode-card ${state.order===order?'active':''}" data-action="order" data-order="${order}" aria-pressed="${state.order===order}"><h3>${t(order+'Order')}</h3><p>${t(order+'OrderHelp')}</p></button>`).join('')}</div><div class="flow-bottom"><span class="count">${t('wordsCount',{n:currentSet().words.length})}</span><button class="btn primary" data-action="start-cards">${t('startCards')}${icon('arrow')}</button></div></section>`;
+}
+function cardsView() {
+  const deck=state.cards,card=deck.items[deck.index],frontLang=deck.mode==='en-ja'?'en':'ja',backLang=deck.mode==='en-ja'?'ja':'en';
+  return `<section class="flashcards-view"><div class="quiz-meta"><span>${e(deck.title)} · ${deck.mode==='en-ja'?'EN → JP':'JP → EN'}</span><button class="text-btn" data-action="back-order">${t('changeOrder')}</button></div><div class="progress" role="progressbar" aria-label="${t('flashcards')}" aria-valuenow="${deck.index+1}" aria-valuemin="0" aria-valuemax="${deck.items.length}"><span style="width:${(deck.index+1)/deck.items.length*100}%"></span></div><div class="quiz-meta" style="margin-bottom:16px"><span id="card-counter" aria-live="polite">${t('cardOf',{n:deck.index+1,total:deck.items.length})}</span><span>${t(deck.order+'Order')}</span></div><button class="flashcard ${deck.flipped?'is-flipped':''}" data-action="flip-card" aria-pressed="${deck.flipped}" aria-label="${e(t('flipCardLabel',{word:deck.flipped?card.back:card.front}))}"><span class="flashcard-inner"><span class="flashcard-face flashcard-front" aria-hidden="${deck.flipped}"><span class="eyebrow">${t(deck.mode==='en-ja'?'word':'meaning')}</span><span class="flashcard-text" lang="${frontLang}">${e(card.front)}</span><span class="flashcard-hint">${icon('refresh')}${t('tapToFlip')}</span></span><span class="flashcard-face flashcard-back" aria-hidden="${!deck.flipped}"><span class="eyebrow">${t(deck.mode==='en-ja'?'meaning':'word')}</span><span class="flashcard-text" lang="${backLang}">${e(card.back)}</span><span class="flashcard-hint">${icon('refresh')}${t('tapToFlipBack')}</span></span></span></button><div class="flashcard-controls"><button class="btn ghost" data-action="previous-card" ${deck.index===0?'disabled':''}>${icon('back')}${t('previousWord')}</button><span class="count">${deck.index+1} / ${deck.items.length}</span><button class="btn green" data-action="next-card" ${deck.index===deck.items.length-1?'disabled':''}>${t('nextWord')}${icon('arrow')}</button></div><p class="swipe-hint">${t('swipeHelp')}</p>${deck.flipped && card.explanation?`<div class="card-explanation"><small>${t('explanation')}</small><p>${e(card.explanation)}</p></div>`:''}<div class="center-actions cards-exit">${btn('returnHome','back-home','ghost')}</div></section>`;
+}
+function moveCard(direction) {
+  const deck=state.cards;if(state.screen!=='cards' || !deck)return;
+  const next=deck.index+direction;if(next<0 || next>=deck.items.length)return;
+  deck.index=next;deck.flipped=false;render();
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches) $('.flashcard')?.animate?.([{transform:`translateX(${direction*45}px)`,opacity:.3},{transform:'translateX(0)',opacity:1}],{duration:180,easing:'ease-out'});
+}
+function flipCard() {
+  if(state.screen!=='cards' || !state.cards)return;
+  state.cards.flipped=!state.cards.flipped;
+  const card=$('.flashcard'),item=state.cards.items[state.cards.index];
+  card.classList.toggle('is-flipped',state.cards.flipped);card.setAttribute('aria-pressed',String(state.cards.flipped));card.setAttribute('aria-label',t('flipCardLabel',{word:state.cards.flipped?item.back:item.front}));
+  $('.flashcard-front',card).setAttribute('aria-hidden',String(state.cards.flipped));$('.flashcard-back',card).setAttribute('aria-hidden',String(!state.cards.flipped));
+  $('.card-explanation')?.remove();
+  if(state.cards.flipped && item.explanation){const block=document.createElement('div');block.className='card-explanation';block.innerHTML=`<small>${t('explanation')}</small><p>${e(item.explanation)}</p>`;$('.cards-exit').before(block);}
+}
+
 function counts() {
   const max=questionPool(currentSet(),state.mode).length;
-  return `<section class="flow"><button class="back" data-action="back-mode">${icon('back')}${t('back')}</button>${flowTitle('chooseCount','countHelp',2)}<span class="pill">${state.mode==='en-ja'?'EN → JA':'JA → EN'}</span><div class="count-grid">${[5,10,15,'all','custom'].map(n=>`<button class="count-btn ${n==='custom'?state.custom?'active':'':!state.custom && state.countChoice===n?'active':''}" data-action="count" data-count="${n}" ${typeof n==='number'&&n>max?'disabled':''}>${typeof n==='number'?n:t(n)}</button>`).join('')}</div>${state.custom?`<label class="custom-count" for="custom-count">${t('countLabel')}<input id="custom-count" type="number" inputmode="numeric" min="1" max="${max}" step="1" value="${e(state.customValue)}"></label>`:''}${state.error?`<p class="error" role="alert">${e(state.error)}</p>`:''}<div class="flow-bottom"><span class="count">${t('available',{n:max})}</span><button class="btn primary" data-action="start">${t('start')}${icon('arrow')}</button></div></section>`;
+  return `<section class="flow"><button class="back" data-action="back-mode">${icon('back')}${t('back')}</button>${flowTitle('chooseCount','countHelp',3)}<span class="pill">${state.mode==='en-ja'?'EN → JP':'JP → EN'}</span><div class="count-grid">${[5,10,15,'all','custom'].map(n=>`<button class="count-btn ${n==='custom'?state.custom?'active':'':!state.custom && state.countChoice===n?'active':''}" data-action="count" data-count="${n}" ${typeof n==='number'&&n>max?'disabled':''}>${typeof n==='number'?n:t(n)}</button>`).join('')}</div>${state.custom?`<label class="custom-count" for="custom-count">${t('countLabel')}<input id="custom-count" type="number" inputmode="numeric" min="1" max="${max}" step="1" value="${e(state.customValue)}"></label>`:''}${state.error?`<p class="error" role="alert">${e(state.error)}</p>`:''}<div class="flow-bottom"><span class="count">${t('available',{n:max})}</span><button class="btn primary" data-action="start">${t('start')}${icon('arrow')}</button></div></section>`;
 }
 function quizView() {
   const qz=state.quiz,q=qz.questions[qz.index],result=qz.answers[qz.index];
-  return `<section class="quiz"><div class="quiz-meta"><span>${e(qz.title)} · ${qz.mode==='en-ja'?'EN → JA':'JA → EN'}</span><button class="text-btn" data-action="quit">${t('quit')}</button></div><div class="progress" role="progressbar" aria-label="${t('questions')}" aria-valuenow="${qz.index+Number(!!result)}" aria-valuemin="0" aria-valuemax="${qz.questions.length}"><span style="width:${(qz.index+Number(!!result))/qz.questions.length*100}%"></span></div><div class="quiz-meta" style="margin-bottom:16px"><span>${t('questionOf',{n:qz.index+1,total:qz.questions.length})}</span><span>${t('correctCount',{n:qz.answers.filter(a=>a.correct).length})}</span></div><div class="question-card"><div class="eyebrow">${t(qz.mode==='en-ja'?'meaningPrompt':'englishPrompt')}</div><div class="question-word" ${qz.mode==='en-ja'?'lang="en"':'lang="ja"'}>${e(q.prompt)}</div></div>${qz.mode==='en-ja'?`<div class="options">${q.options.map((option,i)=>`<button class="option ${result?(normalize(option)===normalize(q.answer)?'correct':option===result.answer?'wrong':''):''}" data-action="answer" data-option="${i}" ${result?'disabled':''}><span class="letter">${'ABCD'[i]}</span><span lang="ja">${e(option)}</span></button>`).join('')}</div>`:`<form id="answer-form" class="typing-form"><label class="visually-hidden" for="typed-answer">${t('englishPrompt')}</label><input id="typed-answer" lang="en" name="answer" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="done" placeholder="${t('answerPlaceholder')}" value="${e(qz.typed||'')}" ${result?'disabled':''}><button class="btn primary" type="submit" ${result?'disabled':''}>${t('check')}</button></form>`}${result?`<div class="feedback ${result.correct?'':'wrong'}" role="status"><h3>${t(result.correct?'correct':'incorrect')}</h3><p>${t('correctAnswer')}: <strong>${e(qz.mode==='ja-en'?q.accepted.join(' / '):q.answer)}</strong></p>${!result.correct?`<p>${t('yourAnswer')}: ${e(result.answer||t('skipped'))}</p>`:''}${q.explanation?`<small>${t('explanation')}</small><p>${e(q.explanation)}</p>`:''}</div>`:''}<div class="quiz-actions">${!result?btn('skip','skip','ghost'):btn(qz.index===qz.questions.length-1?'results':'next','next','green')}</div></section>`;
+  return `<section class="quiz"><div class="quiz-meta"><span>${e(qz.title)} · ${qz.mode==='en-ja'?'EN → JP':'JP → EN'}</span><button class="text-btn" data-action="quit">${t('quit')}</button></div><div class="progress" role="progressbar" aria-label="${t('questions')}" aria-valuenow="${qz.index+Number(!!result)}" aria-valuemin="0" aria-valuemax="${qz.questions.length}"><span style="width:${(qz.index+Number(!!result))/qz.questions.length*100}%"></span></div><div class="quiz-meta" style="margin-bottom:16px"><span>${t('questionOf',{n:qz.index+1,total:qz.questions.length})}</span><span>${t('correctCount',{n:qz.answers.filter(a=>a.correct).length})}</span></div><div class="question-card"><div class="eyebrow">${t(qz.mode==='en-ja'?'meaningPrompt':'englishPrompt')}</div><div class="question-word" ${qz.mode==='en-ja'?'lang="en"':'lang="ja"'}>${e(q.prompt)}</div></div>${qz.mode==='en-ja'?`<div class="options">${q.options.map((option,i)=>`<button class="option ${result?(normalize(option)===normalize(q.answer)?'correct':option===result.answer?'wrong':''):''}" data-action="answer" data-option="${i}" ${result?'disabled':''}><span class="letter">${'ABCD'[i]}</span><span lang="ja">${e(option)}</span></button>`).join('')}</div>`:`<form id="answer-form" class="typing-form"><label class="visually-hidden" for="typed-answer">${t('englishPrompt')}</label><input id="typed-answer" lang="en" name="answer" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="done" placeholder="${t('answerPlaceholder')}" value="${e(qz.typed||'')}" ${result?'disabled':''}><button class="btn primary" type="submit" ${result?'disabled':''}>${t('check')}</button></form>`}${result?`<div class="feedback ${result.correct?'':'wrong'}" role="status"><h3>${t(result.correct?'correct':'incorrect')}</h3><p>${t('correctAnswer')}: <strong>${e(qz.mode==='ja-en'?q.accepted.join(' / '):q.answer)}</strong></p>${!result.correct?`<p>${t('yourAnswer')}: ${e(result.answer||t('skipped'))}</p>`:''}${q.explanation?`<small>${t('explanation')}</small><p>${e(q.explanation)}</p>`:''}</div>`:''}<div class="quiz-actions">${!result?btn('skip','skip','ghost'):btn(qz.index===qz.questions.length-1?'results':'next','next','green')}</div></section>`;
 }
 function resultView() {
   const qz=state.quiz,correct=qz.answers.filter(a=>a.correct).length,perfect=correct===qz.questions.length;
@@ -112,7 +141,7 @@ async function navigate(route, fromHistory=false) {
   if(state.saving)return;
   if(!await discardGuard()) { if(fromHistory)history.pushState(null,'',state.route==='edit'?'#/edit':'#/');return; }
   if(state.screen==='quiz' && !await confirmDialog('quitTitle',t('quitHelp'),'confirmQuit')) { if(fromHistory)history.pushState(null,'',state.route==='edit'?'#/edit':'#/');return; }
-  state.route=route;state.screen='home';state.quiz=null;state.dirty=false;state.draft=null;state.error='';
+  state.route=route;state.screen='home';state.quiz=null;state.cards=null;state.dirty=false;state.draft=null;state.error='';
   if(!fromHistory)history.pushState(null,'',route==='edit'?'#/edit':'#/');
   render();window.scrollTo(0,0);
 }
@@ -212,10 +241,18 @@ const actions={
   settings:settingsDialog,
   sound(){soundEnabled=!soundEnabled;storage.set('wordnest-sound',soundEnabled?'on':'off');render();},
   async reload(){if(!await discardGuard())return;state.dirty=false;state.draft=null;state.selected.clear();state.loaded=false;state.screen='home';state.quiz=null;await load();},
-  open(button){state.setId=button.dataset.id;state.screen='mode';state.error='';render();window.scrollTo(0,0);},
-  'back-home'(){state.screen='home';state.quiz=null;cancelAnimationFrame(confettiFrame);const c=$('#confetti');c.getContext('2d')?.clearRect(0,0,c.width,c.height);render();window.scrollTo(0,0);},
+  open(button){state.setId=button.dataset.id;state.screen='activity';state.cards=null;state.error='';render();window.scrollTo(0,0);},
+  'back-home'(){state.screen='home';state.quiz=null;state.cards=null;cancelAnimationFrame(confettiFrame);const c=$('#confetti');c.getContext('2d')?.clearRect(0,0,c.width,c.height);render();window.scrollTo(0,0);},
+  'back-activity'(){state.screen='activity';state.error='';render();},
+  activity(button){state.activity=button.dataset.activity;state.screen='mode';state.order='original';state.error='';render();},
+  order(button){state.order=button.dataset.order;render();},
+  'start-cards'(){const set=currentSet();state.cards={title:set.title,mode:state.mode,order:state.order,index:0,flipped:false,items:createFlashcards(set,state.mode,state.order)};state.screen='cards';render();window.scrollTo(0,0);},
+  'back-order'(){state.screen='order';state.cards=null;render();},
+  'flip-card':flipCard,
+  'next-card'(){moveCard(1);},
+  'previous-card'(){moveCard(-1);},
   'back-mode'(){state.screen='mode';state.error='';render();},
-  mode(button){state.mode=button.dataset.mode;state.screen='count';const max=questionPool(currentSet(),state.mode).length;state.count=Math.min(5,max);state.countChoice=max<5?'all':5;state.custom=false;state.error='';render();},
+  mode(button){state.mode=button.dataset.mode;if(state.activity==='cards'){state.screen='order';render();return;}state.screen='count';const max=questionPool(currentSet(),state.mode).length;state.count=Math.min(5,max);state.countChoice=max<5?'all':5;state.custom=false;state.error='';render();},
   count(button){const value=button.dataset.count;state.custom=value==='custom';if(!state.custom){state.countChoice=value==='all'?'all':Number(value);state.count=value==='all'?questionPool(currentSet(),state.mode).length:Number(value);}state.error='';render();},
   start(){const max=questionPool(currentSet(),state.mode).length,count=state.custom?Number(state.customValue):state.count;if(!Number.isInteger(count)||count<1||count>max){state.error=t('invalidCount',{n:max});render();return;}try{const set=currentSet();state.quiz={title:set.title,mode:state.mode,questions:createQuiz(set,state.mode,count),index:0,answers:[],typed:''};state.screen='quiz';state.error='';render();window.scrollTo(0,0);}catch(err){state.error=message(err);render();}},
   answer(button){submitAnswer(state.quiz.questions[state.quiz.index].options[Number(button.dataset.option)]);},
@@ -235,9 +272,39 @@ const actions={
   async logout(){if(!await discardGuard())return;try{await api('/api/logout',{method:'POST'});state.authenticated=false;state.draft=null;state.dirty=false;state.error='';render();}catch(err){toast(message(err));}},
   import:importDialog,
 };
+let cardGesture=null, suppressFlipUntil=0;
+document.addEventListener('pointerdown',event=>{
+  const target=event.target.closest('.flashcard');
+  if(!target || state.screen!=='cards' || modal.open || event.isPrimary===false || event.button>0)return;
+  cardGesture={target,id:event.pointerId,x:event.clientX,y:event.clientY};
+});
+document.addEventListener('pointermove',event=>{
+  const gesture=cardGesture;if(!gesture || event.pointerId!==gesture.id)return;
+  const dx=event.clientX-gesture.x,dy=event.clientY-gesture.y;
+  if(Math.abs(dx)>12 && Math.abs(dx)>Math.abs(dy)*1.2){
+    event.preventDefault();
+    try{gesture.target.setPointerCapture?.(event.pointerId);}catch{}
+    gesture.target.style.transform=`translateX(${Math.max(-80,Math.min(80,dx*.4))}px) rotate(${Math.max(-3,Math.min(3,dx*.015))}deg)`;
+  }
+},{passive:false});
+function finishCardGesture(event,cancelled=false){
+  const gesture=cardGesture;if(!gesture || event.pointerId!==gesture.id)return;
+  cardGesture=null;gesture.target.style.transform='';
+  const dx=event.clientX-gesture.x,dy=event.clientY-gesture.y;
+  if(cancelled || Math.abs(dx)>12 || Math.abs(dy)>12)suppressFlipUntil=Date.now()+400;
+  if(cancelled || !gesture.target.isConnected || state.screen!=='cards' || modal.open)return;
+  if(Math.abs(dx)>=48 && Math.abs(dx)>Math.abs(dy)*1.2)moveCard(dx<0?1:-1);
+}
+document.addEventListener('pointerup',event=>finishCardGesture(event));
+document.addEventListener('pointercancel',event=>finishCardGesture(event,true));
+document.addEventListener('keydown',event=>{
+  if(state.screen!=='cards' || modal.open || event.altKey || event.metaKey || event.ctrlKey || event.target.closest('input,textarea,select,[contenteditable="true"]'))return;
+  if(event.key==='ArrowLeft' || event.key==='ArrowRight'){event.preventDefault();moveCard(event.key==='ArrowRight'?1:-1);}
+  else if((event.key===' ' || event.key==='Enter') && (event.target===document.body || event.target.closest('.flashcard'))){event.preventDefault();if(!event.repeat)flipCard();}
+});
 document.addEventListener('click',async event=>{
   const nav=event.target.closest('[data-nav]');if(nav){event.preventDefault();await navigate(nav.dataset.nav);return;}
-  const button=event.target.closest('[data-action]');if(button && !button.disabled){try{await actions[button.dataset.action]?.(button);}catch(err){toast(message(err));}}
+  const button=event.target.closest('[data-action]');if(button && !button.disabled){if(button.dataset.action==='flip-card' && Date.now()<suppressFlipUntil)return;try{await actions[button.dataset.action]?.(button);}catch(err){toast(message(err));}}
   if(event.detail>0 && event.target.closest('button'))document.activeElement?.closest('button')?.blur();
 });
 document.addEventListener('input',event=>{const el=event.target;if(el.id==='search'){state.search=el.value;render();}else if(el.id==='custom-count')state.customValue=el.value;else if(el.id==='typed-answer')state.quiz.typed=el.value;else if(el.id==='set-title'){state.draft.title=el.value;markDirty();}else if(el.dataset.word!==undefined){state.draft.words[Number(el.dataset.word)][el.dataset.field]=el.value;markDirty();}});

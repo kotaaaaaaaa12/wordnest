@@ -1,6 +1,6 @@
 # Wordnest
 
-A responsive English vocabulary quiz app for Cloudflare Workers + D1. Includes English/Japanese UI, a password-protected editor, shared word sets, and JSON/ZIP import and export. No container, R2 bucket, or email service is needed.
+A responsive English vocabulary quiz and flashcard app for Cloudflare Workers + D1. Includes English/Japanese UI, a password-protected editor, shared word sets, and JSON/ZIP import and export. No container, R2 bucket, or email service is needed.
 
 ## Deploy with Cloudflare Workers
 
@@ -73,14 +73,29 @@ The application requests them as `/assets/audio/correct.mp3`, etc. Missing audio
 ## Practice
 
 1. Choose a word set.
-2. Choose **EN → JA** (four choices) or **JA → EN** (typed answer).
-3. Choose **5**, **10**, **15**, **All**, or **Custom**. Counts greater than the available unique questions are disabled.
-4. Answer once, review the correct answer and optional explanation, then continue. “I don't know” counts as incorrect.
-5. Review the score and every question. A perfect score triggers the celebration.
+2. Choose **Flashcards** or **Quiz**.
+3. Choose **EN → JP** or **JP → EN**. For a quiz, EN → JP uses four choices and JP → EN uses a typed English answer.
+4. For a quiz, choose **5**, **10**, **15**, **All**, or **Custom**. Counts greater than the available unique questions are disabled.
+5. Answer once, review the correct answer and optional explanation, then continue. “I don't know” counts as incorrect.
+6. Review the score and every question. A perfect score triggers the celebration.
 
-Questions are shuffled without replacement. EN → JA uses three distinct meanings from other entries in the same set. It requires at least four distinct meanings; smaller sets still support JA → EN. An English word may appear only once within a set. In JA → EN, identical Japanese meanings form one question, and every English word mapped to that meaning is accepted. Therefore, the unique question count can differ between modes.
+Questions are shuffled without replacement. EN → JP uses three distinct meanings from other entries in the same set. It requires at least four distinct meanings; smaller sets still support JP → EN. An English word may appear only once within a set. In JP → EN, identical Japanese meanings form one question, and every English word mapped to that meaning is accepted. Therefore, the unique question count can differ between modes.
 
 Typed answers ignore capitalization, surrounding/repeated spaces, full-width Latin characters, and curly-versus-straight apostrophes. Spelling otherwise needs to match. Enter one accepted English word or phrase, not a slash-separated list.
+
+## Flashcards
+
+After choosing **Flashcards** and a direction, choose **Original order**, **Reverse order**, or **Random order**, then open the deck.
+
+- Tap or click the card to flip between its front and back.
+- EN → JP shows English on the front and Japanese on the back. JP → EN reverses these sides.
+- Swipe left for the next word and right for the previous word. Previous/Next buttons and the left/right arrow keys also work.
+- Press Space or Enter while the card is focused to flip it. A swipe does not also trigger a flip; vertical scrolling and cancelled gestures do not advance the deck.
+- Every new card starts on its front. The first and last cards have fixed boundaries; navigation does not wrap around.
+- All registered words are included once, even when several English words share a meaning. The four-distinct-meanings requirement applies only to the multiple-choice quiz.
+- Random order is shuffled once when the deck opens. Moving backward revisits the same cards in the same session order.
+- Optional explanations appear after revealing the answer. Change order returns to the order picker; Return home exits the deck.
+- Viewing or shuffling a deck does not modify the saved word order. Flashcards do not produce quiz scores or celebrations.
 
 ## Editing and shared storage
 
@@ -149,7 +164,7 @@ npm test
 npx wrangler deploy --dry-run
 ```
 
-Tests cover randomized nonrepeating quizzes, distinct distractors, duplicate-meaning handling, bilingual message parity, ZIP/JSON round trips, password authentication and rate limiting, D1 writes and revisions, atomic import validation, simulated UI flows, theme switching, modal focus styling, and safe removal of the legacy example. Real Safari layout/audio playback and a live Cloudflare account deployment must be checked in the target environment.
+Tests cover randomized nonrepeating quizzes, distinct distractors, duplicate-meaning handling, bilingual message parity, ZIP/JSON round trips, password authentication and rate limiting, D1 writes and revisions, atomic import validation, simulated UI flows, theme switching, modal focus styling, flashcard directions and ordering, swipe/cancel/keyboard navigation, and safe removal of the legacy example. Real Safari layout/audio playback and a live Cloudflare account deployment must be checked in the target environment.
 
 ## Project layout
 
