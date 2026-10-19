@@ -65,13 +65,16 @@ const routeHref=route=>route==='home'?'#/':`#/${route}`;
 function shell(content) {
   return `<div class="app-shell"><aside class="sidebar"><a href="#/" data-nav="home" class="brand"><span class="brand-mark">${icon('book')}</span>wordnest<span style="color:var(--accent)">.</span></a><nav class="nav" style="--nav-count:${state.authenticated?5:4}" aria-label="${t('home')}"><a href="#/" data-nav="home" class="${state.route==='home'?'active':''}">${icon('book')}${t('home')}</a><a href="#/stats" data-nav="stats" class="${state.route==='stats'?'active':''}">${icon('stats')}${t('stats')}</a><a href="#/rankings" data-nav="rankings" class="${state.route==='rankings'?'active':''}">${icon('trophy')}${t('rankings')}</a><a href="#/guide" data-nav="guide" class="${state.route==='guide'?'active':''}">${icon('guide')}${t('guide')}</a>${state.authenticated?`<a href="#/edit" data-nav="edit" class="${state.route==='edit'?'active':''}">${icon('edit')}${t('edit')}</a>`:''}</nav><div class="sidebar-bottom"><button class="settings-trigger" data-action="settings">${icon('settings')}${t('settings')}</button></div></aside><main class="main">${content}</main></div>`;
 }
+function isTextEntry(element) {
+  return element?.tagName==='TEXTAREA' || (element?.tagName==='INPUT' && ['text','search','email','password','tel','url','number'].includes(element.type));
+}
 function render() {
   learning.tick();
   if(state.sessionKnown && state.route==='edit' && !state.authenticated){state.route='home';state.screen='home';state.quiz=null;state.cards=null;state.collection=null;history.replaceState(null,'',routeHref('home'));}
   if($('#weak-picker'))state.weakPickerOpen=$('#weak-picker').open;
   document.title=`Wordnest — ${t(state.route==='home'?'home':state.route)}`;
   const active = document.activeElement;
-  const focusId = active?.id;
+  const focusId = isTextEntry(active) ? active.id : null;
   const selection = active && typeof active.selectionStart==='number' ? [active.selectionStart,active.selectionEnd] : null;
   let content;
   if (state.route==='stats') content=statsView();
@@ -93,7 +96,7 @@ function render() {
   refreshAdminSettings();
   refreshRankingSettings();
   if(state.screen!=='quiz' || state.route!=='home')stopQuizClock();
-  if (focusId && document.getElementById(focusId) && !['language'].includes(focusId)) { const el=document.getElementById(focusId); el.focus({preventScroll:true}); if(selection && el.setSelectionRange) el.setSelectionRange(...selection); }
+  if (focusId) { const el=document.getElementById(focusId); if(el && document.activeElement!==el){el.focus({preventScroll:true});if(selection && el.setSelectionRange)el.setSelectionRange(...selection);} }
 }
 function learningScreen() { return state.route==='home' && ['quiz','cards'].includes(state.screen); }
 function syncLearning() { learning.setActive(learningScreen() && document.visibilityState==='visible' && document.hasFocus() && !$('#modal')?.open); }
@@ -336,7 +339,7 @@ function dialog(content, setup) {
     modal.innerHTML=content;
     modal.setAttribute('aria-labelledby','modal-title');
     let settled=false;
-    const finish=value=>{ if(settled)return; settled=true; modal.close();syncLearning(); modal.oncancel=null; modal.onclick=null; modal.onchange=null; modal.onsubmit=null; if(previous?.isConnected) previous.focus({preventScroll:true}); resolve(value); };
+    const finish=value=>{ if(settled)return; settled=true; modal.close();syncLearning(); modal.oncancel=null; modal.onclick=null; modal.onchange=null; modal.onsubmit=null; if(previous?.isConnected){if(isTextEntry(previous))previous.focus({preventScroll:true});else if(document.activeElement===previous)previous.blur();} resolve(value); };
     modal.oncancel=event=>{event.preventDefault();finish(false);};
     modal.onclick=event=>{const button=event.target.closest('[data-dialog]');if(button)finish(button.dataset.dialog==='confirm');};
     learning.setActive(false);modal.showModal(); $('#modal-title',modal)?.focus({preventScroll:true});
@@ -466,6 +469,7 @@ async function settingsDialog() {
     const action=await dialog(settingsContent(),finish=>{
       modal.scrollTop=scroll;
       modal.onchange=event=>{
+        if(event.target.tagName==='SELECT' && event.target.value===({'theme-choice':themeChoice,'light-palette':lightPalette,'dark-palette':darkPalette,'settings-language':languageChoice})[event.target.id])return;
         if(event.target.id==='theme-choice'){themeChoice=event.target.value;storage.set('wordnest-theme',themeChoice);applyTheme();}
         else if(event.target.id==='light-palette'){lightPalette=event.target.value;storage.set('wordnest-light-palette',lightPalette);applyTheme();}
         else if(event.target.id==='dark-palette'){darkPalette=event.target.value;storage.set('wordnest-dark-palette',darkPalette);applyTheme();}
@@ -650,7 +654,14 @@ document.addEventListener('click',async event=>{
   if(event.detail>0 && event.target.closest('button'))document.activeElement?.closest('button')?.blur();
 });
 document.addEventListener('input',event=>{const el=event.target;if(el.id==='word-search'){state.wordSearch=el.value;state.listLimit=100;render();}else if(el.id==='search'){state.search=el.value;render();}else if(el.id==='custom-count')state.customValue=el.value;else if(el.id==='typed-answer')state.quiz.typed=el.value;else if(el.id==='set-title'){state.draft.title=el.value;markDirty();}else if(el.dataset.word!==undefined){state.draft.words[Number(el.dataset.word)][el.dataset.field]=el.value;markDirty();}});
-document.addEventListener('change',event=>{const el=event.target;if(el.id==='ranking-metric'){state.rankingMetric=el.value;refreshRankings();}else if(el.id==='weak-set'){state.weakSetId=el.value;state.listLimit=100;render();}else if(el.id==='favorite-set'){state.favoriteSet=el.value;state.listLimit=100;render();}else if(el.dataset.weakSet!==undefined){if(el.checked)state.weakIds.add(el.dataset.weakSet);else state.weakIds.delete(el.dataset.weakSet);state.listLimit=100;render();}else if(el.id==='language'){languageChoice=el.value;storage.set('wordnest-language',languageChoice);setLanguage();render();}else if(el.dataset.select){if(el.checked)state.selected.add(el.dataset.select);else state.selected.delete(el.dataset.select);render();}});
+// Blur before change handlers redraw the app; never focus a committed native picker again.
+document.addEventListener('change',event=>{
+  const select=event.target;if(select.tagName!=='SELECT')return;
+  select.blur();
+  requestAnimationFrame(()=>{if(document.activeElement===select)select.blur();});
+},true);
+document.addEventListener('keyup',event=>{if(event.key==='Escape' && event.target.tagName==='SELECT')event.target.blur();});
+document.addEventListener('change',event=>{const el=event.target;if(el.id==='ranking-metric'){if(state.rankingMetric===el.value)return;state.rankingMetric=el.value;refreshRankings();}else if(el.id==='weak-set'){if(state.weakSetId===el.value)return;state.weakSetId=el.value;state.listLimit=100;render();}else if(el.id==='favorite-set'){if(state.favoriteSet===el.value)return;state.favoriteSet=el.value;state.listLimit=100;render();}else if(el.dataset.weakSet!==undefined){if(el.checked)state.weakIds.add(el.dataset.weakSet);else state.weakIds.delete(el.dataset.weakSet);state.listLimit=100;render();}else if(el.id==='language'){languageChoice=el.value;storage.set('wordnest-language',languageChoice);setLanguage();render();}else if(el.dataset.select){if(el.checked)state.selected.add(el.dataset.select);else state.selected.delete(el.dataset.select);render();}});
 document.addEventListener('submit',async event=>{
   if(event.target.id==='answer-form'){event.preventDefault();if(!state.quiz.typed.trim())return;submitAnswer(state.quiz.typed);}
   if(event.target.id==='admin-login-form'){event.preventDefault();await submitAdmin(event.target);}

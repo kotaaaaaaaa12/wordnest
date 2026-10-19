@@ -34,7 +34,7 @@ test('saved palettes apply before app startup, preserve both defaults, and rejec
 test('settings save independent light/dark palettes, auto follows the system, and localized navigation keeps its new order',async()=>{
   const {w,system,listeners}=create(),find=s=>w.document.querySelector(s);
   async function click(selector){find(selector).click();await tick();await tick();}
-  function select(selector,value){find(selector).value=value;find(selector).dispatchEvent(new w.Event('change',{bubbles:true}));}
+  function select(selector,value){const picker=find(selector);picker.focus();picker.value=value;picker.dispatchEvent(new w.Event('change',{bubbles:true}));assert.notEqual(w.document.activeElement.tagName,'SELECT');}
   try{
     w.eval(boot);w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();
     assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.dataset.nav),['home','stats','rankings','guide']);

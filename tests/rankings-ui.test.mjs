@@ -19,6 +19,8 @@ async function waitFor(check,label){for(let i=0;i<400;i++){if(check())return;awa
 async function harness(mf,{lang='en',hash='#/',preferences,seed=false}={}){
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/'+hash,runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window,requests=[];
   Object.assign(w,core,statistics,personalTools,rankingTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:false})});w.document.hasFocus=()=>true;
+  // Keep periodic background refresh separate from these interaction assertions.
+  const timeout=w.setTimeout.bind(w);w.setTimeout=(callback,delay,...args)=>callback?.name==='learningHeartbeat'?0:timeout(callback,delay,...args);
   w.Audio=class{play(){return Promise.resolve();}};w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){}});
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
   w.localStorage.setItem('wordnest-language',lang);if(preferences)w.localStorage.setItem(rankingTools.RANKING_KEY,JSON.stringify(preferences));
@@ -50,7 +52,8 @@ test('rankings show the same eight formatted values as Statistics and support re
     await click('.nav [data-nav="stats"]');const values=Object.fromEntries(Object.values(rankingTools.rankingMetrics).map(key=>[key,find(`[data-stat="${key}"]`).textContent]));
     await click('.nav [data-nav="rankings"]');await waitFor(()=>!find('.ranking-loading'),'rankings loaded');assert.equal(w.document.title,'Wordnest — Rankings');assert.equal(find('.ranking-name').textContent,'<b>Chris</b>');assert.equal(find('.ranking-name b'),null);
     for(const [metric,key] of Object.entries(rankingTools.rankingMetrics)){
-      find('#ranking-metric').value=metric;find('#ranking-metric').dispatchEvent(new w.Event('change',{bubbles:true}));await waitFor(()=>!find('.ranking-loading'),metric);
+      find('#ranking-metric').focus();find('#ranking-metric').value=metric;find('#ranking-metric').dispatchEvent(new w.Event('change',{bubbles:true}));assert.notEqual(w.document.activeElement.tagName,'SELECT');await waitFor(()=>!find('.ranking-loading'),metric);assert.notEqual(w.document.activeElement.tagName,'SELECT');
+      const requests=h.requests.length;find('#ranking-metric').dispatchEvent(new w.Event('change',{bubbles:true}));await tick();await tick();assert.equal(h.requests.length,requests,'unchanged selection must not issue another request');
       if(metric==='accuracy'){assert.equal(find('.ranking-self'),null);assert.ok(find('.rankings-view').textContent.includes('30'));}
       else assert.equal(find('.ranking-self td:last-child').textContent,values[key],metric);
     }
