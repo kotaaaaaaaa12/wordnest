@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { icon } from '../public/icons.js';
 import * as core from '../public/core.js';
+import * as statistics from '../public/stats.js';
 import { messages, translator } from '../public/i18n.js';
 import * as zip from 'fflate';
 import { seed } from './fixture.js';
@@ -12,8 +13,8 @@ const source=(await readFile('public/app.js','utf8')).replace(/^import .*;\n/gm,
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 test('UI: edit, quizzes, flashcards and gestures, theme settings, ZIP and JSON transfers',async()=>{
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/#/',runScripts:'outside-only',pretendToBeVisual:true});
-  const w=dom.window;let sets=[{...structuredClone(seed),id:'seed',revision:1}],authed=false,confettiPlays=0,orderRevision=0;const downloads=[];
-  Object.assign(w,core,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
+  const w=dom.window;w.document.hasFocus=()=>true;let sets=[{...structuredClone(seed),id:'seed',revision:1}],authed=false,confettiPlays=0,orderRevision=0;const downloads=[];
+  Object.assign(w,core,statistics,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
   w.Audio=class{constructor(url){this.url=url;}play(){if(this.url.includes('confetti'))confettiPlays++;return Promise.resolve();}};
   w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){}});w.HTMLElement.prototype.scrollIntoView=()=>{};
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
@@ -36,12 +37,12 @@ test('UI: edit, quizzes, flashcards and gestures, theme settings, ZIP and JSON t
   function submit(selector){find(selector).dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));}
   try{
     w.eval(source);await tick();await tick();assert.equal(w.document.querySelectorAll('.set-card').length,1);assert.equal(find('[data-action="new"]'),null);assert.equal(find('[data-select]'),null);assert.equal(find('[data-action="import"]'),null);
-    assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.dataset.nav),['home','guide','edit']);
-    await click('.nav [data-nav="guide"]');assert.equal(w.location.hash,'#/guide');assert.equal(find('.guide-view h1').textContent,'How to use Wordnest');assert.equal(w.document.querySelectorAll('.guide-section').length,5);assert.equal(w.document.querySelectorAll('.guide-legend li').length,4);assert.ok(find('.nav [data-nav="guide"]').classList.contains('active'));assert.equal(find('.set-card'),null);
+    assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.dataset.nav),['home','guide','stats','edit']);
+    await click('.nav [data-nav="guide"]');assert.equal(w.location.hash,'#/guide');assert.equal(find('.guide-view h1').textContent,'How to use Wordnest');assert.equal(w.document.querySelectorAll('.guide-section').length,6);assert.equal(w.document.querySelectorAll('.guide-legend li').length,4);assert.ok(find('.nav [data-nav="guide"]').classList.contains('active'));assert.equal(find('.set-card'),null);
     await click('.nav [data-nav="home"]');assert.equal(w.location.hash,'#/');assert.ok(find('.set-card'));
-    await click('[data-action="settings"]');const theme=find('#theme-choice');theme.value='light';theme.dispatchEvent(new w.Event('change',{bubbles:true}));assert.equal(w.document.documentElement.dataset.theme,'light');theme.value='dark';theme.dispatchEvent(new w.Event('change',{bubbles:true}));assert.equal(w.document.documentElement.dataset.theme,'dark');assert.equal(w.localStorage.getItem('wordnest-theme'),'dark');assert.equal(w.getComputedStyle(find('#modal-title')).outline,'none');await click('[data-dialog="cancel"]');
-    await click('[data-nav="edit"]:not(.brand)');input('#password','a-long-testing-password');submit('#login-form');await tick();await tick();
-    await click('[data-action="settings"]');await click('[data-settings-action="new"]');input('#set-title','Four words');
+    await click('[data-action="settings"]');assert.equal(find('[data-settings-action]'),null);const theme=find('#theme-choice');theme.value='light';theme.dispatchEvent(new w.Event('change',{bubbles:true}));assert.equal(w.document.documentElement.dataset.theme,'light');theme.value='dark';theme.dispatchEvent(new w.Event('change',{bubbles:true}));assert.equal(w.document.documentElement.dataset.theme,'dark');assert.equal(w.localStorage.getItem('wordnest-theme'),'dark');assert.equal(w.getComputedStyle(find('#modal-title')).outline,'none');await click('[data-dialog="cancel"]');
+    await click('[data-nav="edit"]:not(.brand)');assert.equal(find('[data-action="new"]'),null);assert.equal(find('[data-action="import"]'),null);assert.equal(find('[data-action="export"]'),null);input('#password','a-long-testing-password');submit('#login-form');await tick();await tick();
+    await click('[data-action="new"]');input('#set-title','Four words');
     await click('.nav [data-nav="guide"]');assert.ok(find('#modal-title'));await click('[data-dialog="cancel"]');assert.equal(w.location.hash,'#/edit');assert.equal(find('#set-title').value,'Four words');assert.equal(find('.guide-view'),null);
     const words=[['apple','りんご'],['book','本'],['cat','猫'],['dog','犬']];
     for(let i=0;i<4;i++){if(i)await click('[data-action="add-word"]');input(`#word-${i}-english`,words[i][0]);input(`#word-${i}-meaning`,words[i][1]);}
@@ -66,9 +67,9 @@ test('UI: edit, quizzes, flashcards and gestures, theme settings, ZIP and JSON t
     await click('[data-action="back-order"]');await click('[data-action="back-mode"]');await click('[data-mode="ja-en"]');await click('[data-order="original"]');await click('[data-action="start-cards"]');assert.equal(find('.flashcard-front .flashcard-text').textContent,'りんご');assert.equal(find('.flashcard-back .flashcard-text').textContent,'apple');w.document.body.dispatchEvent(new w.KeyboardEvent('keydown',{key:' ',bubbles:true}));assert.equal(find('.card-explanation p').textContent,'A useful word.');
     for(let i=0;i<3;i++)await click('[data-action="next-card"]');assert.ok(find('[data-action="next-card"]').disabled);assert.equal(find('.flashcard-front .flashcard-text').textContent,'犬');
     await click('[data-action="back-order"]');await click('[data-order="random"]');await click('[data-action="start-cards"]');const seen=[];for(let i=0;i<4;i++){seen.push(find('.flashcard-back .flashcard-text').textContent);if(i<3)await click('[data-action="next-card"]');}assert.equal(new Set(seen).size,4);assert.deepEqual(sets[0].words.map(w=>w.english),words.map(w=>w[0]));assert.equal(confettiPlays,2);
-    await click('[data-action="back-home"]');await click('[data-action="settings"]');await click('[data-settings-action="export"]');await click('[data-export-all]');await click('#export-confirm');assert.equal(downloads.length,1);const zipBytes=new Uint8Array(await downloads[0].arrayBuffer());assert.equal(Object.keys(zip.unzipSync(zipBytes)).length,2);
-    await click('.nav [data-nav="edit"]');await click('[data-action="settings"]');await click('[data-settings-action="import"]');const picker=find('#import-files');Object.defineProperty(picker,'files',{value:[{name:'sets.json',size:1000,text:async()=>JSON.stringify({sets:[{title:'Import one',words:sets[0].words},{title:'Import two',words:sets[0].words}]})}]});await picker.onchange({target:picker});assert.equal(w.document.querySelectorAll('[data-import]').length,2);find('[data-import="1"]').click();await tick();await click('#import-confirm');assert.equal(sets.length,3);assert.equal(sets[0].title,'Import one');assert.equal(find('#modal').hasAttribute('open'),false);
-    await click('[data-action="settings"]');await click('[data-settings-action="import"]');const zipPicker=find('#import-files');const zipped=zip.zipSync({'first.json':zip.strToU8(JSON.stringify({title:'ZIP import',words:sets[0].words}))});Object.defineProperty(zipPicker,'files',{value:[{name:'sets.zip',size:zipped.length,arrayBuffer:async()=>zipped.buffer}]});await zipPicker.onchange({target:zipPicker});assert.equal(w.document.querySelectorAll('[data-import]').length,1);await click('#import-confirm');assert.equal(sets.length,4);assert.equal(sets[0].title,'ZIP import');
+    await click('[data-action="back-home"]');await click('.nav [data-nav="edit"]');await click('[data-action="export"]');await click('[data-export-all]');await click('#export-confirm');assert.equal(downloads.length,1);const zipBytes=new Uint8Array(await downloads[0].arrayBuffer());assert.equal(Object.keys(zip.unzipSync(zipBytes)).length,2);
+    await click('.nav [data-nav="edit"]');await click('[data-action="import"]');const picker=find('#import-files');Object.defineProperty(picker,'files',{value:[{name:'sets.json',size:1000,text:async()=>JSON.stringify({sets:[{title:'Import one',words:sets[0].words},{title:'Import two',words:sets[0].words}]})}]});await picker.onchange({target:picker});assert.equal(w.document.querySelectorAll('[data-import]').length,2);find('[data-import="1"]').click();await tick();await click('#import-confirm');assert.equal(sets.length,3);assert.equal(sets[0].title,'Import one');assert.equal(find('#modal').hasAttribute('open'),false);
+    await click('[data-action="import"]');const zipPicker=find('#import-files');const zipped=zip.zipSync({'first.json':zip.strToU8(JSON.stringify({title:'ZIP import',words:sets[0].words}))});Object.defineProperty(zipPicker,'files',{value:[{name:'sets.zip',size:zipped.length,arrayBuffer:async()=>zipped.buffer}]});await zipPicker.onchange({target:zipPicker});assert.equal(w.document.querySelectorAll('[data-import]').length,1);await click('#import-confirm');assert.equal(sets.length,4);assert.equal(sets[0].title,'ZIP import');
     const beforeManagement=sets.map(s=>s.id),draftId=sets[0].id;input('#set-title','An unsaved title');
     await click('[data-action="manage-sets"]');assert.ok(find(`[data-manage-up="${beforeManagement[0]}"]`).disabled);assert.ok(find(`[data-manage-down="${beforeManagement.at(-1)}"]`).disabled);await click(`[data-manage-down="${beforeManagement[0]}"]`);assert.deepEqual(sets.map(s=>s.id),beforeManagement);
     await click('[data-manage-close]');assert.ok(find('[data-manage-discard]'));await click('[data-manage-keep]');await click('#save-set-order');assert.deepEqual(sets.map(s=>s.id),[beforeManagement[1],beforeManagement[0],...beforeManagement.slice(2)]);assert.ok(find('#save-set-order').disabled);await click('[data-manage-close]');assert.equal(find('#set-title').value,'An unsaved title');assert.equal(find('#dirty-label').textContent,'Unsaved changes');
@@ -85,8 +86,8 @@ test('UI: edit, quizzes, flashcards and gestures, theme settings, ZIP and JSON t
 
 test('Guide deep link stays available when word set loading fails',async()=>{
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/#/guide',runScripts:'outside-only',pretendToBeVisual:true});
-  const w=dom.window;
-  Object.assign(w,core,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
+  const w=dom.window;w.document.hasFocus=()=>true;
+  Object.assign(w,core,statistics,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
   w.Audio=class{play(){return Promise.resolve();}};
   w.fetch=async()=>{throw new Error('Offline');};
   try{

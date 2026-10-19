@@ -51,7 +51,7 @@ The Practice page opens directly to the word-set heading, search field, and set 
 
 ## Guide tab
 
-The Guide tab sits between Practice and Edit and is available at `#/guide`, including before word sets finish loading. It follows the selected English/Japanese UI language and explains quizzes, flashcards, clear colors, editing, transfers, and sound effects. On mobile, the three tabs occupy their own row below the brand and Settings button.
+The navigation is Practice → Guide → Statistics → Edit. Guide is available at `#/guide`, including before word sets finish loading. It follows the selected English/Japanese UI language and explains quizzes, flashcards, clear colors, editing, transfers, and sound effects. On mobile, the four tabs occupy their own row below the brand and Settings button.
 
 ## Settings and appearance
 
@@ -60,9 +60,10 @@ Open **Settings** from the sidebar or the gear button in the mobile header.
 - Appearance: **Auto**, **Light**, or **Dark**. Auto follows the device theme. Your choice is remembered on this browser and applied before the page is painted.
 - Language: **Auto**, **English**, or **日本語**.
 - Sound: enable or disable quiz effects.
-- Word sets and backups: **Import**, **Export**, and editing tools. Unlock Edit before importing or creating a set. **New set** appears only inside Settings while Edit is unlocked.
 
-Practice cards contain no export checkboxes or New set buttons. The editor keeps backup and creation actions in Settings as well. Focus outlines and focus shadows are suppressed throughout the interface, including modal headings and buttons. Direction cards have no sticky hover highlight, and pointer clicks do not leave the selected button focused.
+Settings contains no word-set management actions. After unlocking Edit, the toolbar contains **New set**, **Import**, **Export**, **Manage sets**, and **Lock editor**.
+
+Practice cards contain no export checkboxes or New set buttons. The editor provides creation and backup actions directly; they remain hidden while the editor is locked. Focus outlines and focus shadows are suppressed throughout the interface, including modal headings and buttons. Direction cards have no sticky hover highlight, and pointer clicks do not leave the selected button focused.
 
 When upgrading from version 1.0, the untouched automatically generated starter set is removed once. A starter set that was edited or renamed is preserved, along with all user-created and imported sets. No example sets are automatically added afterward.
 
@@ -136,22 +137,22 @@ Unlock **Edit**, then open **Manage sets**.
 - The server validates the complete set list and checks the collection revision. A stale reordering request cannot silently overwrite changes from another browser.
 - Existing installations automatically get a persistent display order based on their previous visible order. No manual migration is required.
 
-Deletion is also available through **Settings → Delete set** while a saved set is open in Edit.
+Delete sets through **Edit → Manage sets** after unlocking the editor.
 
 ## Export and import
 
 ### Export
 
-Open **Settings → Export**, select one or more word sets, then choose **Export selected**.
+Unlock **Edit → Export**, select one or more word sets, then choose **Export selected**.
 
 - One set downloads as one `.json` file.
 - Multiple sets download as a ZIP containing one JSON file per set.
 - Select all exports the complete collection.
-- Settings has **Export draft** while a draft is open to download the current draft, including unsaved changes. An incomplete draft can be backed up but must be completed before it can be imported.
+- The editor action bar has **Export draft** while a draft is open to download the current draft, including unsaved changes. An incomplete draft can be backed up but must be completed before it can be imported.
 
 ### Import
 
-Unlock Edit, open **Settings → Import**, then select one or more JSON/ZIP files. Review the preview and select the sets you want to add. Importing always creates new copies and never overwrites existing sets. Sets are imported together as one database batch. If any selected set is invalid, the whole batch is rejected.
+Unlock Edit, open **Import**, then select one or more JSON/ZIP files. Review the preview and select the sets you want to add. Importing always creates new copies and never overwrites existing sets. Sets are imported together as one database batch. If any selected set is invalid, the whole batch is rejected.
 
 Supported JSON format:
 
@@ -230,3 +231,15 @@ The main content starts at the top of the page, with horizontal centering only. 
 Clear progress is saved in this browser for each word set and quiz direction. Only rounds started with All selected can earn a clear. Only completing the original All round perfectly, without any mistakes or retries, earns the direction clear. Missed-question retries never earn clears, including retries from an All round. Fixed counts and Custom never qualify, even when their count equals the full pool size. Incomplete or incorrect rounds and flashcards do not qualify. Legacy clear records without first-pass All provenance are ignored because earlier records cannot distinguish clears earned through retries. Clears remain earned after later mistakes. Progress survives reloads and is separate from the shared word sets in D1; it is not included in set exports. Editing English words or meanings invalidates the clear state. Renaming, changing explanations, and reordering preserve it. Previous sessions cannot be recovered because earlier versions did not store results.
 
 Japanese UI instructions, confirmations, and errors use a consistent polite tone.
+
+## Learning records
+
+Open **Statistics** (`#/stats`) without an editing password. It displays total study time, average time per study day, attempted questions, correct answers, accuracy, card flips, current streak, longest streak, and a seven-day study-time chart. All labels, duration units, dates, and instructions support English and Japanese and both themes.
+
+- Records start with version 1.7.0 and remain in this browser. They are separate from D1 word sets and from clear-state records. Existing All first-pass clears are preserved. Word-set imports and exports do not contain learning records.
+- Quizzes include thinking and feedback-reading time. Flashcards include reading time. Setup screens, results, Edit, Guide, Statistics, and all dialogs are excluded. Hidden pages and page-cache suspension stop time. Sixty seconds without a click, pointer press, keyboard action, input, or scroll pauses time; interaction resumes it.
+- The average divides total time by the number of local calendar days with recorded time or an attempt/flip. Unstudied days are excluded. Zero activity shows zero time and a dash for accuracy.
+- Answered, skipped, and timed-out questions each count once, including retries and questions in unfinished rounds. Late background timeouts belong to the deadline's local date. Both directions of a manual card flip count; navigation and automatic front-side resets do not.
+- A streak day requires at least one attempted question or card flip. Before studying today, yesterday's continuing streak is shown. The longest streak includes all recorded days. Time-only reading days contribute to the daily average but do not start a streak.
+- Time spans split at device-local midnight, and overlapping spans from multiple tabs are merged before summing. Each page writes its own cumulative record so simultaneous tabs cannot overwrite each other's counters. Records are saved after counted actions, screen transitions, page hiding, and once per second while open. An abrupt browser/process failure can lose the latest unsaved time slice.
+- Clearing browser storage removes these records. If browser storage is unavailable or full, the Statistics page shows a notice and retains current-tab records in memory.

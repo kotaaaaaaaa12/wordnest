@@ -1,3 +1,4 @@
+import { LearningTracker, localDay } from './stats.js';
 import { icon } from './icons.js';
 import { normalize, studyKey, studyStatus, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, isCorrect, portable, parseImport } from './core.js';
 import { messages, translator } from './i18n.js';
@@ -6,6 +7,8 @@ const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const e = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const storage = { get(key, fallback) { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }, set(key, value) { try { localStorage.setItem(key, value); } catch {} } };
+let learningStorage;try{learningStorage=localStorage;}catch{}
+const learning=new LearningTracker({storage:learningStorage,now:()=>Date.now()});
 let languageChoice = storage.get('wordnest-language','auto');
 if (!['auto','en','ja'].includes(languageChoice)) languageChoice = 'auto';
 let lang, t;
@@ -42,17 +45,19 @@ async function load() {
   catch(error) { state.loadError=message(error); }
   render();
 }
-function routeFromHash() { return location.hash==='#/guide'?'guide':location.hash.startsWith('#/edit')?'edit':'home'; }
+function routeFromHash() { return location.hash==='#/stats'?'stats':location.hash==='#/guide'?'guide':location.hash.startsWith('#/edit')?'edit':'home'; }
 const routeHref=route=>route==='home'?'#/':`#/${route}`;
 function shell(content) {
-  return `<div class="app-shell"><aside class="sidebar"><a href="#/" data-nav="home" class="brand"><span class="brand-mark">${icon('book')}</span>wordnest<span style="color:var(--accent)">.</span></a><nav class="nav" aria-label="${t('home')}"><a href="#/" data-nav="home" class="${state.route==='home'?'active':''}">${icon('book')}${t('home')}</a><a href="#/guide" data-nav="guide" class="${state.route==='guide'?'active':''}">${icon('guide')}${t('guide')}</a><a href="#/edit" data-nav="edit" class="${state.route==='edit'?'active':''}">${icon('edit')}${t('edit')}</a></nav><div class="sidebar-bottom"><button class="settings-trigger" data-action="settings">${icon('settings')}${t('settings')}</button></div></aside><main class="main">${content}</main></div>`;
+  return `<div class="app-shell"><aside class="sidebar"><a href="#/" data-nav="home" class="brand"><span class="brand-mark">${icon('book')}</span>wordnest<span style="color:var(--accent)">.</span></a><nav class="nav" aria-label="${t('home')}"><a href="#/" data-nav="home" class="${state.route==='home'?'active':''}">${icon('book')}${t('home')}</a><a href="#/guide" data-nav="guide" class="${state.route==='guide'?'active':''}">${icon('guide')}${t('guide')}</a><a href="#/stats" data-nav="stats" class="${state.route==='stats'?'active':''}">${icon('stats')}${t('stats')}</a><a href="#/edit" data-nav="edit" class="${state.route==='edit'?'active':''}">${icon('edit')}${t('edit')}</a></nav><div class="sidebar-bottom"><button class="settings-trigger" data-action="settings">${icon('settings')}${t('settings')}</button></div></aside><main class="main">${content}</main></div>`;
 }
 function render() {
+  learning.tick();
   const active = document.activeElement;
   const focusId = active?.id;
   const selection = active && typeof active.selectionStart==='number' ? [active.selectionStart,active.selectionEnd] : null;
   let content;
-  if (state.route==='guide') content=guideView();
+  if (state.route==='stats') content=statsView();
+  else if (state.route==='guide') content=guideView();
   else if (state.loadError) content=`<div class="empty"><h2>${e(state.loadError)}</h2>${btn('retry','reload','primary')}</div>`;
   else if (!state.loaded) content=`<div class="loading"><span class="spinner"></span>${t('loading')}</div>`;
   else if (state.route==='edit') content=editor();
@@ -65,12 +70,27 @@ function render() {
   else if (state.screen==='result') content=resultView();
   else content=home();
   $('#app').innerHTML=shell(content);
+  syncLearning();
   if(state.screen!=='quiz' || state.route!=='home')stopQuizClock();
   if (focusId && document.getElementById(focusId) && !['language'].includes(focusId)) { const el=document.getElementById(focusId); el.focus({preventScroll:true}); if(selection && el.setSelectionRange) el.setSelectionRange(...selection); }
 }
+function learningScreen() { return state.route==='home' && ['quiz','cards'].includes(state.screen); }
+function syncLearning() { learning.setActive(learningScreen() && document.visibilityState==='visible' && document.hasFocus() && !$('#modal')?.open); }
+function formatDuration(milliseconds) {
+  const seconds=Math.floor(milliseconds/1000),hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60),rest=seconds%60;
+  return hours?t('durationHours',{h:hours,m:minutes,s:rest}):minutes?t('durationMinutes',{m:minutes,s:rest}):t('durationSeconds',{s:rest});
+}
+let statsRenderedDay;
+function statsView() {
+  statsRenderedDay=localDay(Date.now());
+  const data=learning.snapshot(),locale=lang==='ja'?'ja-JP':'en-US',number=value=>new Intl.NumberFormat(locale).format(value);
+  const cards=[['totalTime','timer',formatDuration(data.totalMs)],['averageTime','calendar',formatDuration(data.averageMs)],['answeredQuestions','quiz',number(data.answered)],['correctQuestions','check',number(data.correct)],['accuracy','target',data.accuracy===null?'—':new Intl.NumberFormat(locale,{style:'percent',maximumFractionDigits:1}).format(data.accuracy)],['cardFlips','flip',number(data.flips)],['currentStreak','flame',t(data.streak===1?'oneDay':'dayCount',{n:number(data.streak)})],['longestStreak','trophy',t(data.longest===1?'oneDay':'dayCount',{n:number(data.longest)})]];
+  const maximum=Math.max(...data.recent.map(day=>day.ms),1),dateFormat=new Intl.DateTimeFormat(locale,{month:'numeric',day:'numeric'});
+  return `<section class="stats-view"><h1>${t('stats')}</h1><p class="stats-note">${t('statsLocal')}</p>${!learning.persistent?`<p class="error" role="status">${t('statsStorageError')}</p>`:''}<div class="stats-grid">${cards.map(([key,symbol,value])=>`<article class="stat-card"><h2>${icon(symbol)}${t(key)}</h2><p data-stat="${key}">${e(value)}</p>${key==='averageTime'?`<small>${t(data.activeDays===1?'averageOneDay':'averageDays',{n:number(data.activeDays)})}</small>`:''}</article>`).join('')}</div><section class="stats-chart" aria-labelledby="recent-time"><h2 id="recent-time">${t('recentTime')}</h2><ol class="stats-bars">${data.recent.map(day=>{const [year,month,date]=day.date.split('-').map(Number),label=dateFormat.format(new Date(year,month-1,date));return `<li><span class="bar-value">${e(formatDuration(day.ms))}</span><span class="bar-track" aria-hidden="true"><span style="height:${day.ms?Math.max(2,day.ms/maximum*100):0}%"></span></span><time datetime="${day.date}">${e(label)}</time></li>`;}).join('')}</ol></section><div class="stats-details"><p>${t('statsTimeRule')}</p><p>${t('statsCountRule')}</p><p>${t('statsStreakRule')}</p></div></section>`;
+}
 function guideView() {
   const section=(id,symbol,title,items)=>`<section class="guide-section" aria-labelledby="${id}"><h2 id="${id}">${icon(symbol)}${t(title)}</h2><ul>${items.map(key=>`<li>${e(t(key))}</li>`).join('')}</ul></section>`;
-  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideEditShared'])}${section('guide-settings','settings','settings',['guideSettings','guideTransfers','guideSounds'])}</article>`;
+  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideEditShared'])}${section('guide-records','stats','stats',['guideStats','statsTimeRule','statsCountRule','statsStreakRule'])}${section('guide-settings','settings','settings',['guideSettings','guideTransfers','guideSounds'])}</article>`;
 }
 function readStudyProgress() {
   try { const value=JSON.parse(storage.get('wordnest-progress','{}'));return value && typeof value==='object' && !Array.isArray(value)?value:{}; } catch { return {}; }
@@ -117,7 +137,7 @@ function moveCard(direction) {
 }
 function flipCard() {
   if(state.screen!=='cards' || !state.cards)return;
-  state.cards.flipped=!state.cards.flipped;
+  state.cards.flipped=!state.cards.flipped;learning.flip();
   const card=$('.flashcard'),item=state.cards.items[state.cards.index];
   card.classList.toggle('is-flipped',state.cards.flipped);card.setAttribute('aria-pressed',String(state.cards.flipped));card.setAttribute('aria-label',t('flipCardLabel',{word:state.cards.flipped?item.back:item.front}));
   $('.flashcard-front',card).setAttribute('aria-hidden',String(state.cards.flipped));$('.flashcard-back',card).setAttribute('aria-hidden',String(!state.cards.flipped));
@@ -165,7 +185,7 @@ function resultView() {
 function editor() {
   if(!state.authenticated) return `<section class="login-card"><span class="set-symbol">${icon('lock')}</span><div><h1>${t('loginTitle')}</h1><p>${t('loginHelp')}</p></div>${!state.configured?`<div class="error">${t('passwordSetup')}</div>`:`<form id="login-form"><label for="password">${t('password')}<input type="password" id="password" name="password" autocomplete="current-password" required minlength="12" maxlength="512"></label>${state.error?`<p class="error" role="alert">${e(state.error)}</p>`:''}<button class="btn primary" ${state.saving?'disabled':''}>${icon('lock')}${t('login')}</button></form>`}<small>${t('sessionNote')}</small></section>`;
   const draft=state.draft;
-  return `<section><div class="edit-heading"><h1>${t('editTitle')}</h1></div><div class="toolbar editor-toolbar"><button class="btn ghost small" data-action="manage-sets">${icon('sort')}${t('manageSets')}</button><button class="btn ghost small" data-action="logout">${icon('lock')}${t('logout')}</button></div><div class="editor-layout"><aside class="set-list" aria-label="${t('library')}">${state.sets.map(s=>`<button class="${draft?.id===s.id?'active':''}" data-action="edit-set" data-id="${e(s.id)}">${e(s.title)}<small>${t('wordsCount',{n:s.words.length})}</small></button>`).join('')}</aside><div class="editor-panel ${state.saving?'busy':''}">${draft?`<label for="set-title">${t('title')}<input id="set-title" maxlength="150" value="${e(draft.title)}" placeholder="${t('setTitlePlaceholder')}"></label><div class="row"><span class="count">${t('wordsCount',{n:draft.words.length})}</span></div><div class="editor-words">${draft.words.map((w,i)=>`<article class="word-row"><div class="word-row-head"><span>${t('wordNumber',{n:i+1})}</span><button class="icon-btn" data-action="remove-word" data-index="${i}" aria-label="${t('removeWord')}">${icon('trash')}</button></div><div class="word-fields"><label for="word-${i}-english">${t('word')}<input id="word-${i}-english" data-word="${i}" data-field="english" lang="en" value="${e(w.english)}" maxlength="150" placeholder="${t('englishPlaceholder')}" autocapitalize="none" spellcheck="false"></label><label for="word-${i}-meaning">${t('meaning')}<input id="word-${i}-meaning" data-word="${i}" data-field="meaning" value="${e(w.meaning)}" maxlength="300" placeholder="${t('meaningPlaceholder')}"></label><label class="wide" for="word-${i}-explanation">${t('explanation')} · ${t('optional')}<textarea id="word-${i}-explanation" data-word="${i}" data-field="explanation" maxlength="2000" placeholder="${t('explanationPlaceholder')}">${e(w.explanation)}</textarea></label></div></article>`).join('')}</div><button class="btn ghost" data-action="add-word" ${draft.words.length>=1000?'disabled':''}>${icon('plus')}${t('addWord')}</button>${state.error?`<p class="error" role="alert">${e(state.error)}</p>`:''}<div class="editor-actions"><span class="muted" id="dirty-label">${state.dirty?t('unsaved'):''}</span><button class="btn primary" data-action="save" ${state.saving?'disabled':''}>${icon('check')}${t(state.saving?'saving':'save')}</button></div>`:`<div class="empty"><p>${t('editorEmpty')}</p></div>`}</div></div></section>`;
+  return `<section><div class="edit-heading"><h1>${t('editTitle')}</h1></div><div class="toolbar editor-toolbar"><div class="actions"><button class="btn primary small" data-action="new">${icon('plus')}${t('newSet')}</button><button class="btn ghost small" data-action="import">${icon('upload')}${t('import')}</button><button class="btn ghost small" data-action="export" ${!state.sets.length?'disabled':''}>${icon('download')}${t('export')}</button><button class="btn ghost small" data-action="manage-sets">${icon('sort')}${t('manageSets')}</button></div><button class="btn ghost small" data-action="logout">${icon('lock')}${t('logout')}</button></div><div class="editor-layout"><aside class="set-list" aria-label="${t('library')}">${state.sets.map(s=>`<button class="${draft?.id===s.id?'active':''}" data-action="edit-set" data-id="${e(s.id)}">${e(s.title)}<small>${t('wordsCount',{n:s.words.length})}</small></button>`).join('')}</aside><div class="editor-panel ${state.saving?'busy':''}">${draft?`<label for="set-title">${t('title')}<input id="set-title" maxlength="150" value="${e(draft.title)}" placeholder="${t('setTitlePlaceholder')}"></label><div class="row"><span class="count">${t('wordsCount',{n:draft.words.length})}</span></div><div class="editor-words">${draft.words.map((w,i)=>`<article class="word-row"><div class="word-row-head"><span>${t('wordNumber',{n:i+1})}</span><button class="icon-btn" data-action="remove-word" data-index="${i}" aria-label="${t('removeWord')}">${icon('trash')}</button></div><div class="word-fields"><label for="word-${i}-english">${t('word')}<input id="word-${i}-english" data-word="${i}" data-field="english" lang="en" value="${e(w.english)}" maxlength="150" placeholder="${t('englishPlaceholder')}" autocapitalize="none" spellcheck="false"></label><label for="word-${i}-meaning">${t('meaning')}<input id="word-${i}-meaning" data-word="${i}" data-field="meaning" value="${e(w.meaning)}" maxlength="300" placeholder="${t('meaningPlaceholder')}"></label><label class="wide" for="word-${i}-explanation">${t('explanation')} · ${t('optional')}<textarea id="word-${i}-explanation" data-word="${i}" data-field="explanation" maxlength="2000" placeholder="${t('explanationPlaceholder')}">${e(w.explanation)}</textarea></label></div></article>`).join('')}</div><button class="btn ghost" data-action="add-word" ${draft.words.length>=1000?'disabled':''}>${icon('plus')}${t('addWord')}</button>${state.error?`<p class="error" role="alert">${e(state.error)}</p>`:''}<div class="editor-actions"><span class="muted" id="dirty-label">${state.dirty?t('unsaved'):''}</span><button class="btn ghost" data-action="export-draft">${icon('download')}${t('draftExport')}</button><button class="btn primary" data-action="save" ${state.saving?'disabled':''}>${icon('check')}${t(state.saving?'saving':'save')}</button></div>`:`<div class="empty"><p>${t('editorEmpty')}</p></div>`}</div></div></section>`;
 }
 const modal=$('#modal');
 function dialog(content, setup) {
@@ -174,10 +194,10 @@ function dialog(content, setup) {
     modal.innerHTML=content;
     modal.setAttribute('aria-labelledby','modal-title');
     let settled=false;
-    const finish=value=>{ if(settled)return; settled=true; modal.close(); modal.oncancel=null; modal.onclick=null; modal.onchange=null; if(previous?.isConnected) previous.focus({preventScroll:true}); resolve(value); };
+    const finish=value=>{ if(settled)return; settled=true; modal.close();syncLearning(); modal.oncancel=null; modal.onclick=null; modal.onchange=null; if(previous?.isConnected) previous.focus({preventScroll:true}); resolve(value); };
     modal.oncancel=event=>{event.preventDefault();finish(false);};
     modal.onclick=event=>{const button=event.target.closest('[data-dialog]');if(button)finish(button.dataset.dialog==='confirm');};
-    modal.showModal(); $('#modal-title',modal)?.focus({preventScroll:true});
+    learning.setActive(false);modal.showModal(); $('#modal-title',modal)?.focus({preventScroll:true});
     setup?.(finish);
   });
 }
@@ -212,6 +232,7 @@ async function deleteSavedSet(set) {
   if(state.draft?.id===set.id){state.draft=null;state.dirty=false;state.error='';}
 }
 async function manageSetsDialog() {
+  if(state.route!=='edit' || !state.authenticated)return;
   let ids=state.sets.map(s=>s.id),baseline=[...ids],pendingDelete=null,confirmClose=false,error='',busy=false,revision=state.orderRevision;
   const changed=()=>ids.join(',')!==baseline.join(',');
   function content(){
@@ -250,10 +271,10 @@ async function manageSetsDialog() {
 }
 
 function settingsContent() {
-  return `<button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t('settings')}</h2><div class="settings-section"><label for="theme-choice">${t('appearance')}<select id="theme-choice">${['auto','light','dark'].map(value=>`<option value="${value}" ${themeChoice===value?'selected':''}>${t(value)}</option>`).join('')}</select></label><label for="settings-language">${t('language')}<select id="settings-language"><option value="auto" ${languageChoice==='auto'?'selected':''}>${t('auto')}</option><option value="en" ${languageChoice==='en'?'selected':''}>English</option><option value="ja" ${languageChoice==='ja'?'selected':''}>日本語</option></select></label><button class="btn ghost" data-settings-sound aria-pressed="${soundEnabled}">${icon(soundEnabled?'sound':'mute')}${t(soundEnabled?'soundOn':'soundOff')}</button></div><div class="settings-section"><h3>${t('wordData')}</h3><div class="settings-buttons"><button class="btn ghost" data-settings-action="export" ${!state.sets.length?'disabled':''}>${icon('download')}${t('export')}</button><button class="btn ghost" data-settings-action="import" ${!state.authenticated?'disabled':''}>${icon('upload')}${t('import')}</button>${state.route==='edit' && state.authenticated?`<button class="btn ghost" data-settings-action="new">${icon('plus')}${t('newSet')}</button>`:''}${state.draft?`<button class="btn ghost" data-settings-action="export-draft">${t('draftExport')}</button>`:''}${state.draft?.id && state.authenticated?`<button class="btn danger" data-settings-action="delete">${icon('trash')}${t('deleteSet')}</button>`:''}</div>${!state.authenticated?`<p class="notice">${t('dataUnlockHint')}</p>`:''}</div><div class="modal-actions"><button class="btn primary" data-dialog="cancel">${t('close')}</button></div>`;
+  return `<button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t('settings')}</h2><div class="settings-section"><label for="theme-choice">${t('appearance')}<select id="theme-choice">${['auto','light','dark'].map(value=>`<option value="${value}" ${themeChoice===value?'selected':''}>${t(value)}</option>`).join('')}</select></label><label for="settings-language">${t('language')}<select id="settings-language"><option value="auto" ${languageChoice==='auto'?'selected':''}>${t('auto')}</option><option value="en" ${languageChoice==='en'?'selected':''}>English</option><option value="ja" ${languageChoice==='ja'?'selected':''}>日本語</option></select></label><button class="btn ghost" data-settings-sound aria-pressed="${soundEnabled}">${icon(soundEnabled?'sound':'mute')}${t(soundEnabled?'soundOn':'soundOff')}</button></div><div class="modal-actions"><button class="btn primary" data-dialog="cancel">${t('close')}</button></div>`;
 }
 async function settingsDialog() {
-  const action=await dialog(settingsContent(),finish=>{
+  await dialog(settingsContent(),finish=>{
     modal.onchange=event=>{
       if(event.target.id==='theme-choice'){themeChoice=event.target.value;storage.set('wordnest-theme',themeChoice);applyTheme();}
       else if(event.target.id==='settings-language'){languageChoice=event.target.value;storage.set('wordnest-language',languageChoice);setLanguage();render();modal.innerHTML=settingsContent();$('#modal-title',modal)?.focus({preventScroll:true});}
@@ -261,15 +282,11 @@ async function settingsDialog() {
     modal.onclick=event=>{
       if(event.target.closest('[data-dialog]')){finish(false);return;}
       if(event.target.closest('[data-settings-sound]')){soundEnabled=!soundEnabled;storage.set('wordnest-sound',soundEnabled?'on':'off');modal.innerHTML=settingsContent();$('#modal-title',modal)?.focus({preventScroll:true});return;}
-      const button=event.target.closest('[data-settings-action]');
-      if(button && !button.disabled)finish(button.dataset.settingsAction);
     };
   });
-  if(action==='export')await exportDialog();
-  else if(action==='import')await importDialog();
-  else if(action)await actions[action]?.();
 }
 async function exportDialog() {
+  if(state.route!=='edit' || !state.authenticated)return;
   function content(){return `<button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t('export')}</h2><p>${t('selectionHelp')}</p><button class="text-btn" data-export-all>${t(state.selected.size===state.sets.length?'clearSelection':'selectAll')}</button><div class="import-list">${state.sets.map(s=>`<div class="import-item"><label><input type="checkbox" data-export-id="${e(s.id)}" ${state.selected.has(s.id)?'checked':''}><span><strong>${e(s.title)}</strong><small>${t('wordsCount',{n:s.words.length})}</small></span></label></div>`).join('')}</div><div class="modal-actions"><button class="btn ghost" data-dialog="cancel">${t('cancel')}</button><button class="btn primary" id="export-confirm" ${!state.selected.size?'disabled':''}>${t('exportSelected')} (${state.selected.size})</button></div>`;}
   await dialog(content(),finish=>{
     modal.onchange=event=>{
@@ -285,6 +302,7 @@ async function exportDialog() {
   });
 }
 async function importDialog() {
+  if(state.route!=='edit' || !state.authenticated)return;
   if(!await discardGuard())return;
   let imported=[],selected=new Set(),busy=false;
   await dialog(`<button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t('importTitle')}</h2><p>${t('importHelp')}</p><label class="file-picker">${t('chooseFiles')}<small>${t('fileHint')}</small><input type="file" id="import-files" accept=".json,.zip,application/json,application/zip" multiple></label><div id="import-preview"></div><p class="error" id="import-error" role="alert" hidden></p><div class="modal-actions"><button class="btn ghost" data-dialog="cancel">${t('cancel')}</button><button class="btn primary" id="import-confirm" disabled>${t('import')}</button></div>`,finish=>{
@@ -325,7 +343,7 @@ function submitAnswer(answer,skipped=false,forceTimeout=false) {
   if(timedOut)qz.remainingMs=0;
   stopQuizClock();
   const q=qz.questions[qz.index],correct=!timedOut && !skipped && isCorrect(q,answer,qz.mode);
-  qz.answers[qz.index]={answer:answer.trim(),correct,timedOut};play(correct?'correct':'incorrect');render();
+  qz.answers[qz.index]={answer:answer.trim(),correct,timedOut};learning.answer(correct,timedOut?qz.deadline:Date.now());play(correct?'correct':'incorrect');render();
 }
 let confettiFrame=0;
 function confetti() {
@@ -378,6 +396,7 @@ const actions={
   async delete(){const draft=state.draft;if(!await confirmDialog('deleteTitle',t('deleteHelp',{title:draft.title}),'delete',true))return;state.saving=true;render();try{await deleteSavedSet(draft);}catch(err){state.error=message(err);}finally{state.saving=false;render();}},
   async logout(){if(!await discardGuard())return;try{await api('/api/logout',{method:'POST'});state.authenticated=false;state.draft=null;state.dirty=false;state.error='';render();}catch(err){toast(message(err));}},
   import:importDialog,
+  export:exportDialog,
 };
 let cardGesture=null, suppressFlipUntil=0;
 document.addEventListener('pointerdown',event=>{
@@ -413,7 +432,7 @@ document.addEventListener('mousedown',event=>{if(event.button===0 && event.targe
 document.addEventListener('click',async event=>{
   const pressed=event.target.closest('button,a');if(pressed && document.activeElement===pressed)pressed.blur();
   const nav=event.target.closest('[data-nav]');if(nav){event.preventDefault();await navigate(nav.dataset.nav);return;}
-  const button=event.target.closest('[data-action]');if(button && !button.disabled){if(button.dataset.action==='flip-card' && Date.now()<suppressFlipUntil)return;try{await actions[button.dataset.action]?.(button);}catch(err){toast(message(err));}}
+  const button=event.target.closest('[data-action]');if(button && !button.disabled){if(['new','import','export','export-draft','export-selected','manage-sets','save','delete','add-word','remove-word'].includes(button.dataset.action) && (state.route!=='edit' || !state.authenticated))return;if(button.dataset.action==='flip-card' && Date.now()<suppressFlipUntil)return;try{await actions[button.dataset.action]?.(button);}catch(err){toast(message(err));}}
   if(event.detail>0 && event.target.closest('button'))document.activeElement?.closest('button')?.blur();
 });
 document.addEventListener('input',event=>{const el=event.target;if(el.id==='search'){state.search=el.value;render();}else if(el.id==='custom-count')state.customValue=el.value;else if(el.id==='typed-answer')state.quiz.typed=el.value;else if(el.id==='set-title'){state.draft.title=el.value;markDirty();}else if(el.dataset.word!==undefined){state.draft.words[Number(el.dataset.word)][el.dataset.field]=el.value;markDirty();}});
@@ -422,9 +441,16 @@ document.addEventListener('submit',async event=>{
   if(event.target.id==='answer-form'){event.preventDefault();if(!state.quiz.typed.trim())return;submitAnswer(state.quiz.typed);}
   if(event.target.id==='login-form'){event.preventDefault();if(state.saving)return;const password=new FormData(event.target).get('password');state.saving=true;state.error='';render();try{await api('/api/login',{method:'POST',body:JSON.stringify({password})});state.authenticated=true;state.error='';}catch(err){state.error=message(err);}finally{state.saving=false;render();}}
 });
-document.addEventListener('visibilitychange',updateQuizClock);
-window.addEventListener('pageshow',updateQuizClock);
+document.addEventListener('visibilitychange',()=>{syncLearning();updateQuizClock();});
+window.addEventListener('pageshow',()=>{syncLearning();updateQuizClock();});
+window.addEventListener('pagehide',()=>learning.setActive(false));
+window.addEventListener('blur',()=>learning.setActive(false));
+window.addEventListener('focus',syncLearning);
+for(const type of ['pointerdown','click','keydown','input','scroll'])document.addEventListener(type,()=>{if(learning.active)learning.touch();},{capture:true,passive:true});
+function learningHeartbeat(){learning.tick();learning.persist();if(state.route==='stats' && statsRenderedDay!==localDay(Date.now()))render();setTimeout(learningHeartbeat,1000);}
+setTimeout(learningHeartbeat,1000);
+window.addEventListener('storage',event=>{if(event.key?.startsWith('wordnest-learning-v1:') && state.route==='stats')render();});
 window.addEventListener('storage',event=>{if(event.key==='wordnest-progress' && state.route==='home' && state.screen==='home')render();});
 window.addEventListener('hashchange',()=>navigate(routeFromHash(),true));
-window.addEventListener('beforeunload',event=>{if(state.dirty||state.saving){event.preventDefault();event.returnValue='';}});
+window.addEventListener('beforeunload',event=>{learning.setActive(false);if(state.dirty||state.saving){event.preventDefault();event.returnValue='';}});
 load();

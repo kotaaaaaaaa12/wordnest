@@ -1,13 +1,13 @@
 {
   "name": "wordnest-quiz",
-  "version": "1.6.4",
+  "version": "1.7.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check src/worker.js && node --check public/app.js && node --check public/core.js && node --check public/i18n.js && node --check public/theme.js && node --check public/icons.js",
+    "check": "node --check src/worker.js && node --check public/app.js && node --check public/core.js && node --check public/i18n.js && node --check public/theme.js && node --check public/icons.js && node --check public/stats.js",
     "build:vendor": "node scripts/vendor.mjs",
     "build:icons": "node scripts/icons.mjs"
   },
