@@ -1,6 +1,6 @@
 import { readFile, writeFile, copyFile } from 'node:fs/promises';
 const names={
-  up:'chevron-up', down:'chevron-down', settings:'settings', book:'book-open', edit:'pencil-line', arrow:'arrow-right', back:'arrow-left', plus:'plus', download:'download', upload:'upload', check:'check', close:'x', search:'search', sound:'volume-2', mute:'volume-x', lock:'lock-keyhole', trash:'trash-2', trophy:'trophy', refresh:'rotate-cw', leaf:'sprout', cards:'layers', quiz:'clipboard-check', flip:'flip-horizontal-2', timer:'timer', sort:'list-ordered', sparkles:'sparkles'
+  guide:'circle-help', up:'chevron-up', down:'chevron-down', settings:'settings', book:'book-open', edit:'pencil-line', arrow:'arrow-right', back:'arrow-left', plus:'plus', download:'download', upload:'upload', check:'check', close:'x', search:'search', sound:'volume-2', mute:'volume-x', lock:'lock-keyhole', trash:'trash-2', trophy:'trophy', refresh:'rotate-cw', leaf:'sprout', cards:'layers', quiz:'clipboard-check', flip:'flip-horizontal-2', timer:'timer', sort:'list-ordered', sparkles:'sparkles'
 };
 const nodes={};
 for(const [key,name] of Object.entries(names)){

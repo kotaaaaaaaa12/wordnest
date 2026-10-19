@@ -21,7 +21,7 @@ function applyTheme() {
 }
 applyTheme();
 systemTheme.addEventListener?.('change', () => { if (themeChoice === 'auto') applyTheme(); });
-const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, configured:true, route:location.hash.startsWith('#/edit')?'edit':'home', screen:'home', selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
+const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, configured:true, route:routeFromHash(), screen:'home', selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
 let soundEnabled = storage.get('wordnest-sound','on') === 'on';
 const sounds = Object.fromEntries(['correct','incorrect','confetti'].map(name => { const audio = new Audio(`/assets/audio/${name}.mp3`); audio.preload='auto'; return [name,audio]; }));
 function play(name) { if (!soundEnabled) return; try { sounds[name].currentTime=0; sounds[name].play()?.catch(()=>{}); } catch {} }
@@ -42,15 +42,18 @@ async function load() {
   catch(error) { state.loadError=message(error); }
   render();
 }
+function routeFromHash() { return location.hash==='#/guide'?'guide':location.hash.startsWith('#/edit')?'edit':'home'; }
+const routeHref=route=>route==='home'?'#/':`#/${route}`;
 function shell(content) {
-  return `<div class="app-shell"><aside class="sidebar"><a href="#/" data-nav="home" class="brand"><span class="brand-mark">${icon('book')}</span>wordnest<span style="color:var(--accent)">.</span></a><nav class="nav" aria-label="${t('home')}"><a href="#/" data-nav="home" class="${state.route==='home'?'active':''}">${icon('book')}${t('home')}</a><a href="#/edit" data-nav="edit" class="${state.route==='edit'?'active':''}">${icon('edit')}${t('edit')}</a></nav><div class="sidebar-bottom"><button class="settings-trigger" data-action="settings">${icon('settings')}${t('settings')}</button></div></aside><main class="main">${content}</main></div>`;
+  return `<div class="app-shell"><aside class="sidebar"><a href="#/" data-nav="home" class="brand"><span class="brand-mark">${icon('book')}</span>wordnest<span style="color:var(--accent)">.</span></a><nav class="nav" aria-label="${t('home')}"><a href="#/" data-nav="home" class="${state.route==='home'?'active':''}">${icon('book')}${t('home')}</a><a href="#/guide" data-nav="guide" class="${state.route==='guide'?'active':''}">${icon('guide')}${t('guide')}</a><a href="#/edit" data-nav="edit" class="${state.route==='edit'?'active':''}">${icon('edit')}${t('edit')}</a></nav><div class="sidebar-bottom"><button class="settings-trigger" data-action="settings">${icon('settings')}${t('settings')}</button></div></aside><main class="main">${content}</main></div>`;
 }
 function render() {
   const active = document.activeElement;
   const focusId = active?.id;
   const selection = active && typeof active.selectionStart==='number' ? [active.selectionStart,active.selectionEnd] : null;
   let content;
-  if (state.loadError) content=`<div class="empty"><h2>${e(state.loadError)}</h2>${btn('retry','reload','primary')}</div>`;
+  if (state.route==='guide') content=guideView();
+  else if (state.loadError) content=`<div class="empty"><h2>${e(state.loadError)}</h2>${btn('retry','reload','primary')}</div>`;
   else if (!state.loaded) content=`<div class="loading"><span class="spinner"></span>${t('loading')}</div>`;
   else if (state.route==='edit') content=editor();
   else if (state.screen==='activity') content=activities();
@@ -64,6 +67,10 @@ function render() {
   $('#app').innerHTML=shell(content);
   if(state.screen!=='quiz' || state.route!=='home')stopQuizClock();
   if (focusId && document.getElementById(focusId) && !['language'].includes(focusId)) { const el=document.getElementById(focusId); el.focus({preventScroll:true}); if(selection && el.setSelectionRange) el.setSelectionRange(...selection); }
+}
+function guideView() {
+  const section=(id,symbol,title,items)=>`<section class="guide-section" aria-labelledby="${id}"><h2 id="${id}">${icon(symbol)}${t(title)}</h2><ul>${items.map(key=>`<li>${e(t(key))}</li>`).join('')}</ul></section>`;
+  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideEditShared'])}${section('guide-settings','settings','settings',['guideSettings','guideTransfers','guideSounds'])}</article>`;
 }
 function readStudyProgress() {
   try { const value=JSON.parse(storage.get('wordnest-progress','{}'));return value && typeof value==='object' && !Array.isArray(value)?value:{}; } catch { return {}; }
@@ -178,10 +185,10 @@ function confirmDialog(title,help,confirm='discard',danger=false) {
 async function discardGuard() { return !state.dirty || await confirmDialog('unsavedTitle',t('unsavedHelp'),'discard',true); }
 async function navigate(route, fromHistory=false) {
   if(state.saving)return;
-  if(!await discardGuard()) { if(fromHistory)history.pushState(null,'',state.route==='edit'?'#/edit':'#/');return; }
-  if(state.screen==='quiz' && !await confirmDialog('quitTitle',t('quitHelp'),'confirmQuit')) { if(fromHistory)history.pushState(null,'',state.route==='edit'?'#/edit':'#/');return; }
+  if(!await discardGuard()) { if(fromHistory)history.pushState(null,'',routeHref(state.route));return; }
+  if(state.screen==='quiz' && !await confirmDialog('quitTitle',t('quitHelp'),'confirmQuit')) { if(fromHistory)history.pushState(null,'',routeHref(state.route));return; }
   state.route=route;state.screen='home';state.quiz=null;state.cards=null;state.dirty=false;state.draft=null;state.error='';
-  if(!fromHistory)history.pushState(null,'',route==='edit'?'#/edit':'#/');
+  if(!fromHistory)history.pushState(null,'',routeHref(route));
   render();window.scrollTo(0,0);
 }
 function markDirty() { state.dirty=true;state.error='';const label=$('#dirty-label');if(label)label.textContent=t('unsaved'); }
@@ -416,6 +423,6 @@ document.addEventListener('submit',async event=>{
 document.addEventListener('visibilitychange',updateQuizClock);
 window.addEventListener('pageshow',updateQuizClock);
 window.addEventListener('storage',event=>{if(event.key==='wordnest-progress' && state.route==='home' && state.screen==='home')render();});
-window.addEventListener('hashchange',()=>navigate(location.hash.startsWith('#/edit')?'edit':'home',true));
+window.addEventListener('hashchange',()=>navigate(routeFromHash(),true));
 window.addEventListener('beforeunload',event=>{if(state.dirty||state.saving){event.preventDefault();event.returnValue='';}});
 load();

@@ -36,9 +36,13 @@ test('UI: edit, quizzes, flashcards and gestures, theme settings, ZIP and JSON t
   function submit(selector){find(selector).dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));}
   try{
     w.eval(source);await tick();await tick();assert.equal(w.document.querySelectorAll('.set-card').length,1);assert.equal(find('[data-action="new"]'),null);assert.equal(find('[data-select]'),null);assert.equal(find('[data-action="import"]'),null);
+    assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.dataset.nav),['home','guide','edit']);
+    await click('.nav [data-nav="guide"]');assert.equal(w.location.hash,'#/guide');assert.equal(find('.guide-view h1').textContent,'How to use Wordnest');assert.equal(w.document.querySelectorAll('.guide-section').length,5);assert.equal(w.document.querySelectorAll('.guide-legend li').length,4);assert.ok(find('.nav [data-nav="guide"]').classList.contains('active'));assert.equal(find('.set-card'),null);
+    await click('.nav [data-nav="home"]');assert.equal(w.location.hash,'#/');assert.ok(find('.set-card'));
     await click('[data-action="settings"]');const theme=find('#theme-choice');theme.value='light';theme.dispatchEvent(new w.Event('change',{bubbles:true}));assert.equal(w.document.documentElement.dataset.theme,'light');theme.value='dark';theme.dispatchEvent(new w.Event('change',{bubbles:true}));assert.equal(w.document.documentElement.dataset.theme,'dark');assert.equal(w.localStorage.getItem('wordnest-theme'),'dark');assert.equal(w.getComputedStyle(find('#modal-title')).outline,'none');await click('[data-dialog="cancel"]');
     await click('[data-nav="edit"]:not(.brand)');input('#password','a-long-testing-password');submit('#login-form');await tick();await tick();
     await click('[data-action="settings"]');await click('[data-settings-action="new"]');input('#set-title','Four words');
+    await click('.nav [data-nav="guide"]');assert.ok(find('#modal-title'));await click('[data-dialog="cancel"]');assert.equal(w.location.hash,'#/edit');assert.equal(find('#set-title').value,'Four words');assert.equal(find('.guide-view'),null);
     const words=[['apple','りんご'],['book','本'],['cat','猫'],['dog','犬']];
     for(let i=0;i<4;i++){if(i)await click('[data-action="add-word"]');input(`#word-${i}-english`,words[i][0]);input(`#word-${i}-meaning`,words[i][1]);}
     input('#word-0-explanation','A useful word.');await click('[data-action="save"]');assert.equal(sets[0].title,'Four words');assert.equal(sets[0].words.length,4);assert.equal(find('#dirty-label').textContent,'');
@@ -74,5 +78,24 @@ test('UI: edit, quizzes, flashcards and gestures, theme settings, ZIP and JSON t
     input('#set-title','A draft to delete');await click('[data-action="manage-sets"]');await click(`[data-manage-delete="${draftId}"]`);assert.ok(find('.manage-confirm').textContent.includes('unsaved draft'));await click('[data-manage-delete-confirm]');assert.equal(sets.length,2);await click('[data-manage-close]');assert.equal(find('#set-title'),null);assert.ok(find('.editor-panel .empty'));
     await click('.nav [data-nav="home"]');assert.deepEqual([...w.document.querySelectorAll('.card-open')].map(b=>b.dataset.id),sets.map(s=>s.id));await click('.nav [data-nav="edit"]');
     await click('[data-action="settings"]');const language=find('#settings-language');language.value='ja';language.dispatchEvent(new w.Event('change',{bubbles:true}));assert.equal(w.document.documentElement.lang,'ja');assert.equal(find('#modal-title').textContent,'設定');await click('[data-dialog="cancel"]');assert.ok(find('.edit-heading h1').textContent.includes('単語'));
+    await click('.nav [data-nav="guide"]');assert.equal(find('.nav [data-nav="guide"]').textContent.trim(),'説明');assert.equal(find('.guide-view h1').textContent,'使い方');assert.ok(find('#guide-cards+ul').textContent.includes('単語カード'));assert.ok(find('.guide-view').textContent.includes('このブラウザ'));assert.ok(find('.guide-view').textContent.includes('両方向クリア'));
+    await click('[data-action="settings"]');find('#settings-language').value='en';find('#settings-language').dispatchEvent(new w.Event('change',{bubbles:true}));await click('[data-dialog="cancel"]');assert.equal(find('.guide-view h1').textContent,'How to use Wordnest');assert.equal(find('.nav [data-nav="guide"]').textContent.trim(),'Guide');assert.ok(find('.guide-view').textContent.includes('15-second'));
   }finally{dom.window.close();}
+});
+
+test('Guide deep link stays available when word set loading fails',async()=>{
+  const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/#/guide',runScripts:'outside-only',pretendToBeVisual:true});
+  const w=dom.window;
+  Object.assign(w,core,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
+  w.Audio=class{play(){return Promise.resolve();}};
+  w.fetch=async()=>{throw new Error('Offline');};
+  try{
+    w.eval(source);await tick();await tick();
+    assert.equal(w.document.querySelector('.guide-view h1').textContent,'How to use Wordnest');
+    assert.ok(w.document.querySelector('.nav [data-nav="guide"]').classList.contains('active'));
+    w.document.querySelector('.nav [data-nav="home"]').click();await tick();await tick();
+    assert.equal(w.location.hash,'#/');assert.equal(w.document.querySelector('.guide-view'),null);assert.ok(w.document.querySelector('.empty'));
+    w.location.hash='#/guide';await new Promise(resolve=>setTimeout(resolve,10));await tick();
+    assert.ok(w.document.querySelector('.guide-view'));assert.equal(w.location.hash,'#/guide');
+  }finally{w.close();}
 });

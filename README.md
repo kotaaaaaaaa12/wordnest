@@ -49,6 +49,10 @@ Keep the same binding/database for later deployments to preserve word sets. If a
 
 The Practice page opens directly to the word-set heading, search field, and set cards. Promotional headings, welcome messages, decorative illustrations, sidebar slogans, and the footer are removed. Setup screens use short labels for the study mode, direction, question count, and card order. The light/dark palette stays the same.
 
+## Guide tab
+
+The Guide tab sits between Practice and Edit and is available at `#/guide`, including before word sets finish loading. It follows the selected English/Japanese UI language and explains quizzes, flashcards, clear colors, editing, transfers, and sound effects. On mobile, the three tabs occupy their own row below the brand and Settings button.
+
 ## Settings and appearance
 
 Open **Settings** from the sidebar or the gear button in the mobile header.
