@@ -75,9 +75,20 @@ export function collectionCards(words,mode,order) {
 }
 const clean=value=>({failures:Number.isInteger(value?.failures)?Math.max(0,Math.min(2,value.failures)):0,successes:Number.isInteger(value?.successes)?Math.max(0,Math.min(3,value.successes)):0,mistakes:Number.isSafeInteger(value?.mistakes)?Math.max(0,value.mistakes):0,weak:value?.weak===true});
 export class PersonalWords {
-  constructor(storage){this.storage=storage;this.memory=new Map();this.persistent=Boolean(storage);}
-  read(type,key) {const name=PREFIX+type+':'+keyToken(key);if(this.memory.has(name))return this.memory.get(name);try{const value=this.storage?.getItem(name);return value?JSON.parse(value):null;}catch{return null;}}
-  write(type,key,value) {const name=PREFIX+type+':'+keyToken(key);this.memory.set(name,value);try{if(!this.storage)throw new Error('Storage unavailable');for(const [pending,entry] of this.memory){this.storage.setItem(pending,JSON.stringify(entry));this.memory.delete(pending);}this.persistent=true;}catch{this.persistent=false;}}
+  constructor(storage){this.storage=storage;this.memory=new Map();this.persistent=Boolean(storage);this.epochs={question:this.readEpoch('question'),favorite:this.readEpoch('favorite')};}
+  readEpoch(type){try{return this.storage?.getItem('wordnest-reset-'+type) || '';}catch{return this.epochs?.[type] || '';}}
+  syncResets(){
+    for(const type of ['question','favorite']){const epoch=this.readEpoch(type);if(epoch===this.epochs[type])continue;this.epochs[type]=epoch;for(const name of this.memory.keys())if(name.startsWith(PREFIX+type+':'))this.memory.delete(name);}
+  }
+  reset(type){
+    if(!['question','favorite'].includes(type))throw new Error('Invalid personal data type');
+    const prefix=PREFIX+type+':',keys=Array.from({length:this.storage?.length || 0},(_,index)=>this.storage.key(index)).filter(key=>key?.startsWith(prefix));
+    if(!this.storage)throw new Error('Storage unavailable');
+    this.storage.setItem('wordnest-reset-'+type,globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
+    this.syncResets();for(const key of keys)this.storage.removeItem(key);this.persistent=true;
+  }
+  read(type,key) {this.syncResets();const name=PREFIX+type+':'+keyToken(key);if(this.memory.has(name))return this.memory.get(name);try{const raw=this.storage?.getItem(name),value=raw?JSON.parse(raw):null;return (value?.epoch || '')===this.epochs[type]?value:null;}catch{return null;}}
+  write(type,key,value) {this.syncResets();const name=PREFIX+type+':'+keyToken(key);this.memory.set(name,{...value,epoch:this.epochs[type]});try{if(!this.storage)throw new Error('Storage unavailable');for(const [pending,entry] of this.memory){this.storage.setItem(pending,JSON.stringify(entry));this.memory.delete(pending);}this.persistent=true;}catch{this.persistent=false;}}
   record(key){return clean(this.read('question',key));}
   answer(sources,correct) {
     for(const key of new Set(sources.map(source=>source.key))){

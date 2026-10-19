@@ -44,7 +44,18 @@ export function summarizeLearning(shards,timestamp=Date.now()) {
 }
 export class LearningTracker {
   constructor({storage,now=()=>Date.now(),id=globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}={}) {
-    this.storage=storage;this.now=now;this.key=STATS_PREFIX+id;this.data={version:1,days:{}};this.active=false;this.cursor=null;this.lastTouch=0;this.dirty=false;this.persistent=Boolean(storage);
+    this.storage=storage;this.now=now;this.key=STATS_PREFIX+id;this.epoch=this.readEpoch();this.data={version:1,epoch:this.epoch,days:{}};this.active=false;this.cursor=null;this.lastTouch=0;this.dirty=false;this.persistent=Boolean(storage);
+  }
+  readEpoch(){try{return this.storage?.getItem('wordnest-reset-learning') || '';}catch{return this.epoch || '';}}
+  syncReset(timestamp=this.now()){
+    const epoch=this.readEpoch();if(epoch===this.epoch)return;
+    this.epoch=epoch;this.data={version:1,epoch,days:{}};this.dirty=false;this.cursor=this.active?timestamp:null;this.lastTouch=timestamp;
+  }
+  reset(){
+    const keys=Array.from({length:this.storage?.length || 0},(_,index)=>this.storage.key(index)).filter(key=>key?.startsWith(STATS_PREFIX));
+    if(!this.storage)throw new Error('Storage unavailable');
+    this.storage.setItem('wordnest-reset-learning',globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
+    this.syncReset();for(const key of keys)this.storage.removeItem(key);this.persistent=true;
   }
   day(timestamp) {return this.data.days[localDay(timestamp)] ||= {answered:0,correct:0,flips:0,intervals:[]};}
   addTime(start,end) {
@@ -56,6 +67,7 @@ export class LearningTracker {
     }
   }
   tick(timestamp=this.now()) {
+    this.syncReset(timestamp);
     if(!this.active || this.cursor===null)return;
     const end=Math.min(timestamp,this.lastTouch+IDLE_MS);
     if(end>this.cursor)this.addTime(this.cursor,end);
@@ -73,6 +85,7 @@ export class LearningTracker {
   }
   flip(timestamp=this.now()) {this.tick();this.day(timestamp).flips++;this.dirty=true;this.persist();}
   persist() {
+    this.syncReset();
     if(!this.dirty)return;
     try{if(!this.storage)throw new Error('Storage unavailable');this.storage.setItem(this.key,JSON.stringify(this.data));this.persistent=true;this.dirty=false;}catch{this.persistent=false;}
   }
@@ -80,7 +93,7 @@ export class LearningTracker {
     this.tick(timestamp);this.persist();const shards=[];
     try{
       const keys=Array.from({length:this.storage?.length || 0},(_,index)=>this.storage.key(index));
-      for(const key of keys){if(!key?.startsWith(STATS_PREFIX) || key===this.key)continue;try{shards.push(JSON.parse(this.storage.getItem(key)));}catch{}}
+      for(const key of keys){if(!key?.startsWith(STATS_PREFIX) || key===this.key)continue;try{const shard=JSON.parse(this.storage.getItem(key));if((shard?.epoch || '')===this.epoch)shards.push(shard);}catch{}}
     }catch{this.persistent=false;}
     shards.push(this.data);return summarizeLearning(shards,timestamp);
   }

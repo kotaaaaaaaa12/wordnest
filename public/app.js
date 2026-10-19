@@ -103,7 +103,7 @@ function statsView() {
 }
 function guideView() {
   const section=(id,symbol,title,items)=>`<section class="guide-section" aria-labelledby="${id}"><h2 id="${id}">${icon(symbol)}${t(title)}</h2><ul>${items.map(key=>`<li>${e(t(key))}</li>`).join('')}</ul></section>`;
-  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-personal','star','personalTools',['guideWeak','guideWeakRecovery','guideFavorites','guideSearch','guidePersonalStorage'])}${section('guide-records','stats','stats',['guideStats','statsTimeRule','statsCountRule','statsStreakRule'])}${section('guide-settings','settings','settings',['guideSettings','guideSounds'])}${state.authenticated?section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideTransfers','guideEditShared']):''}</article>`;
+  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-personal','star','personalTools',['guideWeak','guideWeakRecovery','guideFavorites','guideSearch','guidePersonalStorage'])}${section('guide-records','stats','stats',['guideStats','statsTimeRule','statsCountRule','statsStreakRule'])}${section('guide-settings','settings','settings',['guideSettings','guideDeleteData','guideSounds'])}${state.authenticated?section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideTransfers','guideEditShared']):''}</article>`;
 }
 function readStudyProgress() {
   try { const value=JSON.parse(storage.get('wordnest-progress','{}'));return value && typeof value==='object' && !Array.isArray(value)?value:{}; } catch { return {}; }
@@ -370,27 +370,57 @@ async function submitAdmin(form) {
   catch(error) { state.adminError=messages.en[error.message]?error.message:'networkError'; }
   finally { state.adminBusy=false;render(); }
 }
+const learningDataTypes={
+  clears:{label:'clearData',help:'clearDataHelp'},
+  weak:{label:'weakWords',help:'weakDataHelp'},
+  favorites:{label:'favorites',help:'favoriteDataHelp'},
+  statistics:{label:'stats',help:'statisticsDataHelp'},
+  all:{label:'allLearningData',help:'allLearningDataHelp'}
+};
+function settingsDataContent() {
+  return `<section class="settings-section settings-data" aria-labelledby="learning-data-title"><h3 id="learning-data-title">${t('deleteLearningData')}</h3><p class="settings-data-note">${t('learningDataScope')}</p><div class="settings-data-list">${Object.entries(learningDataTypes).filter(([type])=>type!=='all').map(([type,{label}])=>`<div class="settings-data-row"><span>${t(label)}</span><button class="btn ghost small" data-delete-learning="${type}" aria-label="${e(t('deleteNamedData',{name:t(label)}))}">${t('delete')}</button></div>`).join('')}</div><button class="btn danger" data-delete-learning="all">${icon('trash')}${t('deleteAllLearningData')}</button></section>`;
+}
+async function deleteLearningData(type) {
+  const target=learningDataTypes[type];if(!target)return;
+  const confirmed=await dialog(`<button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${e(t('deleteDataTitle',{name:t(target.label)}))}</h2><p>${t(target.help)}</p><p>${t('deleteDataWarning')}</p><div class="modal-actions"><button class="btn ghost" data-dialog="cancel">${t('cancel')}</button><button class="btn danger" data-dialog="confirm">${t('delete')}</button></div>`);
+  if(!confirmed)return;
+  try {
+    if(type==='clears' || type==='all'){if(!learningStorage)throw new Error('Storage unavailable');learningStorage.removeItem('wordnest-progress');}
+    if(type==='weak' || type==='all')personal.reset('question');
+    if(type==='favorites' || type==='all')personal.reset('favorite');
+    if(type==='statistics' || type==='all')learning.reset();
+    render();toast(t('learningDataDeleted'));
+  } catch {render();toast(t('deleteDataError'));}
+}
 function settingsContent() {
-  return `<button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t('settings')}</h2><div class="settings-section"><label for="theme-choice">${t('appearance')}<select id="theme-choice">${['auto','light','dark'].map(value=>`<option value="${value}" ${themeChoice===value?'selected':''}>${t(value)}</option>`).join('')}</select></label>${['light','dark'].map(mode=>`<label for="${mode}-palette">${t(mode==='light'?'lightTheme':'darkTheme')}<select id="${mode}-palette">${paletteChoices[mode].map(value=>`<option value="${value}" ${(mode==='light'?lightPalette:darkPalette)===value?'selected':''}>${t('palette_'+value)}</option>`).join('')}</select></label>`).join('')}<label for="settings-language">${t('language')}<select id="settings-language"><option value="auto" ${languageChoice==='auto'?'selected':''}>${t('auto')}</option><option value="en" ${languageChoice==='en'?'selected':''}>English</option><option value="ja" ${languageChoice==='ja'?'selected':''}>日本語</option></select></label><button class="btn ghost" data-settings-sound aria-pressed="${soundEnabled}">${icon(soundEnabled?'sound':'mute')}${t(soundEnabled?'soundOn':'soundOff')}</button></div><section class="settings-section settings-admin" id="admin-controls" aria-labelledby="admin-settings-title" data-state="${e(adminSignature())}">${adminSettingsContent()}</section><div class="modal-actions"><button class="btn primary" data-dialog="cancel">${t('close')}</button></div>`;
+  return `<button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t('settings')}</h2><div class="settings-section"><label for="theme-choice">${t('appearance')}<select id="theme-choice">${['auto','light','dark'].map(value=>`<option value="${value}" ${themeChoice===value?'selected':''}>${t(value)}</option>`).join('')}</select></label>${['light','dark'].map(mode=>`<label for="${mode}-palette">${t(mode==='light'?'lightTheme':'darkTheme')}<select id="${mode}-palette">${paletteChoices[mode].map(value=>`<option value="${value}" ${(mode==='light'?lightPalette:darkPalette)===value?'selected':''}>${t('palette_'+value)}</option>`).join('')}</select></label>`).join('')}<label for="settings-language">${t('language')}<select id="settings-language"><option value="auto" ${languageChoice==='auto'?'selected':''}>${t('auto')}</option><option value="en" ${languageChoice==='en'?'selected':''}>English</option><option value="ja" ${languageChoice==='ja'?'selected':''}>日本語</option></select></label><button class="btn ghost" data-settings-sound aria-pressed="${soundEnabled}">${icon(soundEnabled?'sound':'mute')}${t(soundEnabled?'soundOn':'soundOff')}</button></div>${settingsDataContent()}<section class="settings-section settings-admin" id="admin-controls" aria-labelledby="admin-settings-title" data-state="${e(adminSignature())}">${adminSettingsContent()}</section><div class="modal-actions"><button class="btn primary" data-dialog="cancel">${t('close')}</button></div>`;
 }
 async function settingsDialog() {
-  state.adminError='';
-  const action=await dialog(settingsContent(),finish=>{
-    modal.onchange=event=>{
-      if(event.target.id==='theme-choice'){themeChoice=event.target.value;storage.set('wordnest-theme',themeChoice);applyTheme();}
-      else if(event.target.id==='light-palette'){lightPalette=event.target.value;storage.set('wordnest-light-palette',lightPalette);applyTheme();}
-      else if(event.target.id==='dark-palette'){darkPalette=event.target.value;storage.set('wordnest-dark-palette',darkPalette);applyTheme();}
-      else if(event.target.id==='settings-language'){languageChoice=event.target.value;storage.set('wordnest-language',languageChoice);setLanguage();render();modal.innerHTML=settingsContent();$('#modal-title',modal)?.focus({preventScroll:true});}
-    };
-    modal.onclick=event=>{
-      if(event.target.closest('[data-admin-open]')){finish('edit');return;}
-      if(event.target.closest('[data-admin-lock]')){finish('lock');return;}
-      if(event.target.closest('[data-dialog]')){finish(false);return;}
-      if(event.target.closest('[data-settings-sound]')){soundEnabled=!soundEnabled;storage.set('wordnest-sound',soundEnabled?'on':'off');modal.innerHTML=settingsContent();$('#modal-title',modal)?.focus({preventScroll:true});return;}
-    };
-  });
-  if(action==='edit' && state.authenticated)await navigate('edit');
-  else if(action==='lock' && state.authenticated)await actions.logout();
+  let scroll=0;
+  while(true){
+    state.adminError='';
+    const action=await dialog(settingsContent(),finish=>{
+      modal.scrollTop=scroll;
+      modal.onchange=event=>{
+        if(event.target.id==='theme-choice'){themeChoice=event.target.value;storage.set('wordnest-theme',themeChoice);applyTheme();}
+        else if(event.target.id==='light-palette'){lightPalette=event.target.value;storage.set('wordnest-light-palette',lightPalette);applyTheme();}
+        else if(event.target.id==='dark-palette'){darkPalette=event.target.value;storage.set('wordnest-dark-palette',darkPalette);applyTheme();}
+        else if(event.target.id==='settings-language'){languageChoice=event.target.value;storage.set('wordnest-language',languageChoice);setLanguage();render();modal.innerHTML=settingsContent();$('#modal-title',modal)?.focus({preventScroll:true});}
+      };
+      modal.onclick=event=>{
+        const deletion=event.target.closest('[data-delete-learning]');
+        if(deletion){finish({deleteData:deletion.dataset.deleteLearning,scroll:modal.scrollTop});return;}
+        if(event.target.closest('[data-admin-open]')){finish('edit');return;}
+        if(event.target.closest('[data-admin-lock]')){finish('lock');return;}
+        if(event.target.closest('[data-dialog]')){finish(false);return;}
+        if(event.target.closest('[data-settings-sound]')){soundEnabled=!soundEnabled;storage.set('wordnest-sound',soundEnabled?'on':'off');modal.innerHTML=settingsContent();$('#modal-title',modal)?.focus({preventScroll:true});return;}
+      };
+    });
+    if(action?.deleteData){scroll=action.scroll;await deleteLearningData(action.deleteData);continue;}
+    if(action==='edit' && state.authenticated)await navigate('edit');
+    else if(action==='lock' && state.authenticated)await actions.logout();
+    return;
+  }
 }
 async function exportDialog() {
   if(state.route!=='edit' || !state.authenticated)return;
@@ -571,3 +601,8 @@ window.addEventListener('beforeunload',event=>{learning.setActive(false);if(stat
 load();
 
 window.addEventListener('storage',event=>{if(event.key?.startsWith('wordnest-personal-v1:') && state.route==='home' && state.screen==='home')render();});
+
+window.addEventListener('storage',event=>{
+  if(event.key==='wordnest-reset-learning'){learning.syncReset();if(state.route==='stats')render();}
+  else if(['wordnest-reset-question','wordnest-reset-favorite'].includes(event.key)){personal.syncResets();if(state.route==='home')render();}
+});

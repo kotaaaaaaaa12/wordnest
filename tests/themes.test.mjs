@@ -49,3 +49,77 @@ test('settings save independent light/dark palettes, auto follows the system, an
     try{reopened.eval(boot);assert.equal(reopened.document.documentElement.dataset.palette,'graphite');}finally{reopened.close();}
   }finally{w.close();}
 });
+
+function resolveToken(w,element,name,seen=new Set()) {
+  assert.ok(!seen.has(name),`Circular theme token: ${name}`);seen.add(name);
+  const value=w.getComputedStyle(element).getPropertyValue(name).trim();
+  const alias=/^var\((--[\w-]+)\)$/.exec(value);
+  return alias?resolveToken(w,element,alias[1],seen):value;
+}
+function luminance(hex){
+  assert.match(hex,/^#[\da-f]{6}$/i);
+  const [r,g,b]=hex.slice(1).match(/../g).map(value=>parseInt(value,16)/255).map(value=>value<=.04045?value/12.92:((value+.055)/1.055)**2.4);
+  return .2126*r+.7152*g+.0722*b;
+}
+function contrast(first,second){const a=luminance(first),b=luminance(second);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);}
+function declaration(w,selector,name){
+  for(const sheet of w.document.styleSheets)for(const rule of sheet.cssRules)if(rule.selectorText===selector)return rule.style.getPropertyValue(name);
+  assert.fail(`Missing selector: ${selector}`);
+}
+test('Graphite selections match the gold brand accent across navigation and practice controls',async()=>{
+  const {w}=create({prefs:{'wordnest-theme':'dark','wordnest-dark-palette':'graphite'}});
+  try{
+    w.eval(boot);w.eval(source);await tick();await tick();const root=w.document.documentElement;
+    assert.equal(resolveToken(w,root,'--selection-text'),resolveToken(w,root,'--accent'));
+    assert.equal(resolveToken(w,root,'--selection-bg'),resolveToken(w,root,'--soft'));
+    assert.notEqual(resolveToken(w,root,'--selection-text'),resolveToken(w,root,'--green'));
+    assert.ok(contrast(resolveToken(w,root,'--selection-text'),resolveToken(w,root,'--selection-bg'))>=4.5);
+    assert.ok(contrast(resolveToken(w,root,'--brand-ink'),resolveToken(w,root,'--accent'))>=4.5);
+    for(const selector of ['.nav a.active','.count-btn.active','.set-list button.active','.order-grid .mode-card.active','.library-tabs button[aria-pressed="true"],.segmented button[aria-pressed="true"]']){
+      assert.equal(declaration(w,selector,'background'),'var(--selection-bg)');assert.equal(declaration(w,selector,'color'),'var(--selection-text)');
+    }
+  }finally{w.close();}
+});
+test('completion books, badges, and Guide legend have distinct semantic colors with readable contrast in every palette',async()=>{
+  const semantic={none:'none','en-ja':'en','ja-en':'ja',both:'both'},seen={light:null,dark:null};
+  for(const [mode,palettes] of Object.entries({light:['default','ocean','lavender'],dark:['default','midnight','graphite']}))for(const palette of palettes){
+    const sets=Object.keys(semantic).map(id=>({id,title:id,words:[{english:'apple',meaning:'りんご'}]}));
+    const progress=Object.fromEntries(sets.map(set=>[set.id,{key:core.studyKey(set),scope:'all-first-pass','en-ja':['en-ja','both'].includes(set.id),'ja-en':['ja-en','both'].includes(set.id)}]));
+    const {w}=create({prefs:{'wordnest-theme':mode,[`wordnest-${mode}-palette`]:palette,'wordnest-progress':JSON.stringify(progress)}});
+    const original=w.fetch;w.fetch=async(path,options)=>path==='/api/sets'?{ok:true,status:200,json:async()=>({sets,orderRevision:0})}:original(path,options);
+    try{
+      w.eval(boot);w.eval(source);await tick();await tick();const root=w.document.documentElement,colors=[];
+      for(const [status,token] of Object.entries(semantic)){
+        const article=w.document.querySelector(`[data-set-id="${status}"]`);assert.equal(article.dataset.studyStatus,status);
+        const foreground=resolveToken(w,article,'--study-color'),background=resolveToken(w,article,'--study-bg');
+        assert.equal(foreground,resolveToken(w,root,`--clear-${token}-text`));assert.equal(background,resolveToken(w,root,`--clear-${token}-bg`));
+        assert.ok(contrast(foreground,background)>=4.5,`${mode}/${palette}/${status} text contrast`);colors.push(foreground);
+        assert.ok(article.querySelector('.set-symbol svg'));assert.ok(article.querySelector('.study-status').textContent.length);
+        if(status!=='none')assert.ok(article.querySelector('.study-status svg'));
+      }
+      assert.equal(new Set(colors).size,4);if(seen[mode])assert.deepEqual(colors,seen[mode]);else seen[mode]=colors;
+      w.document.querySelector('.nav [data-nav="guide"]').click();await tick();await tick();
+      for(const status of Object.keys(semantic)){
+        const legend=w.document.querySelector(`.guide-legend .study-${status}`);assert.equal(resolveToken(w,legend,'--study-color'),resolveToken(w,root,`--clear-${semantic[status]}-text`));
+      }
+    }finally{w.close();}
+  }
+});
+test('modal backgrounds stay neutral and the active palette persists through modal switches and closing',async()=>{
+  for(const [mode,palettes] of Object.entries({light:['default','ocean','lavender'],dark:['default','midnight','graphite']}))for(const palette of palettes){
+    const {w}=create({prefs:{'wordnest-theme':mode,[`wordnest-${mode}-palette`]:palette}}),find=s=>w.document.querySelector(s);
+    async function click(s){find(s).click();await tick();await tick();}
+    try{
+      w.eval(boot);w.eval(source);await tick();await tick();const root=w.document.documentElement;
+      const expected=resolveToken(w,root,'--paper');await click('[data-action="settings"]');assert.equal(find('#modal').open,true);
+      assert.equal(resolveToken(w,root,'--paper'),expected);assert.equal(root.dataset.palette,palette);
+      const overlay=declaration(w,'dialog::backdrop','background');assert.equal(overlay,'rgba(0, 0, 0, 0.32)');assert.ok(!overlay.includes('var('));assert.equal(declaration(w,':root[data-theme="dark"] dialog::backdrop','background'),'rgba(0, 0, 0, 0.52)');
+      assert.match(css,/dialog::backdrop\{[^}]*-webkit-backdrop-filter:blur\(4px\)/);assert.equal(declaration(w,'dialog::backdrop','backdrop-filter'),'blur(4px)');
+      assert.equal(declaration(w,'body','background'),'var(--paper)');assert.equal(declaration(w,'.app-shell','background'),'var(--paper)');
+      await click('[data-delete-learning="all"]');assert.equal(resolveToken(w,root,'--paper'),expected);assert.equal(root.dataset.palette,palette);
+      await click('[data-dialog="cancel"]');assert.ok(find('#admin-controls'));await click('[data-dialog="cancel"]');assert.equal(find('#modal').open,false);assert.equal(root.dataset.palette,palette);
+      await click('[data-action="settings"]');const picker=find(`#${mode}-palette`);picker.value=palette==='default'?palettes[1]:'default';picker.dispatchEvent(new w.Event('change',{bubbles:true}));
+      const updated=resolveToken(w,root,'--paper');assert.notEqual(updated,expected);await click('[data-dialog="cancel"]');assert.equal(resolveToken(w,root,'--paper'),updated);
+    }finally{w.close();}
+  }
+});
