@@ -45,6 +45,10 @@ The shipped configuration intentionally omits a database ID to enable automatic 
 
 Keep the same binding/database for later deployments to preserve word sets. If auto-provisioning is unavailable for your account or token, create a D1 database in the dashboard, then use the explicit binding above. Do not change the database just to update application code.
 
+## Simple layout
+
+The Practice page opens directly to the word-set heading, search field, and set cards. Promotional headings, welcome messages, decorative illustrations, sidebar slogans, and the footer are removed. Setup screens use short labels for the study mode, direction, question count, and card order. The light/dark palette stays the same.
+
 ## Settings and appearance
 
 Open **Settings** from the sidebar or the gear button in the mobile header.
@@ -210,3 +214,7 @@ wrangler.jsonc            Workers deployment and D1 binding
 fflate is distributed under its MIT license, included in `public/vendor/fflate-LICENSE.txt`.
 
 The interface uses selected [Lucide](https://lucide.dev/) SVG icons with a consistent 24-unit grid and rounded 1.8-unit strokes. Only the icons used by this app are bundled; no CDN or icon font is loaded. Lucide and inherited Feather license notices are included in `public/vendor/lucide-LICENSE.txt`. After changing the selected icon list, run `npm run build:icons` and commit the generated module and favicon.
+
+### Flashcard text layout
+
+Flashcards grow to fit the longer face, so full meanings remain readable in both directions. Both faces share a grid cell to keep the card height stable when flipping. Long content uses normal page scrolling rather than a clipped inner scroll area. The Japanese UI calls this mode “単語カード”.
