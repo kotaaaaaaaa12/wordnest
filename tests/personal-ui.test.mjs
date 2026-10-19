@@ -12,12 +12,12 @@ const source=(await readFile('public/app.js','utf8')).replace(/^import .*;\n/gm,
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const first={id:'first',title:'Set A',revision:1,words:[['apple','りんご'],['book','本'],['cat','猫'],['dog','犬']].map(([english,meaning])=>({english,meaning,explanation:'A useful note.'}))};
 const second={id:'second',title:'Set B',revision:1,words:[['egg','卵'],['fish','魚'],['goat','山羊'],['hat','帽子']].map(([english,meaning])=>({english,meaning,explanation:''}))};
-function harness(hash='#/') {
+function harness(hash='#/',authenticated=false) {
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/'+hash,runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
   Object.assign(w,core,statistics,personalTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});w.document.hasFocus=()=>true;
   w.Audio=class{play(){return Promise.resolve();}};w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){}});
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
-  w.fetch=async path=>({ok:true,status:200,json:async()=>path==='/api/sets'?{sets:[first,second],orderRevision:0}:{authenticated:false,configured:true}});
+  w.fetch=async path=>({ok:true,status:200,json:async()=>path==='/api/sets'?{sets:[first,second],orderRevision:0}:{authenticated,configured:true}});
   return {dom,w};
 }
 test('personal UI supports cross-context recovery, set selection, both collection activities, favorites, and search',async()=>{
@@ -66,7 +66,7 @@ test('personal UI supports cross-context recovery, set selection, both collectio
   }finally{w.close();}
 });
 test('document titles follow all main tabs, selected language, and direct links',async()=>{
-  const {w}=harness('#/guide'),find=s=>w.document.querySelector(s);
+  const {w}=harness('#/guide',true),find=s=>w.document.querySelector(s);
   async function click(selector){assert.ok(find(selector),selector);find(selector).click();await tick();await tick();}
   try{
     w.eval(source);await tick();await tick();assert.equal(w.document.title,'Wordnest — Guide');

@@ -16,7 +16,7 @@ A responsive English vocabulary quiz and flashcard app for Cloudflare Workers + 
 
 4. Deploy. Wrangler automatically provisions the `DB` D1 binding on the first deployment. The first API request creates the tables. New installations start with no word sets. No manual SQL migration is needed. The deploy token must have permission to provision D1 databases.
 5. Set the runtime secret **`ADMIN_PASSWORD`** to a strong password of **at least 12 characters**. In your deployed Worker's **Settings → Variables and Secrets**, add a **Secret** with that name and deploy the change. This must be a Worker runtime secret, not only a build environment variable.
-6. Open the Worker URL. Everyone can practice and export word sets. Open **Edit** and enter the password to create, import, change, or delete shared sets.
+6. Open the Worker URL. Everyone can practice. Enter the administrator password at the bottom of **Settings** to reveal **Edit** and create, import, export, change, or delete shared sets.
 
 For CLI deployment:
 
@@ -51,17 +51,21 @@ The Practice page starts with a compact Sets / Difficult words / Favorites / Wor
 
 ## Guide tab
 
-The navigation is Practice → Guide → Statistics → Edit. Guide is available at `#/guide`, including before word sets finish loading. It follows the selected English/Japanese UI language and explains quizzes, flashcards, personal study tools, clear colors, editing, transfers, statistics, and sound effects. On mobile, the four tabs occupy their own row below the brand and Settings button.
+Public navigation is Practice → Statistics → Guide. Authenticated administrators also see Edit as the fourth tab. Guide is available at `#/guide`, including before word sets finish loading. It follows the selected English/Japanese UI language and explains quizzes, flashcards, personal study tools, clear colors, statistics, settings, and sound effects. Editing and transfer instructions appear only for authenticated administrators, after the Settings section. On mobile, the three or four visible tabs share their own row below the brand and Settings button.
 
 ## Settings and appearance
 
 Open **Settings** from the sidebar or the gear button in the mobile header.
 
 - Appearance: **Auto**, **Light**, or **Dark**. Auto follows the device theme. Your choice is remembered on this browser and applied before the page is painted.
+- Light theme: **Default**, **Ocean**, or **Lavender**.
+- Dark theme: **Default**, **Midnight**, or **Graphite**.
 - Language: **Auto**, **English**, or **日本語**.
 - Sound: enable or disable quiz effects.
 
-Settings contains no word-set management actions. After unlocking Edit, the toolbar contains **New set**, **Import**, **Export**, **Manage sets**, and **Lock editor**.
+The original default light and dark palettes are unchanged. Light and dark theme choices are saved separately on this browser; Auto switches between those saved choices. Theme preferences are applied in the document head before the page is painted. Favorite stars have a solid yellow fill in every theme. Clear-status colors keep their established meanings across palettes.
+
+Settings contains no word-set management actions. Its bottom Administrator access section accepts the existing `ADMIN_PASSWORD`, reveals Edit after successful server authentication, and offers Open editor and Lock editor while authenticated. There is no password wall on the Edit page; anonymous `#/edit` links return to Practice. After enabling editing, the toolbar contains **New set**, **Import**, **Export**, **Manage sets**, and **Lock editor**.
 
 Practice cards contain no export checkboxes or New set buttons. The editor provides creation and backup actions directly; they remain hidden while the editor is locked. Focus outlines and focus shadows are suppressed throughout the interface, including modal headings and buttons. Direction cards have no sticky hover highlight, and pointer clicks do not leave the selected button focused.
 
@@ -113,6 +117,7 @@ After choosing **Flashcards** and a direction, choose **Original order**, **Reve
 
 ## Editing and shared storage
 
+- Enable editing with the administrator password at the bottom of Settings. Authentication reveals the Edit tab and the editing guide; locking or an expired-session response hides both. Unsaved drafts remain in memory after session expiry and can be resumed after authenticating again.
 - Word sets are shared across browsers and stored in D1, not in local storage.
 - The editor supports a title, English word, meaning, and optional explanation.
 - Save changes explicitly. Saving keeps the editor open.
@@ -127,7 +132,7 @@ The quiz content is public to visitors who can access the Worker URL. The editin
 
 ## Delete and reorder word sets
 
-Unlock **Edit**, then open **Manage sets**.
+Enable editing in **Settings**, open **Edit**, then open **Manage sets**.
 
 - Use the up/down buttons to change the display order, then choose **Save order**. The saved order applies to the Practice page, Edit list, and export picker on every browser after loading the current collection.
 - Saving a word's content does not move its set. New sets and imported sets are added above the existing collection.
@@ -143,7 +148,7 @@ Delete sets through **Edit → Manage sets** after unlocking the editor.
 
 ### Export
 
-Unlock **Edit → Export**, select one or more word sets, then choose **Export selected**.
+Enable editing in **Settings**, open **Edit → Export**, select one or more word sets, then choose **Export selected**.
 
 - One set downloads as one `.json` file.
 - Multiple sets download as a ZIP containing one JSON file per set.
@@ -152,7 +157,7 @@ Unlock **Edit → Export**, select one or more word sets, then choose **Export s
 
 ### Import
 
-Unlock Edit, open **Import**, then select one or more JSON/ZIP files. Review the preview and select the sets you want to add. Importing always creates new copies and never overwrites existing sets. Sets are imported together as one database batch. If any selected set is invalid, the whole batch is rejected.
+Enable editing in **Settings**, open **Edit → Import**, then select one or more JSON/ZIP files. Review the preview and select the sets you want to add. Importing always creates new copies and never overwrites existing sets. Sets are imported together as one database batch. If any selected set is invalid, the whole batch is rejected.
 
 Supported JSON format:
 
@@ -246,7 +251,7 @@ Open **Statistics** (`#/stats`) without an editing password. It displays total s
 
 ## Difficult words, favorites, and word search
 
-Version 1.8.0 adds these views inside Practice. Main navigation remains Practice / Guide / Statistics / Edit. The browser document title follows the active main tab and selected UI language, including direct links and language changes while a dialog is open.
+Version 1.8.0 adds these views inside Practice. Main navigation is Practice / Statistics / Guide, with Edit added for authenticated administrators. The browser document title follows the active main tab and selected UI language, including direct links and language changes while a dialog is open.
 
 - **Difficult words:** select EN → JP or JP → EN and either one word set or a combined selection of sets. Each selection supports quizzes and flashcards. Two consecutive incorrect, skipped, or timed-out answers to the same question in the same direction register it. Three consecutive correct answers remove it. Regular word-set quizzes, difficult-word quizzes, favorite quizzes, and mistake retries all update the same question record. Other questions do not interrupt its streak. A miss resets the correct streak; a correct answer resets the miss streak. A registered question stays registered until its third consecutive correct answer. After recovery, two new consecutive misses register it again.
 - **Favorites:** stars are available outside the flashcard flip button, in revealed quiz feedback, and in word search results/details. Save individual words and study them across sets or filter to one set. Recovery never removes favorites. Both quiz directions, question counts, card directions, and card orders are supported. A word can be in Favorites and Difficult words at the same time.
