@@ -5,6 +5,7 @@ import { JSDOM } from 'jsdom';
 import * as core from '../public/core.js';
 import * as statistics from '../public/stats.js';
 import * as personalTools from '../public/personal.js';
+import * as rankingTools from '../public/rankings.js';
 import { icon } from '../public/icons.js';
 import { messages, translator } from '../public/i18n.js';
 import * as zip from 'fflate';
@@ -14,7 +15,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const password='administrator-password';
 async function harness({hash='#/guide',authenticated=false,configured=true}={}) {
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/'+hash,runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
-  Object.assign(w,core,statistics,personalTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:false})});
+  Object.assign(w,core,statistics,personalTools,rankingTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:false})});
   w.document.hasFocus=()=>true;w.Audio=class{play(){return Promise.resolve();}};
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
   let expireWrites=false,delayLogin;
@@ -36,7 +37,7 @@ async function harness({hash='#/guide',authenticated=false,configured=true}={}) 
   async function click(s){const element=find(s);assert.ok(element,s);element.click();await tick();await tick();}
   function input(s,value){find(s).value=value;find(s).dispatchEvent(new w.Event('input',{bubbles:true}));}
   async function login(value=password){input('#admin-password',value);find('#admin-login-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await tick();await tick();}
-  w.eval(source);await tick();await tick();
+  w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();
   return {w,find,click,input,login,expire(){expireWrites=true;},delay(promise){delayLogin=promise;}};
 }
 test('administrator access lives at Settings bottom and controls Edit and its guide in both languages',async()=>{
@@ -53,7 +54,7 @@ test('administrator access lives at Settings bottom and controls Edit and its gu
     assert.ok(sections.at(-1).textContent.includes('Import'));assert.equal(sections.at(-2).textContent.includes('Import'),false);
     find('#settings-language').value='ja';find('#settings-language').dispatchEvent(new w.Event('change',{bubbles:true}));
     assert.equal(find('#admin-settings-title').textContent,'管理者用');assert.equal(find('[data-admin-open]').textContent.trim(),'編集画面を開く');assert.ok(find('#guide-edit+ul').textContent.includes('管理者パスワード'));
-    await click('[data-admin-open]');assert.equal(w.location.hash,'#/edit');assert.ok(find('.editor-toolbar'));assert.equal(find('input[type="password"]'),null);assert.equal(find('#login-form'),null);
+    await click('[data-admin-open]');assert.equal(w.location.hash,'#/edit');assert.ok(find('.editor-toolbar'));assert.equal(find('[data-action="logout"]'),null);assert.equal(find('input[type="password"]'),null);assert.equal(find('#login-form'),null);
     await click('.nav [data-nav="guide"]');await click('[data-action="settings"]');await click('[data-admin-lock]');
     assert.equal(find('.nav [data-nav="edit"]'),null);assert.equal(find('#guide-edit'),null);assert.equal(find('#modal').open,false);
     await click('[data-action="settings"]');assert.equal(find('label[for="admin-password"]').firstChild.textContent,'管理者パスワード');

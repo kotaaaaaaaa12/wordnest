@@ -28,19 +28,23 @@ export function summarizeLearning(shards,timestamp=Date.now()) {
       if(Array.isArray(value.intervals))day.intervals.push(...value.intervals.filter(span=>Array.isArray(span) && localDay(span[0])===key && localDay(span[1]-1)===key));
     }
   }
+  for(const day of Object.values(days)){day.ms=mergeLearningIntervals(day.intervals).reduce((sum,[start,end])=>sum+end-start,0);delete day.intervals;}
+  const summary=summarizeStudyDays(days,localDay(timestamp));
+  const recent=Array.from({length:7},(_,index)=>{const date=new Date(timestamp);date.setHours(0,0,0,0);date.setDate(date.getDate()-6+index);const key=localDay(date.getTime());return {date:key,ms:days[key]?.ms || 0};});
+  return {...summary,days,recent};
+}
+export function summarizeStudyDays(days,today) {
   let totalMs=0,answered=0,correct=0,flips=0,activeDays=0;
   for(const day of Object.values(days)){
-    day.ms=mergeLearningIntervals(day.intervals).reduce((sum,[start,end])=>sum+end-start,0);delete day.intervals;
     totalMs+=day.ms;answered+=day.answered;correct+=day.correct;flips+=day.flips;
     if(day.ms>0 || day.answered>0 || day.flips>0)activeDays++;
   }
-  const today=localDay(timestamp),todayOrdinal=ordinal(today),dates=Object.keys(days).filter(key=>days[key].answered>0 || days[key].flips>0).map(ordinal).sort((a,b)=>a-b);
+  const todayOrdinal=ordinal(today),dates=Object.keys(days).filter(key=>days[key].answered>0 || days[key].flips>0).map(ordinal).sort((a,b)=>a-b);
   let longest=0,run=0,previous=null;
   for(const date of dates){run=date===previous+1?run+1:1;longest=Math.max(longest,run);previous=date;}
   let streak=0,cursor=dates.includes(todayOrdinal)?todayOrdinal:todayOrdinal-1;
   const studied=new Set(dates);while(studied.has(cursor)){streak++;cursor--;}
-  const recent=Array.from({length:7},(_,index)=>{const date=new Date(timestamp);date.setHours(0,0,0,0);date.setDate(date.getDate()-6+index);const key=localDay(date.getTime());return {date:key,ms:days[key]?.ms || 0};});
-  return {days,totalMs,averageMs:activeDays?totalMs/activeDays:0,activeDays,answered,correct,flips,accuracy:answered?correct/answered:null,streak,longest,recent};
+  return {totalMs,averageMs:activeDays?totalMs/activeDays:0,activeDays,answered,correct,flips,accuracy:answered?correct/answered:null,streak,longest,lastStudyDay:dates.length?Object.keys(days).filter(key=>days[key].answered>0 || days[key].flips>0).sort().at(-1):null};
 }
 export class LearningTracker {
   constructor({storage,now=()=>Date.now(),id=globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}={}) {

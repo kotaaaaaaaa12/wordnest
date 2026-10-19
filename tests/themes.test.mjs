@@ -5,6 +5,7 @@ import { JSDOM } from 'jsdom';
 import * as core from '../public/core.js';
 import * as statistics from '../public/stats.js';
 import * as personalTools from '../public/personal.js';
+import * as rankingTools from '../public/rankings.js';
 import { icon } from '../public/icons.js';
 import { messages, translator } from '../public/i18n.js';
 import * as zip from 'fflate';
@@ -13,7 +14,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function create({dark=false,prefs={}}={}) {
   const dom=new JSDOM('<meta name="theme-color"><div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/#/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window,listeners=[];
   const system={matches:dark,addEventListener(type,callback){if(type==='change')listeners.push(callback);}};
-  Object.assign(w,core,statistics,personalTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>system});w.document.hasFocus=()=>true;
+  Object.assign(w,core,statistics,personalTools,rankingTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>system});w.document.hasFocus=()=>true;
   w.Audio=class{play(){return Promise.resolve();}};
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
   w.fetch=async path=>({ok:true,status:200,json:async()=>path==='/api/sets'?{sets:[],orderRevision:0}:{authenticated:false,configured:true}});
@@ -35,8 +36,8 @@ test('settings save independent light/dark palettes, auto follows the system, an
   async function click(selector){find(selector).click();await tick();await tick();}
   function select(selector,value){find(selector).value=value;find(selector).dispatchEvent(new w.Event('change',{bubbles:true}));}
   try{
-    w.eval(boot);w.eval(source);await tick();await tick();
-    assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.dataset.nav),['home','stats','guide']);
+    w.eval(boot);w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();
+    assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.dataset.nav),['home','stats','rankings','guide']);
     await click('[data-action="settings"]');assert.equal(find('#light-palette').options.length,3);assert.equal(find('#dark-palette').options.length,3);
     select('#light-palette','ocean');assert.equal(w.document.documentElement.dataset.palette,'ocean');select('#dark-palette','midnight');assert.equal(w.document.documentElement.dataset.palette,'ocean');
     system.matches=true;listeners.forEach(callback=>callback({matches:true}));assert.equal(w.document.documentElement.dataset.theme,'dark');assert.equal(w.document.documentElement.dataset.palette,'midnight');assert.equal(find('meta[name="theme-color"]').content,'#111a27');
@@ -44,7 +45,7 @@ test('settings save independent light/dark palettes, auto follows the system, an
     select('#settings-language','ja');assert.equal(find('#light-palette').selectedOptions[0].textContent,'ラベンダー');assert.equal(find('#dark-palette').selectedOptions[0].textContent,'グラファイト');
     select('#theme-choice','auto');assert.equal(w.document.documentElement.dataset.palette,'graphite');system.matches=false;listeners.forEach(callback=>callback({matches:false}));assert.equal(w.document.documentElement.dataset.palette,'lavender');
     assert.equal(w.localStorage.getItem('wordnest-light-palette'),'lavender');assert.equal(w.localStorage.getItem('wordnest-dark-palette'),'graphite');assert.equal(w.localStorage.getItem('wordnest-theme'),'auto');
-    await click('[data-dialog="cancel"]');assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.textContent.trim()),['学習','学習記録','説明']);
+    await click('[data-dialog="cancel"]');assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.textContent.trim()),['学習','学習記録','ランキング','説明']);
     const reopened=create({dark:true,prefs:{'wordnest-theme':'auto','wordnest-light-palette':w.localStorage.getItem('wordnest-light-palette'),'wordnest-dark-palette':w.localStorage.getItem('wordnest-dark-palette')}}).w;
     try{reopened.eval(boot);assert.equal(reopened.document.documentElement.dataset.palette,'graphite');}finally{reopened.close();}
   }finally{w.close();}
@@ -69,7 +70,7 @@ function declaration(w,selector,name){
 test('Graphite selections match the gold brand accent across navigation and practice controls',async()=>{
   const {w}=create({prefs:{'wordnest-theme':'dark','wordnest-dark-palette':'graphite'}});
   try{
-    w.eval(boot);w.eval(source);await tick();await tick();const root=w.document.documentElement;
+    w.eval(boot);w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();const root=w.document.documentElement;
     assert.equal(resolveToken(w,root,'--selection-text'),resolveToken(w,root,'--accent'));
     assert.equal(resolveToken(w,root,'--selection-bg'),resolveToken(w,root,'--soft'));
     assert.notEqual(resolveToken(w,root,'--selection-text'),resolveToken(w,root,'--green'));
@@ -88,7 +89,7 @@ test('completion books, badges, and Guide legend have distinct semantic colors w
     const {w}=create({prefs:{'wordnest-theme':mode,[`wordnest-${mode}-palette`]:palette,'wordnest-progress':JSON.stringify(progress)}});
     const original=w.fetch;w.fetch=async(path,options)=>path==='/api/sets'?{ok:true,status:200,json:async()=>({sets,orderRevision:0})}:original(path,options);
     try{
-      w.eval(boot);w.eval(source);await tick();await tick();const root=w.document.documentElement,colors=[];
+      w.eval(boot);w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();const root=w.document.documentElement,colors=[];
       for(const [status,token] of Object.entries(semantic)){
         const article=w.document.querySelector(`[data-set-id="${status}"]`);assert.equal(article.dataset.studyStatus,status);
         const foreground=resolveToken(w,article,'--study-color'),background=resolveToken(w,article,'--study-bg');
@@ -110,7 +111,7 @@ test('modal backgrounds stay neutral and the active palette persists through mod
     const {w}=create({prefs:{'wordnest-theme':mode,[`wordnest-${mode}-palette`]:palette}}),find=s=>w.document.querySelector(s);
     async function click(s){find(s).click();await tick();await tick();}
     try{
-      w.eval(boot);w.eval(source);await tick();await tick();const root=w.document.documentElement;
+      w.eval(boot);w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();const root=w.document.documentElement;
       const expected=resolveToken(w,root,'--paper');await click('[data-action="settings"]');assert.equal(find('#modal').open,true);
       assert.equal(resolveToken(w,root,'--paper'),expected);assert.equal(root.dataset.palette,palette);
       const overlay=declaration(w,'dialog::backdrop','background');assert.equal(overlay,'rgba(0, 0, 0, 0.32)');assert.ok(!overlay.includes('var('));assert.equal(declaration(w,':root[data-theme="dark"] dialog::backdrop','background'),'rgba(0, 0, 0, 0.52)');

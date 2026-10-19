@@ -5,6 +5,7 @@ import { JSDOM } from 'jsdom';
 import * as core from '../public/core.js';
 import * as statistics from '../public/stats.js';
 import * as personalTools from '../public/personal.js';
+import * as rankingTools from '../public/rankings.js';
 import { icon } from '../public/icons.js';
 import { messages, translator } from '../public/i18n.js';
 import * as zip from 'fflate';
@@ -14,7 +15,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 test('records count answers and flips once, persist early exits, pause background/dialog time, and translate',async()=>{
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/#/stats',runScripts:'outside-only',pretendToBeVisual:true});
   const w=dom.window;let now=new Date(2026,9,19,12).getTime(),visible=true,focused=true;const timers=new Map(),timeouts=new Map();let timerId=0;
-  Object.assign(w,core,statistics,personalTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
+  Object.assign(w,core,statistics,personalTools,rankingTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
   w.Date.now=()=>now;w.setInterval=fn=>{const id=++timerId;timers.set(id,fn);return id;};w.clearInterval=id=>timers.delete(id);w.setTimeout=(fn,delay)=>{const id=++timerId;timeouts.set(id,{fn,at:now+delay});return id;};w.clearTimeout=id=>timeouts.delete(id);
   Object.defineProperty(w.document,'visibilityState',{get:()=>visible?'visible':'hidden'});
   w.Audio=class{play(){return Promise.resolve();}};w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){}});
@@ -26,7 +27,7 @@ test('records count answers and flips once, persist early exits, pause backgroun
   const advance=ms=>{now+=ms;for(const fn of [...timers.values()])fn();for(const [id,entry] of [...timeouts])if(entry.at<=now){timeouts.delete(id);entry.fn();}};
   const summary=()=>new statistics.LearningTracker({storage:w.localStorage,now:()=>now,id:'observer'}).snapshot();
   try{
-    w.eval(source);await tick();await tick();assert.ok(find('.stats-view'));assert.equal(find('[data-stat="answeredQuestions"]').textContent,'0');assert.equal(w.document.querySelectorAll('.stats-bars li').length,7);
+    w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();assert.ok(find('.stats-view'));assert.equal(find('[data-stat="answeredQuestions"]').textContent,'0');assert.equal(w.document.querySelectorAll('.stats-bars li').length,7);
     advance(10000);await click('.nav [data-nav="home"]');await click('[data-action="open"]');await click('[data-activity="quiz"]');await click('[data-mode="en-ja"]');await click('[data-action="start"]');
     advance(3000);const word=seed.words.find(word=>word.english===find('.question-word').textContent),button=[...w.document.querySelectorAll('.option')].find(button=>button.textContent.slice(1)===word.meaning);button.click();button.click();await tick();assert.equal(summary().answered,1);assert.equal(summary().correct,1);
     advance(2000);await click('[data-action="settings"]');assert.equal(find('[data-settings-action]'),null);advance(10000);await click('[data-dialog="cancel"]');assert.equal(summary().totalMs,5000);

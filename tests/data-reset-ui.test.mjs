@@ -5,6 +5,7 @@ import { JSDOM } from 'jsdom';
 import * as core from '../public/core.js';
 import * as statistics from '../public/stats.js';
 import * as personalTools from '../public/personal.js';
+import * as rankingTools from '../public/rankings.js';
 import { icon } from '../public/icons.js';
 import { messages, translator } from '../public/i18n.js';
 import * as zip from 'fflate';
@@ -13,7 +14,7 @@ const source=(await readFile('public/app.js','utf8')).replace(/^import .*;\n/gm,
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 async function harness({lang='en',authenticated=false}={}){
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/#/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
-  Object.assign(w,core,statistics,personalTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:false})});w.document.hasFocus=()=>true;
+  Object.assign(w,core,statistics,personalTools,rankingTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:false})});w.document.hasFocus=()=>true;
   w.Audio=class{play(){return Promise.resolve();}};
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
   const requests=[],set={...structuredClone(seed),id:'seed',revision:1};
@@ -28,7 +29,7 @@ async function harness({lang='en',authenticated=false}={}){
   function status(){const stats=new statistics.LearningTracker({storage:w.localStorage,id:'reader'}).snapshot();return {clears:!!w.localStorage.getItem('wordnest-progress'),weak:personal.record(question.sources[0].key).weak,favorites:personal.favorite(word),statistics:stats.answered>0};}
   const find=s=>w.document.querySelector(s);
   async function click(s){assert.ok(find(s),s);find(s).click();await tick();await tick();}
-  seedData();w.eval(source);await tick();await tick();
+  seedData();w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();
   return {w,find,click,status,requests,set,word,question};
 }
 test('all five Settings deletion choices confirm their scope, cancel safely, and delete only the selected category',async()=>{

@@ -6,6 +6,7 @@ import { icon } from '../public/icons.js';
 import * as core from '../public/core.js';
 import * as statistics from '../public/stats.js';
 import * as personalTools from '../public/personal.js';
+import * as rankingTools from '../public/rankings.js';
 import { messages, translator } from '../public/i18n.js';
 import * as zip from 'fflate';
 import { seed } from './fixture.js';
@@ -15,7 +16,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 test('UI: edit, quizzes, flashcards and gestures, theme settings, ZIP and JSON transfers',async()=>{
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/#/',runScripts:'outside-only',pretendToBeVisual:true});
   const w=dom.window;w.document.hasFocus=()=>true;let sets=[{...structuredClone(seed),id:'seed',revision:1}],authed=false,confettiPlays=0,orderRevision=0;const downloads=[];
-  Object.assign(w,core,statistics,personalTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
+  Object.assign(w,core,statistics,personalTools,rankingTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
   w.Audio=class{constructor(url){this.url=url;}play(){if(this.url.includes('confetti'))confettiPlays++;return Promise.resolve();}};
   w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){}});w.HTMLElement.prototype.scrollIntoView=()=>{};
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
@@ -37,9 +38,9 @@ test('UI: edit, quizzes, flashcards and gestures, theme settings, ZIP and JSON t
   function input(selector,value){const element=find(selector);assert.ok(element,selector);element.value=value;element.dispatchEvent(new w.Event('input',{bubbles:true}));}
   function submit(selector){find(selector).dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));}
   try{
-    w.eval(source);await tick();await tick();assert.equal(w.document.querySelectorAll('.set-card').length,1);assert.equal(find('[data-action="new"]'),null);assert.equal(find('[data-select]'),null);assert.equal(find('[data-action="import"]'),null);
-    assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.dataset.nav),['home','stats','guide']);
-    await click('.nav [data-nav="guide"]');assert.equal(w.location.hash,'#/guide');assert.equal(find('.guide-view h1').textContent,'How to use Wordnest');assert.equal(w.document.querySelectorAll('.guide-section').length,6);assert.equal(w.document.querySelectorAll('.guide-legend li').length,4);assert.ok(find('.nav [data-nav="guide"]').classList.contains('active'));assert.equal(find('.set-card'),null);
+    w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();assert.equal(w.document.querySelectorAll('.set-card').length,1);assert.equal(find('[data-action="new"]'),null);assert.equal(find('[data-select]'),null);assert.equal(find('[data-action="import"]'),null);
+    assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.dataset.nav),['home','stats','rankings','guide']);
+    await click('.nav [data-nav="guide"]');assert.equal(w.location.hash,'#/guide');assert.equal(find('.guide-view h1').textContent,'How to use Wordnest');assert.equal(w.document.querySelectorAll('.guide-section').length,7);assert.equal(w.document.querySelectorAll('.guide-legend li').length,4);assert.ok(find('.nav [data-nav="guide"]').classList.contains('active'));assert.equal(find('.set-card'),null);
     await click('.nav [data-nav="home"]');assert.equal(w.location.hash,'#/');assert.ok(find('.set-card'));
     await click('[data-action="settings"]');assert.equal(find('[data-settings-action]'),null);const theme=find('#theme-choice');theme.value='light';theme.dispatchEvent(new w.Event('change',{bubbles:true}));assert.equal(w.document.documentElement.dataset.theme,'light');theme.value='dark';theme.dispatchEvent(new w.Event('change',{bubbles:true}));assert.equal(w.document.documentElement.dataset.theme,'dark');assert.equal(w.localStorage.getItem('wordnest-theme'),'dark');assert.equal(w.getComputedStyle(find('#modal-title')).outline,'none');await click('[data-dialog="cancel"]');
     assert.equal(find('[data-nav="edit"]'),null);await click('[data-action="settings"]');assert.equal(find('[data-action="new"]'),null);assert.equal(find('[data-action="import"]'),null);assert.equal(find('[data-action="export"]'),null);input('#admin-password','a-long-testing-password');submit('#admin-login-form');await tick();await tick();await click('[data-admin-open]');
@@ -88,11 +89,11 @@ test('UI: edit, quizzes, flashcards and gestures, theme settings, ZIP and JSON t
 test('Guide deep link stays available when word set loading fails',async()=>{
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/#/guide',runScripts:'outside-only',pretendToBeVisual:true});
   const w=dom.window;w.document.hasFocus=()=>true;
-  Object.assign(w,core,statistics,personalTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
+  Object.assign(w,core,statistics,personalTools,rankingTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
   w.Audio=class{play(){return Promise.resolve();}};
   w.fetch=async()=>{throw new Error('Offline');};
   try{
-    w.eval(source);await tick();await tick();
+    w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();
     assert.equal(w.document.querySelector('.guide-view h1').textContent,'How to use Wordnest');
     assert.ok(w.document.querySelector('.nav [data-nav="guide"]').classList.contains('active'));
     w.document.querySelector('.nav [data-nav="home"]').click();await tick();await tick();

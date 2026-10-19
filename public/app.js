@@ -1,3 +1,4 @@
+import { RankingClient, rankingMetrics } from './rankings.js';
 import { PersonalWords, wordIdentity, catalogWord, findCatalogWord, sourceQuestions, collectionQuestions, canMultipleChoice, quizFromPool, collectionCards } from './personal.js';
 import { LearningTracker, localDay } from './stats.js';
 import { icon } from './icons.js';
@@ -33,7 +34,10 @@ function applyTheme() {
 }
 applyTheme();
 systemTheme.addEventListener?.('change', () => { if (themeChoice === 'auto') applyTheme(); });
-const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, sessionKnown:false, adminBusy:false, adminError:'', configured:true, route:routeFromHash(), screen:'home', libraryTab:'sets', collection:null, weakScope:'single', weakMode:'en-ja', weakSetId:null, weakIds:null, weakPickerOpen:false, favoriteSet:'all', wordSearch:'', listLimit:100, selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
+const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, sessionKnown:false, adminBusy:false, adminError:'', configured:true, rankingMetric:'totalMs', rankingData:null, rankingBusy:false, rankingError:'', route:routeFromHash(), screen:'home', libraryTab:'sets', collection:null, weakScope:'single', weakMode:'en-ja', weakSetId:null, weakIds:null, weakPickerOpen:false, favoriteSet:'all', wordSearch:'', listLimit:100, selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
+const ranking=new RankingClient({storage:learningStorage,fetch:(...args)=>fetch(...args),snapshot:()=>{
+  const snapshot=learning.snapshot();return {epoch:learning.epoch,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',days:snapshot.days};
+},onChange:()=>{refreshRankingSettings();if(state.route==='rankings')render();}});
 let soundEnabled = storage.get('wordnest-sound','on') === 'on';
 const sounds = Object.fromEntries(['correct','incorrect','confetti'].map(name => { const audio = new Audio(`/assets/audio/${name}.mp3`); audio.preload='auto'; return [name,audio]; }));
 function play(name) { if (!soundEnabled) return; try { sounds[name].currentTime=0; sounds[name].play()?.catch(()=>{}); } catch {} }
@@ -53,11 +57,13 @@ async function load() {
   try { const [data, session]=await Promise.all([api('/api/sets'),api('/api/session')]); state.sets=data.sets; state.orderRevision=data.orderRevision; state.authenticated=session.authenticated; state.sessionKnown=true; state.configured=session.configured; state.loaded=true; }
   catch(error) { state.sessionKnown=true;state.loadError=message(error); }
   render();
+  if(state.route==='rankings')refreshRankings();else ranking.sync().catch(()=>{});
+  setTimeout(maybeRankingOnboarding,0);
 }
-function routeFromHash() { return location.hash==='#/stats'?'stats':location.hash==='#/guide'?'guide':location.hash.startsWith('#/edit')?'edit':'home'; }
+function routeFromHash() { return location.hash==='#/stats'?'stats':location.hash==='#/rankings'?'rankings':location.hash==='#/guide'?'guide':location.hash.startsWith('#/edit')?'edit':'home'; }
 const routeHref=route=>route==='home'?'#/':`#/${route}`;
 function shell(content) {
-  return `<div class="app-shell"><aside class="sidebar"><a href="#/" data-nav="home" class="brand"><span class="brand-mark">${icon('book')}</span>wordnest<span style="color:var(--accent)">.</span></a><nav class="nav" style="--nav-count:${state.authenticated?4:3}" aria-label="${t('home')}"><a href="#/" data-nav="home" class="${state.route==='home'?'active':''}">${icon('book')}${t('home')}</a><a href="#/stats" data-nav="stats" class="${state.route==='stats'?'active':''}">${icon('stats')}${t('stats')}</a><a href="#/guide" data-nav="guide" class="${state.route==='guide'?'active':''}">${icon('guide')}${t('guide')}</a>${state.authenticated?`<a href="#/edit" data-nav="edit" class="${state.route==='edit'?'active':''}">${icon('edit')}${t('edit')}</a>`:''}</nav><div class="sidebar-bottom"><button class="settings-trigger" data-action="settings">${icon('settings')}${t('settings')}</button></div></aside><main class="main">${content}</main></div>`;
+  return `<div class="app-shell"><aside class="sidebar"><a href="#/" data-nav="home" class="brand"><span class="brand-mark">${icon('book')}</span>wordnest<span style="color:var(--accent)">.</span></a><nav class="nav" style="--nav-count:${state.authenticated?5:4}" aria-label="${t('home')}"><a href="#/" data-nav="home" class="${state.route==='home'?'active':''}">${icon('book')}${t('home')}</a><a href="#/stats" data-nav="stats" class="${state.route==='stats'?'active':''}">${icon('stats')}${t('stats')}</a><a href="#/rankings" data-nav="rankings" class="${state.route==='rankings'?'active':''}">${icon('trophy')}${t('rankings')}</a><a href="#/guide" data-nav="guide" class="${state.route==='guide'?'active':''}">${icon('guide')}${t('guide')}</a>${state.authenticated?`<a href="#/edit" data-nav="edit" class="${state.route==='edit'?'active':''}">${icon('edit')}${t('edit')}</a>`:''}</nav><div class="sidebar-bottom"><button class="settings-trigger" data-action="settings">${icon('settings')}${t('settings')}</button></div></aside><main class="main">${content}</main></div>`;
 }
 function render() {
   learning.tick();
@@ -69,6 +75,7 @@ function render() {
   const selection = active && typeof active.selectionStart==='number' ? [active.selectionStart,active.selectionEnd] : null;
   let content;
   if (state.route==='stats') content=statsView();
+  else if (state.route==='rankings') content=rankingsView();
   else if (state.route==='guide') content=guideView();
   else if (state.loadError) content=`<div class="empty"><h2>${e(state.loadError)}</h2>${btn('retry','reload','primary')}</div>`;
   else if (!state.loaded) content=`<div class="loading"><span class="spinner"></span>${t('loading')}</div>`;
@@ -84,6 +91,7 @@ function render() {
   $('#app').innerHTML=shell(content);
   syncLearning();
   refreshAdminSettings();
+  refreshRankingSettings();
   if(state.screen!=='quiz' || state.route!=='home')stopQuizClock();
   if (focusId && document.getElementById(focusId) && !['language'].includes(focusId)) { const el=document.getElementById(focusId); el.focus({preventScroll:true}); if(selection && el.setSelectionRange) el.setSelectionRange(...selection); }
 }
@@ -93,17 +101,72 @@ function formatDuration(milliseconds) {
   const seconds=Math.floor(milliseconds/1000),hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60),rest=seconds%60;
   return hours?t('durationHours',{h:hours,m:minutes,s:rest}):minutes?t('durationMinutes',{m:minutes,s:rest}):t('durationSeconds',{s:rest});
 }
+function formatStudyMetric(metric,value) {
+  if(value===null || value===undefined)return '—';
+  const number=value=>new Intl.NumberFormat(lang==='ja'?'ja-JP':'en-US').format(value);
+  if(['totalMs','averageMs'].includes(metric))return formatDuration(value);
+  if(metric==='accuracy')return new Intl.NumberFormat(lang==='ja'?'ja-JP':'en-US',{style:'percent',maximumFractionDigits:1}).format(value);
+  if(['streak','longest'].includes(metric))return t(value===1?'oneDay':'dayCount',{n:number(value)});
+  return number(value);
+}
+function rankingsView() {
+  const prefs=ranking.preferences(),joined=prefs?.choice==='joined',data=state.rankingData,metric=state.rankingMetric;
+  const rowMarkup=(row,mine=false)=>`<tr class="${mine?'ranking-self':''}" ${mine?'aria-label="'+e(t('rankingYou'))+'"':''}><td>${row.rank}</td><td><span class="ranking-name">${e(row.name)}</span>${mine?`<span class="ranking-you">${t('rankingYou')}</span>`:''}</td><td>${e(formatStudyMetric(metric,row.value))}</td></tr>`;
+  const selfId=prefs?.id,rows=data?.metric===metric?data.rows:[],mine=joined && data?.metric===metric?data.mine:null;
+  return `<section class="rankings-view"><h1>${t('rankings')}</h1><div class="ranking-profile"><div><p>${joined?e(t('rankingAs',{name:prefs.name})):t('rankingNotParticipating')}</p><small>${t(prefs?.pending?'rankingPending':'rankingBrowser')}</small></div><button class="btn ghost small" data-action="ranking-name">${icon('edit')}${t(joined?'rankingChangeName':'rankingJoin')}</button></div><div class="ranking-controls"><label for="ranking-metric">${t('rankingMetric')}<select id="ranking-metric">${Object.entries(rankingMetrics).map(([value,key])=>`<option value="${value}" ${metric===value?'selected':''}>${t(key)}</option>`).join('')}</select></label><button class="btn ghost small" data-action="ranking-refresh" ${state.rankingBusy?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div><p class="ranking-note">${t(metric==='accuracy'?'rankingAccuracyRule':metric==='averageMs'?'rankingAverageRule':'rankingUpdateRule')}</p>${state.rankingError?`<p class="error" role="alert">${e(t(state.rankingError))}</p>`:''}${state.rankingBusy?`<p class="ranking-loading" role="status">${t('rankingLoading')}</p>`:''}${rows.length?`<div class="ranking-table-wrap"><table class="ranking-table"><caption class="visually-hidden">${t(rankingMetrics[metric])}</caption><thead><tr><th scope="col">${t('rankingPosition')}</th><th scope="col">${t('rankingDisplayName')}</th><th scope="col">${t('rankingRecord')}</th></tr></thead><tbody>${rows.filter(row=>joined || row.id!==selfId).map(row=>rowMarkup(row,joined && row.id===selfId)).join('')}</tbody></table></div>`:!state.rankingBusy?`<div class="empty"><p>${t('rankingEmpty')}</p></div>`:''}${mine && !rows.some(row=>row.id===mine.id)?`<div class="ranking-own"><h2>${t('rankingYourPosition')}</h2><table class="ranking-table"><tbody>${rowMarkup(mine,true)}</tbody></table></div>`:''}${joined && !mine && data?.metric===metric && !state.rankingBusy?`<p class="ranking-note">${t(metric==='accuracy'?'rankingAccuracyPending':'rankingNoRecord')}</p>`:''}<p class="ranking-note">${t('rankingTop100',{n:data?.total || 0})}</p></section>`;
+}
+let rankingRequest=0;
+async function refreshRankings(synchronize=true) {
+  const request=++rankingRequest,metric=state.rankingMetric;state.rankingBusy=true;state.rankingError='';if(state.route==='rankings')render();
+  let syncError='';
+  try{
+    if(synchronize)try{await ranking.sync(true);}catch(error){syncError=messages.en[error.message]?error.message:'networkError';}
+    const data=await ranking.list(metric);if(request!==rankingRequest)return;
+    state.rankingData=data;state.rankingError=syncError;
+  }catch(error){if(request===rankingRequest)state.rankingError=messages.en[error.message]?error.message:'networkError';}
+  finally{if(request===rankingRequest){state.rankingBusy=false;if(state.route==='rankings')render();}}
+}
+let rankingOnboardingStarted=false;
+function maybeRankingOnboarding(){
+  if(rankingOnboardingStarted || ranking.preferences())return;
+  if(modal.open){setTimeout(maybeRankingOnboarding,500);return;}
+  rankingOnboardingStarted=true;rankingNameDialog(true);
+}
+async function rankingNameDialog(initial=false){
+  const prefs=ranking.preferences();
+  const result=await dialog(`<button class="icon-btn modal-close" data-ranking-name-close aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t(prefs?.choice==='joined'?'rankingChangeName':'rankingJoinTitle')}</h2><p>${t('rankingNameHelp')}</p><form id="ranking-name-form" class="ranking-name-form"><label for="ranking-name">${t('rankingDisplayName')}<input id="ranking-name" name="name" value="${e(prefs?.name || '')}" autocomplete="nickname" maxlength="40" required></label><small>${t('rankingNameLimit')}</small><p class="error" id="ranking-name-error" role="alert" hidden></p><div class="modal-actions"><button class="btn ghost" type="button" data-ranking-name-close>${t(initial?'rankingDecline':'cancel')}</button><button class="btn primary" type="submit">${t('rankingSaveName')}</button></div></form>`,finish=>{
+    let busy=false;
+    modal.oncancel=event=>{event.preventDefault();if(!busy)finish(initial?'decline':false);};
+    modal.onclick=event=>{if(event.target.closest('[data-ranking-name-close]') && !busy)finish(initial?'decline':false);};
+    modal.onsubmit=async event=>{
+      if(event.target.id!=='ranking-name-form')return;event.preventDefault();if(busy)return;
+      busy=true;const input=$('#ranking-name'),error=$('#ranking-name-error'),submit=$('[type="submit"]',modal);submit.disabled=true;error.hidden=true;
+      try{await ranking.join(input.value);finish('joined');}
+      catch(err){error.textContent=message(err);error.hidden=false;}
+      finally{busy=false;if(submit.isConnected)submit.disabled=false;}
+    };
+  });
+  if(result==='decline')try{await ranking.decline();}catch(error){toast(message(error));}
+  if(state.route==='rankings')await refreshRankings();
+}
+function rankingSettingsSignature(){const prefs=ranking.preferences();return JSON.stringify([prefs?.choice,prefs?.name,prefs?.pending,ranking.error,lang]);}
+function rankingSettingsContent(){
+  const prefs=ranking.preferences(),joined=prefs?.choice==='joined';
+  return `<h3 id="ranking-settings-title">${t('rankingParticipation')}</h3><p>${t(prefs?.pending?'rankingPending':joined?'rankingEnabledHelp':'rankingDisabledHelp')}</p>${joined?`<small>${e(t('rankingAs',{name:prefs.name}))}</small>`:''}<button class="btn ghost" data-ranking-settings aria-pressed="${joined}">${t(joined?'rankingDisable':'rankingEnable')}</button>`;
+}
+function refreshRankingSettings(){const section=$('#ranking-settings');if(section && section.dataset.state!==rankingSettingsSignature()){section.innerHTML=rankingSettingsContent();section.dataset.state=rankingSettingsSignature();}}
 let statsRenderedDay;
 function statsView() {
   statsRenderedDay=localDay(Date.now());
   const data=learning.snapshot(),locale=lang==='ja'?'ja-JP':'en-US',number=value=>new Intl.NumberFormat(locale).format(value);
-  const cards=[['totalTime','timer',formatDuration(data.totalMs)],['averageTime','calendar',formatDuration(data.averageMs)],['answeredQuestions','quiz',number(data.answered)],['correctQuestions','check',number(data.correct)],['accuracy','target',data.accuracy===null?'—':new Intl.NumberFormat(locale,{style:'percent',maximumFractionDigits:1}).format(data.accuracy)],['cardFlips','flip',number(data.flips)],['currentStreak','flame',t(data.streak===1?'oneDay':'dayCount',{n:number(data.streak)})],['longestStreak','trophy',t(data.longest===1?'oneDay':'dayCount',{n:number(data.longest)})]];
+  const metricIcons={totalMs:'timer',averageMs:'calendar',answered:'quiz',correct:'check',accuracy:'target',flips:'flip',streak:'flame',longest:'trophy'};
+  const cards=Object.entries(rankingMetrics).map(([metric,key])=>[key,metricIcons[metric],formatStudyMetric(metric,data[metric])]);
   const maximum=Math.max(...data.recent.map(day=>day.ms),1),dateFormat=new Intl.DateTimeFormat(locale,{month:'numeric',day:'numeric'});
   return `<section class="stats-view"><h1>${t('stats')}</h1><p class="stats-note">${t('statsLocal')}</p>${!learning.persistent?`<p class="error" role="status">${t('statsStorageError')}</p>`:''}<div class="stats-grid">${cards.map(([key,symbol,value])=>`<article class="stat-card"><h2>${icon(symbol)}${t(key)}</h2><p data-stat="${key}">${e(value)}</p>${key==='averageTime'?`<small>${t(data.activeDays===1?'averageOneDay':'averageDays',{n:number(data.activeDays)})}</small>`:''}</article>`).join('')}</div><section class="stats-chart" aria-labelledby="recent-time"><h2 id="recent-time">${t('recentTime')}</h2><ol class="stats-bars">${data.recent.map(day=>{const [year,month,date]=day.date.split('-').map(Number),label=dateFormat.format(new Date(year,month-1,date));return `<li><span class="bar-value">${e(formatDuration(day.ms))}</span><span class="bar-track" aria-hidden="true"><span style="height:${day.ms?Math.max(2,day.ms/maximum*100):0}%"></span></span><time datetime="${day.date}">${e(label)}</time></li>`;}).join('')}</ol></section><div class="stats-details"><p>${t('statsTimeRule')}</p><p>${t('statsCountRule')}</p><p>${t('statsStreakRule')}</p></div></section>`;
 }
 function guideView() {
   const section=(id,symbol,title,items)=>`<section class="guide-section" aria-labelledby="${id}"><h2 id="${id}">${icon(symbol)}${t(title)}</h2><ul>${items.map(key=>`<li>${e(t(key))}</li>`).join('')}</ul></section>`;
-  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-personal','star','personalTools',['guideWeak','guideWeakRecovery','guideFavorites','guideSearch','guidePersonalStorage'])}${section('guide-records','stats','stats',['guideStats','statsTimeRule','statsCountRule','statsStreakRule'])}${section('guide-settings','settings','settings',['guideSettings','guideDeleteData','guideSounds'])}${state.authenticated?section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideTransfers','guideEditShared']):''}</article>`;
+  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-personal','star','personalTools',['guideWeak','guideWeakRecovery','guideFavorites','guideSearch','guidePersonalStorage'])}${section('guide-records','stats','stats',['guideStats','statsTimeRule','statsCountRule','statsStreakRule'])}${section('guide-rankings','trophy','rankings',['guideRankings','rankingAccuracyRule','guideRankingPrivacy'])}${section('guide-settings','settings','settings',['guideSettings','guideDeleteData','guideSounds'])}${state.authenticated?section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideTransfers','guideEditShared']):''}</article>`;
 }
 function readStudyProgress() {
   try { const value=JSON.parse(storage.get('wordnest-progress','{}'));return value && typeof value==='object' && !Array.isArray(value)?value:{}; } catch { return {}; }
@@ -264,7 +327,7 @@ function resultView() {
 function editor() {
   if(!state.authenticated)return '';
   const draft=state.draft;
-  return `<section><div class="edit-heading"><h1>${t('editTitle')}</h1></div><div class="toolbar editor-toolbar"><div class="actions"><button class="btn primary small" data-action="new">${icon('plus')}${t('newSet')}</button><button class="btn ghost small" data-action="import">${icon('upload')}${t('import')}</button><button class="btn ghost small" data-action="export" ${!state.sets.length?'disabled':''}>${icon('download')}${t('export')}</button><button class="btn ghost small" data-action="manage-sets">${icon('sort')}${t('manageSets')}</button></div><button class="btn ghost small" data-action="logout">${icon('lock')}${t('logout')}</button></div><div class="editor-layout"><aside class="set-list" aria-label="${t('library')}">${state.sets.map(s=>`<button class="${draft?.id===s.id?'active':''}" data-action="edit-set" data-id="${e(s.id)}">${e(s.title)}<small>${t('wordsCount',{n:s.words.length})}</small></button>`).join('')}</aside><div class="editor-panel ${state.saving?'busy':''}">${draft?`<label for="set-title">${t('title')}<input id="set-title" maxlength="150" value="${e(draft.title)}" placeholder="${t('setTitlePlaceholder')}"></label><div class="row"><span class="count">${t('wordsCount',{n:draft.words.length})}</span></div><div class="editor-words">${draft.words.map((w,i)=>`<article class="word-row"><div class="word-row-head"><span>${t('wordNumber',{n:i+1})}</span><button class="icon-btn" data-action="remove-word" data-index="${i}" aria-label="${t('removeWord')}">${icon('trash')}</button></div><div class="word-fields"><label for="word-${i}-english">${t('word')}<input id="word-${i}-english" data-word="${i}" data-field="english" lang="en" value="${e(w.english)}" maxlength="150" placeholder="${t('englishPlaceholder')}" autocapitalize="none" spellcheck="false"></label><label for="word-${i}-meaning">${t('meaning')}<input id="word-${i}-meaning" data-word="${i}" data-field="meaning" value="${e(w.meaning)}" maxlength="300" placeholder="${t('meaningPlaceholder')}"></label><label class="wide" for="word-${i}-explanation">${t('explanation')} · ${t('optional')}<textarea id="word-${i}-explanation" data-word="${i}" data-field="explanation" maxlength="2000" placeholder="${t('explanationPlaceholder')}">${e(w.explanation)}</textarea></label></div></article>`).join('')}</div><button class="btn ghost" data-action="add-word" ${draft.words.length>=1000?'disabled':''}>${icon('plus')}${t('addWord')}</button>${state.error?`<p class="error" role="alert">${e(state.error)}</p>`:''}<div class="editor-actions"><span class="muted" id="dirty-label">${state.dirty?t('unsaved'):''}</span><button class="btn ghost" data-action="export-draft">${icon('download')}${t('draftExport')}</button><button class="btn primary" data-action="save" ${state.saving?'disabled':''}>${icon('check')}${t(state.saving?'saving':'save')}</button></div>`:`<div class="empty"><p>${t('editorEmpty')}</p></div>`}</div></div></section>`;
+  return `<section><div class="edit-heading"><h1>${t('editTitle')}</h1></div><div class="toolbar editor-toolbar"><div class="actions"><button class="btn primary small" data-action="new">${icon('plus')}${t('newSet')}</button><button class="btn ghost small" data-action="import">${icon('upload')}${t('import')}</button><button class="btn ghost small" data-action="export" ${!state.sets.length?'disabled':''}>${icon('download')}${t('export')}</button><button class="btn ghost small" data-action="manage-sets">${icon('sort')}${t('manageSets')}</button></div></div><div class="editor-layout"><aside class="set-list" aria-label="${t('library')}">${state.sets.map(s=>`<button class="${draft?.id===s.id?'active':''}" data-action="edit-set" data-id="${e(s.id)}">${e(s.title)}<small>${t('wordsCount',{n:s.words.length})}</small></button>`).join('')}</aside><div class="editor-panel ${state.saving?'busy':''}">${draft?`<label for="set-title">${t('title')}<input id="set-title" maxlength="150" value="${e(draft.title)}" placeholder="${t('setTitlePlaceholder')}"></label><div class="row"><span class="count">${t('wordsCount',{n:draft.words.length})}</span></div><div class="editor-words">${draft.words.map((w,i)=>`<article class="word-row"><div class="word-row-head"><span>${t('wordNumber',{n:i+1})}</span><button class="icon-btn" data-action="remove-word" data-index="${i}" aria-label="${t('removeWord')}">${icon('trash')}</button></div><div class="word-fields"><label for="word-${i}-english">${t('word')}<input id="word-${i}-english" data-word="${i}" data-field="english" lang="en" value="${e(w.english)}" maxlength="150" placeholder="${t('englishPlaceholder')}" autocapitalize="none" spellcheck="false"></label><label for="word-${i}-meaning">${t('meaning')}<input id="word-${i}-meaning" data-word="${i}" data-field="meaning" value="${e(w.meaning)}" maxlength="300" placeholder="${t('meaningPlaceholder')}"></label><label class="wide" for="word-${i}-explanation">${t('explanation')} · ${t('optional')}<textarea id="word-${i}-explanation" data-word="${i}" data-field="explanation" maxlength="2000" placeholder="${t('explanationPlaceholder')}">${e(w.explanation)}</textarea></label></div></article>`).join('')}</div><button class="btn ghost" data-action="add-word" ${draft.words.length>=1000?'disabled':''}>${icon('plus')}${t('addWord')}</button>${state.error?`<p class="error" role="alert">${e(state.error)}</p>`:''}<div class="editor-actions"><span class="muted" id="dirty-label">${state.dirty?t('unsaved'):''}</span><button class="btn ghost" data-action="export-draft">${icon('download')}${t('draftExport')}</button><button class="btn primary" data-action="save" ${state.saving?'disabled':''}>${icon('check')}${t(state.saving?'saving':'save')}</button></div>`:`<div class="empty"><p>${t('editorEmpty')}</p></div>`}</div></div></section>`;
 }
 const modal=$('#modal');
 function dialog(content, setup) {
@@ -273,7 +336,7 @@ function dialog(content, setup) {
     modal.innerHTML=content;
     modal.setAttribute('aria-labelledby','modal-title');
     let settled=false;
-    const finish=value=>{ if(settled)return; settled=true; modal.close();syncLearning(); modal.oncancel=null; modal.onclick=null; modal.onchange=null; if(previous?.isConnected) previous.focus({preventScroll:true}); resolve(value); };
+    const finish=value=>{ if(settled)return; settled=true; modal.close();syncLearning(); modal.oncancel=null; modal.onclick=null; modal.onchange=null; modal.onsubmit=null; if(previous?.isConnected) previous.focus({preventScroll:true}); resolve(value); };
     modal.oncancel=event=>{event.preventDefault();finish(false);};
     modal.onclick=event=>{const button=event.target.closest('[data-dialog]');if(button)finish(button.dataset.dialog==='confirm');};
     learning.setActive(false);modal.showModal(); $('#modal-title',modal)?.focus({preventScroll:true});
@@ -293,6 +356,7 @@ async function navigate(route, fromHistory=false) {
   state.route=route;state.collection=null;state.screen='home';state.quiz=null;state.cards=null;if(!resumeDraft){state.dirty=false;state.draft=null;state.error='';}
   if(!fromHistory)history.pushState(null,'',routeHref(route));
   render();window.scrollTo(0,0);
+  if(route==='rankings')await refreshRankings();else ranking.sync().catch(()=>{});
 }
 function markDirty() { state.dirty=true;state.error='';const label=$('#dirty-label');if(label)label.textContent=t('unsaved'); }
 function download(blob,filename) {const link=document.createElement('a');const url=URL.createObjectURL(blob);link.href=url;link.download=filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
@@ -388,12 +452,12 @@ async function deleteLearningData(type) {
     if(type==='clears' || type==='all'){if(!learningStorage)throw new Error('Storage unavailable');learningStorage.removeItem('wordnest-progress');}
     if(type==='weak' || type==='all')personal.reset('question');
     if(type==='favorites' || type==='all')personal.reset('favorite');
-    if(type==='statistics' || type==='all')learning.reset();
-    render();toast(t('learningDataDeleted'));
+    if(type==='statistics' || type==='all'){learning.reset();try{await ranking.sync(true);}catch{toast(t('rankingResetPending'));}}
+    render();toast(t(ranking.error && ['statistics','all'].includes(type)?'rankingResetPending':'learningDataDeleted'));
   } catch {render();toast(t('deleteDataError'));}
 }
 function settingsContent() {
-  return `<button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t('settings')}</h2><div class="settings-section"><label for="theme-choice">${t('appearance')}<select id="theme-choice">${['auto','light','dark'].map(value=>`<option value="${value}" ${themeChoice===value?'selected':''}>${t(value)}</option>`).join('')}</select></label>${['light','dark'].map(mode=>`<label for="${mode}-palette">${t(mode==='light'?'lightTheme':'darkTheme')}<select id="${mode}-palette">${paletteChoices[mode].map(value=>`<option value="${value}" ${(mode==='light'?lightPalette:darkPalette)===value?'selected':''}>${t('palette_'+value)}</option>`).join('')}</select></label>`).join('')}<label for="settings-language">${t('language')}<select id="settings-language"><option value="auto" ${languageChoice==='auto'?'selected':''}>${t('auto')}</option><option value="en" ${languageChoice==='en'?'selected':''}>English</option><option value="ja" ${languageChoice==='ja'?'selected':''}>日本語</option></select></label><button class="btn ghost" data-settings-sound aria-pressed="${soundEnabled}">${icon(soundEnabled?'sound':'mute')}${t(soundEnabled?'soundOn':'soundOff')}</button></div>${settingsDataContent()}<section class="settings-section settings-admin" id="admin-controls" aria-labelledby="admin-settings-title" data-state="${e(adminSignature())}">${adminSettingsContent()}</section><div class="modal-actions"><button class="btn primary" data-dialog="cancel">${t('close')}</button></div>`;
+  return `<button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t('settings')}</h2><div class="settings-section"><label for="theme-choice">${t('appearance')}<select id="theme-choice">${['auto','light','dark'].map(value=>`<option value="${value}" ${themeChoice===value?'selected':''}>${t(value)}</option>`).join('')}</select></label>${['light','dark'].map(mode=>`<label for="${mode}-palette">${t(mode==='light'?'lightTheme':'darkTheme')}<select id="${mode}-palette">${paletteChoices[mode].map(value=>`<option value="${value}" ${(mode==='light'?lightPalette:darkPalette)===value?'selected':''}>${t('palette_'+value)}</option>`).join('')}</select></label>`).join('')}<label for="settings-language">${t('language')}<select id="settings-language"><option value="auto" ${languageChoice==='auto'?'selected':''}>${t('auto')}</option><option value="en" ${languageChoice==='en'?'selected':''}>English</option><option value="ja" ${languageChoice==='ja'?'selected':''}>日本語</option></select></label><button class="btn ghost" data-settings-sound aria-pressed="${soundEnabled}">${icon(soundEnabled?'sound':'mute')}${t(soundEnabled?'soundOn':'soundOff')}</button></div><section class="settings-section" id="ranking-settings" aria-labelledby="ranking-settings-title" data-state="${e(rankingSettingsSignature())}">${rankingSettingsContent()}</section>${settingsDataContent()}<section class="settings-section settings-admin" id="admin-controls" aria-labelledby="admin-settings-title" data-state="${e(adminSignature())}">${adminSettingsContent()}</section><div class="modal-actions"><button class="btn primary" data-dialog="cancel">${t('close')}</button></div>`;
 }
 async function settingsDialog() {
   let scroll=0;
@@ -409,6 +473,7 @@ async function settingsDialog() {
       };
       modal.onclick=event=>{
         const deletion=event.target.closest('[data-delete-learning]');
+        if(event.target.closest('[data-ranking-settings]')){finish(ranking.preferences()?.choice==='joined'?'ranking-off':'ranking-name');return;}
         if(deletion){finish({deleteData:deletion.dataset.deleteLearning,scroll:modal.scrollTop});return;}
         if(event.target.closest('[data-admin-open]')){finish('edit');return;}
         if(event.target.closest('[data-admin-lock]')){finish('lock');return;}
@@ -416,6 +481,8 @@ async function settingsDialog() {
         if(event.target.closest('[data-settings-sound]')){soundEnabled=!soundEnabled;storage.set('wordnest-sound',soundEnabled?'on':'off');modal.innerHTML=settingsContent();$('#modal-title',modal)?.focus({preventScroll:true});return;}
       };
     });
+    if(action==='ranking-name'){await rankingNameDialog();continue;}
+    if(action==='ranking-off'){ranking.decline().then(()=>{if(state.route==='rankings')refreshRankings(false);}).catch(error=>toast(message(error)));continue;}
     if(action?.deleteData){scroll=action.scroll;await deleteLearningData(action.deleteData);continue;}
     if(action==='edit' && state.authenticated)await navigate('edit');
     else if(action==='lock' && state.authenticated)await actions.logout();
@@ -492,6 +559,8 @@ function confetti() {
 }
 const actions={
   settings:settingsDialog,
+  'ranking-name':()=>rankingNameDialog(),
+  'ranking-refresh':()=>refreshRankings(),
   'library-tab'(button){state.libraryTab=button.dataset.tab;state.listLimit=100;state.collection=null;render();},
   'weak-scope'(button){state.weakScope=button.dataset.scope;state.listLimit=100;render();},
   'weak-mode'(button){state.weakMode=button.dataset.mode;state.weakSetId=null;state.listLimit=100;render();},
@@ -504,7 +573,7 @@ const actions={
   sound(){soundEnabled=!soundEnabled;storage.set('wordnest-sound',soundEnabled?'on':'off');render();},
   async reload(){if(!await discardGuard())return;state.dirty=false;state.draft=null;state.selected.clear();state.loaded=false;state.screen='home';state.quiz=null;await load();},
   open(button){state.collection=null;state.setId=button.dataset.id;state.screen='activity';state.cards=null;state.error='';render();window.scrollTo(0,0);},
-  'back-home'(){state.collection=null;state.screen='home';state.quiz=null;state.cards=null;cancelAnimationFrame(confettiFrame);const c=$('#confetti');c.getContext('2d')?.clearRect(0,0,c.width,c.height);render();window.scrollTo(0,0);},
+  'back-home'(){ranking.sync().catch(()=>{});state.collection=null;state.screen='home';state.quiz=null;state.cards=null;cancelAnimationFrame(confettiFrame);const c=$('#confetti');c.getContext('2d')?.clearRect(0,0,c.width,c.height);render();window.scrollTo(0,0);},
   'back-activity'(){if(state.collection){actions['back-home']();return;}state.screen='activity';state.error='';render();},
   activity(button){state.activity=button.dataset.activity;state.screen='mode';state.order='original';state.error='';render();},
   order(button){state.order=button.dataset.order;render();},
@@ -519,7 +588,7 @@ const actions={
   start(){const max=activePool().length,count=state.custom?Number(state.customValue):state.count;if(!Number.isInteger(count)||count<1||count>max){state.error=t('invalidCount',{n:max});render();return;}try{const set=currentSet(),origin=state.collection?.kind || 'set';state.quiz={origin,setId:origin==='set'?set.id:null,setKey:origin==='set'?studyKey(set):null,allSelected:origin==='set' && !state.custom && state.countChoice==='all' && count===max,title:activeTitle(),mode:state.mode,questions:quizFromPool(activePool(),state.mode,count,activeMeanings(),state.collection?globalWordBank():[]),index:0,answers:[],typed:''};state.screen='quiz';state.error='';startQuestionClock();render();window.scrollTo(0,0);}catch(err){state.error=message(err);render();}},
   answer(button){submitAnswer(state.quiz.questions[state.quiz.index].options[Number(button.dataset.option)]);},
   skip(){submitAnswer('',true);},
-  next(){const qz=state.quiz;if(!qz.answers[qz.index])return;if(qz.index===qz.questions.length-1){state.screen='result';const perfect=qz.answers.length===qz.questions.length && qz.answers.every(a=>a.correct);if(perfect)recordQuizClear(qz);render();if(perfect){play('confetti');confetti();}window.scrollTo(0,0);}else{qz.index++;qz.typed='';startQuestionClock();render();window.scrollTo(0,0);}},
+  next(){const qz=state.quiz;if(!qz.answers[qz.index])return;if(qz.index===qz.questions.length-1){state.screen='result';ranking.sync(true).catch(()=>{});const perfect=qz.answers.length===qz.questions.length && qz.answers.every(a=>a.correct);if(perfect)recordQuizClear(qz);render();if(perfect){play('confetti');confetti();}window.scrollTo(0,0);}else{qz.index++;qz.typed='';startQuestionClock();render();window.scrollTo(0,0);}},
   async quit(){if(await confirmDialog('quitTitle',t('quitHelp'),'confirmQuit'))actions['back-home']();},
   'retry-mistakes'(){
     const previous=state.quiz;if(state.screen!=='result' || !previous)return;
@@ -581,18 +650,19 @@ document.addEventListener('click',async event=>{
   if(event.detail>0 && event.target.closest('button'))document.activeElement?.closest('button')?.blur();
 });
 document.addEventListener('input',event=>{const el=event.target;if(el.id==='word-search'){state.wordSearch=el.value;state.listLimit=100;render();}else if(el.id==='search'){state.search=el.value;render();}else if(el.id==='custom-count')state.customValue=el.value;else if(el.id==='typed-answer')state.quiz.typed=el.value;else if(el.id==='set-title'){state.draft.title=el.value;markDirty();}else if(el.dataset.word!==undefined){state.draft.words[Number(el.dataset.word)][el.dataset.field]=el.value;markDirty();}});
-document.addEventListener('change',event=>{const el=event.target;if(el.id==='weak-set'){state.weakSetId=el.value;state.listLimit=100;render();}else if(el.id==='favorite-set'){state.favoriteSet=el.value;state.listLimit=100;render();}else if(el.dataset.weakSet!==undefined){if(el.checked)state.weakIds.add(el.dataset.weakSet);else state.weakIds.delete(el.dataset.weakSet);state.listLimit=100;render();}else if(el.id==='language'){languageChoice=el.value;storage.set('wordnest-language',languageChoice);setLanguage();render();}else if(el.dataset.select){if(el.checked)state.selected.add(el.dataset.select);else state.selected.delete(el.dataset.select);render();}});
+document.addEventListener('change',event=>{const el=event.target;if(el.id==='ranking-metric'){state.rankingMetric=el.value;refreshRankings();}else if(el.id==='weak-set'){state.weakSetId=el.value;state.listLimit=100;render();}else if(el.id==='favorite-set'){state.favoriteSet=el.value;state.listLimit=100;render();}else if(el.dataset.weakSet!==undefined){if(el.checked)state.weakIds.add(el.dataset.weakSet);else state.weakIds.delete(el.dataset.weakSet);state.listLimit=100;render();}else if(el.id==='language'){languageChoice=el.value;storage.set('wordnest-language',languageChoice);setLanguage();render();}else if(el.dataset.select){if(el.checked)state.selected.add(el.dataset.select);else state.selected.delete(el.dataset.select);render();}});
 document.addEventListener('submit',async event=>{
   if(event.target.id==='answer-form'){event.preventDefault();if(!state.quiz.typed.trim())return;submitAnswer(state.quiz.typed);}
   if(event.target.id==='admin-login-form'){event.preventDefault();await submitAdmin(event.target);}
 });
 document.addEventListener('visibilitychange',()=>{syncLearning();updateQuizClock();});
 window.addEventListener('pageshow',()=>{syncLearning();updateQuizClock();});
-window.addEventListener('pagehide',()=>learning.setActive(false));
+window.addEventListener('pagehide',()=>{learning.setActive(false);ranking.flushOnExit();});
 window.addEventListener('blur',()=>learning.setActive(false));
 window.addEventListener('focus',syncLearning);
 for(const type of ['pointerdown','click','keydown','input','scroll'])document.addEventListener(type,()=>{if(learning.active)learning.touch();},{capture:true,passive:true});
-function learningHeartbeat(){learning.tick();learning.persist();if(state.route==='stats' && statsRenderedDay!==localDay(Date.now()))render();setTimeout(learningHeartbeat,1000);}
+let rankingHeartbeatAt=0;
+function learningHeartbeat(){learning.tick();learning.persist();if(Date.now()-rankingHeartbeatAt>=30000){rankingHeartbeatAt=Date.now();ranking.sync().then(()=>{if(state.route==='rankings')refreshRankings(false);}).catch(()=>{});}if(state.route==='stats' && statsRenderedDay!==localDay(Date.now()))render();setTimeout(learningHeartbeat,1000);}
 setTimeout(learningHeartbeat,1000);
 window.addEventListener('storage',event=>{if(event.key?.startsWith('wordnest-learning-v1:') && state.route==='stats')render();});
 window.addEventListener('storage',event=>{if(event.key==='wordnest-progress' && state.route==='home' && state.screen==='home')render();});
@@ -606,3 +676,6 @@ window.addEventListener('storage',event=>{
   if(event.key==='wordnest-reset-learning'){learning.syncReset();if(state.route==='stats')render();}
   else if(['wordnest-reset-question','wordnest-reset-favorite'].includes(event.key)){personal.syncResets();if(state.route==='home')render();}
 });
+
+window.addEventListener('online',()=>ranking.sync(true).then(()=>{if(state.route==='rankings')refreshRankings(false);}).catch(()=>{}));
+window.addEventListener('storage',event=>{if(event.key==='wordnest-ranking-v1' || event.key==='wordnest-reset-learning'){refreshRankingSettings();ranking.sync(true).then(()=>{if(state.route==='rankings')refreshRankings(false);}).catch(()=>{});if(state.route==='rankings')render();}});

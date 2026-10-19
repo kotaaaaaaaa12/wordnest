@@ -51,7 +51,7 @@ The Practice page starts with a compact Sets / Difficult words / Favorites / Wor
 
 ## Guide tab
 
-Public navigation is Practice → Statistics → Guide. Authenticated administrators also see Edit as the fourth tab. Guide is available at `#/guide`, including before word sets finish loading. It follows the selected English/Japanese UI language and explains quizzes, flashcards, personal study tools, clear colors, statistics, settings, and sound effects. Editing and transfer instructions appear only for authenticated administrators, after the Settings section. On mobile, the three or four visible tabs share their own row below the brand and Settings button.
+Public navigation is Practice → Statistics → Rankings → Guide. Authenticated administrators also see Edit as the fifth tab. Guide is available at `#/guide`, including before word sets finish loading. It follows the selected English/Japanese UI language and explains quizzes, flashcards, personal study tools, clear colors, statistics, settings, and sound effects. Editing and transfer instructions appear only for authenticated administrators, after the Settings section. On mobile, the four or five visible tabs share their own row below the brand and Settings button.
 
 ## Settings and appearance
 
@@ -65,7 +65,7 @@ Open **Settings** from the sidebar or the gear button in the mobile header.
 
 The original default light and dark palettes are unchanged. Light and dark theme choices are saved separately on this browser; Auto switches between those saved choices. Theme preferences are applied in the document head before the page is painted. Favorite stars have a solid yellow fill in every theme. Clear-status colors keep their established meanings across palettes.
 
-Settings contains no word-set management actions. Its bottom Administrator access section accepts the existing `ADMIN_PASSWORD`, reveals Edit after successful server authentication, and offers Open editor and Lock editor while authenticated. There is no password wall on the Edit page; anonymous `#/edit` links return to Practice. After enabling editing, the toolbar contains **New set**, **Import**, **Export**, **Manage sets**, and **Lock editor**.
+Settings contains no word-set management actions. Its bottom Administrator access section accepts the existing `ADMIN_PASSWORD`, reveals Edit after successful server authentication, and offers Open editor and Lock editor while authenticated. There is no password wall on the Edit page; anonymous `#/edit` links return to Practice. After enabling editing, the toolbar contains **New set**, **Import**, **Export**, and **Manage sets**. Lock editor is available only in Settings.
 
 Practice cards contain no export checkboxes or New set buttons. The editor provides creation and backup actions directly; they remain hidden while the editor is locked. Focus outlines and focus shadows are suppressed throughout the interface, including modal headings and buttons. Direction cards have no sticky hover highlight, and pointer clicks do not leave the selected button focused.
 
@@ -203,6 +203,8 @@ Tests cover randomized nonrepeating quizzes, distinct distractors, duplicate-mea
 
 ```text
 src/worker.js             Worker API, authentication, D1 persistence
+src/rankings.js           Ranking profiles, validated aggregation, public boards
+public/rankings.js        Browser identity, preferences, serialized sync/retry
 public/index.html         Application shell
 public/app.js             Quiz, editor, import/export, sound, celebration
 public/core.js            Shared validation and quiz rules
@@ -241,7 +243,7 @@ Japanese UI instructions, confirmations, and errors use a consistent polite tone
 
 Open **Statistics** (`#/stats`) without an editing password. It displays total study time, average time per study day, attempted questions, correct answers, accuracy, card flips, current streak, longest streak, and a seven-day study-time chart. All labels, duration units, dates, and instructions support English and Japanese and both themes.
 
-- Records start with version 1.7.0 and remain in this browser. They are separate from D1 word sets and from clear-state records. Existing All first-pass clears are preserved. Word-set imports and exports do not contain learning records.
+- Records start with version 1.7.0 and remain in this browser. Ranking participants additionally publish the same day totals to D1. They are separate from D1 word sets and from clear-state records. Existing All first-pass clears are preserved. Word-set imports and exports do not contain learning records.
 - Quizzes include thinking and feedback-reading time. Flashcards include reading time. Setup screens, results, Edit, Guide, Statistics, and all dialogs are excluded. Hidden pages and page-cache suspension stop time. Sixty seconds without a click, pointer press, keyboard action, input, or scroll pauses time; interaction resumes it.
 - The average divides total time by the number of local calendar days with recorded time or an attempt/flip. Unstudied days are excluded. Zero activity shows zero time and a dash for accuracy.
 - Answered, skipped, and timed-out questions each count once, including retries and questions in unfinished rounds. Late background timeouts belong to the deadline's local date. Both directions of a manual card flip count; navigation and automatic front-side resets do not.
@@ -251,7 +253,7 @@ Open **Statistics** (`#/stats`) without an editing password. It displays total s
 
 ## Difficult words, favorites, and word search
 
-Version 1.8.0 adds these views inside Practice. Main navigation is Practice / Statistics / Guide, with Edit added for authenticated administrators. The browser document title follows the active main tab and selected UI language, including direct links and language changes while a dialog is open.
+Version 1.8.0 adds these views inside Practice. Main navigation is Practice / Statistics / Rankings / Guide, with Edit added for authenticated administrators. The browser document title follows the active main tab and selected UI language, including direct links and language changes while a dialog is open.
 
 - **Difficult words:** select EN → JP or JP → EN and either one word set or a combined selection of sets. Each selection supports quizzes and flashcards. Two consecutive incorrect, skipped, or timed-out answers to the same question in the same direction register it. Three consecutive correct answers remove it. Regular word-set quizzes, difficult-word quizzes, favorite quizzes, and mistake retries all update the same question record. Other questions do not interrupt its streak. A miss resets the correct streak; a correct answer resets the miss streak. A registered question stays registered until its third consecutive correct answer. After recovery, two new consecutive misses register it again.
 - **Favorites:** stars are available outside the flashcard flip button, in revealed quiz feedback, and in word search results/details. Save individual words and study them across sets or filter to one set. Recovery never removes favorites. Both quiz directions, question counts, card directions, and card orders are supported. A word can be in Favorites and Difficult words at the same time.
@@ -265,10 +267,24 @@ Version 1.8.0 adds these views inside Practice. Main navigation is Practice / St
 
 Settings includes a learning-data section above Administrator access. You can delete quiz completion status, difficult-word records (including success/failure streaks), favorites, or learning statistics separately, or delete all four categories together. Every choice opens a confirmation dialog that identifies the selected data and states that deletion cannot be undone. Cancel or Escape returns to Settings without deleting.
 
-These actions affect this browser's learning data only. Shared D1 word sets, theme/language/sound preferences, and the administrator cookie are preserved. The controls are available without administrator authentication. Reset generations prevent other open tabs and pending in-memory writes from restoring deleted records. New study activity starts fresh records.
+These actions delete this browser's selected learning data. Deleting Statistics or all learning data also resets the published ranking records; offline removal is retried when connected. Shared D1 word sets, theme/language/sound preferences, and the administrator cookie are preserved. The controls are available without administrator authentication. Reset generations prevent other open tabs and pending in-memory writes from restoring deleted records. New study activity starts fresh records.
 
 ## Theme rendering and completion colors
 
 Graphite uses the warm gold brand accent for selected navigation, practice tabs, segmented controls, question counts, card-order choices, and editor selections. Correct/incorrect feedback remains separate from selection styling. Dark brand icons use dark ink for contrast on the lighter accent. The page and app shell paint the active paper color explicitly. Modal backdrops use a neutral translucent black overlay with standard and WebKit blur declarations, avoiding a fixed green tint or inherited theme variables in the backdrop.
 
 Completion indicators use theme-independent semantic colors: neutral gray for uncleared, orange for EN → JP, blue for JP → EN, and green for both. Light and dark modes use separate foreground/background/border colors. Both the book and the labeled status badge use these colors; labels and check/trophy icons also identify completion without relying on color. The Guide legend uses the same tokens.
+
+## Rankings (version 1.9.0)
+
+`#/rankings` offers all eight Statistics measures: total study time, average per study day, questions attempted, correct answers, accuracy, card flips, current streak, and longest streak. The server and Statistics use the same day-total summary function, and both views use the same number/time formatter. Accuracy requires at least 30 attempts; zero percent is eligible once the threshold is met. Other categories require a positive record. Boards show up to 100 rows, plus the current browser's own position outside the top 100. Equal raw values share a competition rank (1, 1, 3). Names can be duplicated; participant identity is separate.
+
+On first visit, a bilingual name dialog appears from any tab. Choose Save and participate or Do not participate; closing that first dialog also declines. Display names allow 1–20 Unicode code points and do not require real names. Returning visitors keep their choice and can register or rename themselves from Rankings. Settings can stop or restart participation. Stopping removes the stored published totals and prevents subsequent statistics uploads while retaining local learning records. No statistics or identity requests are sent for a browser that has declined without ever registering. Anyone can read the boards.
+
+A 256-bit random browser secret is retained in site storage, sent only to authenticated ranking endpoints as a bearer token, and represented in D1 by its SHA-256 identifier. It never grants editor access. Profiles and aggregate day totals are stored in the existing D1 database. Tables are created automatically by the existing bootstrap; no manual SQL migration or new secret is required. Changing a name updates the same profile. Clearing all site storage externally loses the browser identity; the in-app learning-data deletion controls preserve it. This feature does not merge different browsers or restore their local study history.
+
+Uploads run about every 30 seconds while the app is open, at quiz completion, on transitions, and before loading Rankings. Small cached-revision uploads also use keepalive on page exit. Network failures retry on subsequent updates and on reconnect. Writes use revision checks and reset epochs to reject out-of-order uploads, synchronize across tabs, and prevent pre-reset records or in-flight uploads from undoing an opt-out. Offline opt-outs and resets show a pending notice; published records remain until the server receives the change. Daily averages count only recorded study days. Streaks use each browser's IANA timezone; public current-streak boards also expire old streaks when the participant has not returned.
+
+The API validates names, dates, timezones, counters, and time totals, checks origins, limits mutations to 120 per minute per client IP (or identity in local development), and never accepts an uploaded final ranking score directly. Measurements originate from the browser, so this is a casual learning leaderboard rather than a tamper-proof competition system. Public rows include only participant identifiers, display names, positions, and the selected aggregate measure; per-day records are not exposed by public APIs.
+
+Validation includes real local D1 integration, agreement between all eight personal/public measures, the 29/30-question accuracy boundary, ties, own positions outside the top 100, identity ownership, rename/opt-out/rejoin, resets, delayed uploads across tabs, offline retries, and bilingual first-visit/UI flows.

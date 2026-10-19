@@ -1,3 +1,4 @@
+import { rankingApi, rankingSchema } from './rankings.js';
 import { validateSet } from '../public/core.js';
 const initialized = new WeakMap();
 const encoder = new TextEncoder();
@@ -7,6 +8,7 @@ const reply = (data, status = 200, headers = {}) => new Response(JSON.stringify(
 async function initialize(db) {
   if (!initialized.has(db)) initialized.set(db, (async () => {
     await db.batch([
+      ...rankingSchema.map(sql=>db.prepare(sql)),
       db.prepare('CREATE TABLE IF NOT EXISTS sets (id TEXT PRIMARY KEY, title TEXT NOT NULL, words TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)'),
       db.prepare('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY)'),
       db.prepare('CREATE TABLE IF NOT EXISTS set_order (id INTEGER PRIMARY KEY CHECK(id=1), ids TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0)'),
@@ -97,6 +99,7 @@ async function api(request, env) {
     rows.results.sort((a,b)=>(positions.get(a.id)??Number.MAX_SAFE_INTEGER)-(positions.get(b.id)??Number.MAX_SAFE_INTEGER));
     return reply({ sets: rows.results.map(s => ({ id: s.id, title: s.title, words: JSON.parse(s.words), revision: s.revision, updatedAt: s.updated_at })), orderRevision: order.revision });
   }
+  if(path==='/api/rankings' || path.startsWith('/api/ranking/'))return rankingApi(request,env.DB,body);
   if (!await authenticated(request, env)) return reply({ error: 'unauthorized' }, 401);
   if (path === '/api/sets/order' && method === 'PUT') {
     const data=await body(request);
@@ -145,6 +148,7 @@ export default {
     try { return await api(request, env); }
     catch (error) {
       const known = ['invalidTitle', 'invalidWords', 'duplicateWord', 'invalidImport', 'jsonRequired', 'tooLarge'];
+      if((error.status && error.message.startsWith('ranking')) || ['invalidRankingData','invalidRankingName'].includes(error.message))return reply({error:error.message},error.status || 400);
       if (known.includes(error.message)) return reply({ error: error.message }, error.status || 400);
       console.error('API request failed', error.message);
       return reply({ error: 'serverError' }, 500);

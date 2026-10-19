@@ -5,6 +5,7 @@ import { JSDOM } from 'jsdom';
 import * as core from '../public/core.js';
 import * as statistics from '../public/stats.js';
 import * as personalTools from '../public/personal.js';
+import * as rankingTools from '../public/rankings.js';
 import { icon } from '../public/icons.js';
 import { messages, translator } from '../public/i18n.js';
 import * as zip from 'fflate';
@@ -15,7 +16,7 @@ test('both quiz directions retry only incorrect, skipped, and timed-out question
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/#/',runScripts:'outside-only',pretendToBeVisual:true});
   const studySet={...structuredClone(seed),words:structuredClone(seed.words.slice(0,5)),id:'seed',revision:1};
   const w=dom.window;w.document.hasFocus=()=>true;let now=1000,nextId=0,celebrations=0;const intervals=new Map();
-  Object.assign(w,core,statistics,personalTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
+  Object.assign(w,core,statistics,personalTools,rankingTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
   w.Date.now=()=>now;w.setInterval=callback=>{const id=++nextId;intervals.set(id,callback);return id;};w.clearInterval=id=>intervals.delete(id);
   w.Audio=class{constructor(url){this.url=url;}play(){if(this.url.includes('confetti'))celebrations++;return Promise.resolve();}};
   w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){}});
@@ -35,7 +36,7 @@ test('both quiz directions retry only incorrect, skipped, and timed-out question
   }
   try{
     w.localStorage.setItem('wordnest-progress','{invalid');
-    w.eval(source);await tick();await tick();
+    w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();
     assert.equal(find('.set-card').dataset.studyStatus,'none');
     w.localStorage.setItem('wordnest-progress',JSON.stringify({seed:{key:core.studyKey(studySet),scope:'all','en-ja':true,'ja-en':true}}));
     await click('[data-action="reload"]');assert.equal(find('.set-card').dataset.studyStatus,'none');

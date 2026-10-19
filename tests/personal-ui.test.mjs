@@ -5,6 +5,7 @@ import { JSDOM } from 'jsdom';
 import * as core from '../public/core.js';
 import * as statistics from '../public/stats.js';
 import * as personalTools from '../public/personal.js';
+import * as rankingTools from '../public/rankings.js';
 import { icon } from '../public/icons.js';
 import { messages, translator } from '../public/i18n.js';
 import * as zip from 'fflate';
@@ -14,7 +15,7 @@ const first={id:'first',title:'Set A',revision:1,words:[['apple','りんご'],['
 const second={id:'second',title:'Set B',revision:1,words:[['egg','卵'],['fish','魚'],['goat','山羊'],['hat','帽子']].map(([english,meaning])=>({english,meaning,explanation:''}))};
 function harness(hash='#/',authenticated=false) {
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/'+hash,runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
-  Object.assign(w,core,statistics,personalTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});w.document.hasFocus=()=>true;
+  Object.assign(w,core,statistics,personalTools,rankingTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});w.document.hasFocus=()=>true;
   w.Audio=class{play(){return Promise.resolve();}};w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){}});
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
   w.fetch=async path=>({ok:true,status:200,json:async()=>path==='/api/sets'?{sets:[first,second],orderRevision:0}:{authenticated,configured:true}});
@@ -39,7 +40,7 @@ test('personal UI supports cross-context recovery, set selection, both collectio
   }
   const question=(set,english,mode='ja-en')=>personalTools.sourceQuestions([set],mode).find(q=>q.english===english);
   try{
-    w.eval(source);await tick();await tick();
+    w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();
     await originalRound('first');assert.equal(saved().record(question(first,'apple').sources[0].key).weak,false);
     await originalRound('first');assert.equal(saved().record(question(first,'apple').sources[0].key).weak,true);
     const other=question(second,'egg');personal.answer(other.sources,false);personal.answer(other.sources,false);
@@ -69,7 +70,7 @@ test('document titles follow all main tabs, selected language, and direct links'
   const {w}=harness('#/guide',true),find=s=>w.document.querySelector(s);
   async function click(selector){assert.ok(find(selector),selector);find(selector).click();await tick();await tick();}
   try{
-    w.eval(source);await tick();await tick();assert.equal(w.document.title,'Wordnest — Guide');
+    w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();assert.equal(w.document.title,'Wordnest — Guide');
     for(const [route,label] of [['stats','Statistics'],['edit','Edit'],['home','Practice'],['guide','Guide']]){await click(`.nav [data-nav="${route}"]`);assert.equal(w.document.title,`Wordnest — ${label}`);}
     await click('[data-action="settings"]');find('#settings-language').value='ja';find('#settings-language').dispatchEvent(new w.Event('change',{bubbles:true}));assert.equal(w.document.title,'Wordnest — 説明');await click('[data-dialog="cancel"]');
     for(const [route,label] of [['stats','学習記録'],['edit','編集'],['home','学習'],['guide','説明']]){await click(`.nav [data-nav="${route}"]`);assert.equal(w.document.title,`Wordnest — ${label}`);}

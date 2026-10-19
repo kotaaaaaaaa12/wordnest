@@ -5,6 +5,7 @@ import { JSDOM } from 'jsdom';
 import * as core from '../public/core.js';
 import * as statistics from '../public/stats.js';
 import * as personalTools from '../public/personal.js';
+import * as rankingTools from '../public/rankings.js';
 import { icon } from '../public/icons.js';
 import { messages, translator } from '../public/i18n.js';
 import * as zip from 'fflate';
@@ -14,7 +15,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 test('15-second quiz clock handles expiry, late answers, modal rerenders, and cleanup',async()=>{
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/#/',runScripts:'outside-only',pretendToBeVisual:true});
   const w=dom.window;w.document.hasFocus=()=>true;let now=1000,nextId=0;const intervals=new Map(),sounds=[];
-  Object.assign(w,core,statistics,personalTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:false})});
+  Object.assign(w,core,statistics,personalTools,rankingTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:false})});
   w.Date.now=()=>now;w.setInterval=callback=>{const id=++nextId;intervals.set(id,callback);return id;};w.clearInterval=id=>intervals.delete(id);
   w.Audio=class{constructor(url){this.url=url;}play(){sounds.push(this.url);return Promise.resolve();}};
   w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){}});
@@ -25,7 +26,7 @@ test('15-second quiz clock handles expiry, late answers, modal rerenders, and cl
   function advance(milliseconds){now+=milliseconds;for(const callback of [...intervals.values()])callback();}
   function correctButton(){const prompt=find('.question-word').textContent,meaning=seed.words.find(word=>word.english===prompt).meaning;return [...w.document.querySelectorAll('.option')].find(button=>button.textContent.slice(1)===meaning);}
   try{
-    w.eval(source);await tick();await tick();await click('[data-action="open"]');find('[data-activity="quiz"]').focus();await click('[data-activity="quiz"]');assert.ok([...w.document.querySelectorAll('[data-mode]')].every(button=>button!==w.document.activeElement));
+    w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();await click('[data-action="open"]');find('[data-activity="quiz"]').focus();await click('[data-activity="quiz"]');assert.ok([...w.document.querySelectorAll('[data-mode]')].every(button=>button!==w.document.activeElement));
     const direction=find('[data-mode="en-ja"]');direction.focus();const down=new w.MouseEvent('mousedown',{bubbles:true,cancelable:true,button:0});direction.dispatchEvent(down);assert.equal(down.defaultPrevented,true);await click('[data-mode="en-ja"]');assert.notEqual(w.document.activeElement,direction);
     await click('[data-action="start"]');assert.equal(find('.timer-seconds').textContent,'15s');assert.equal(find('.timer-track').getAttribute('aria-valuenow'),'15');assert.equal(intervals.size,1);const prompt=find('.question-word').textContent;
     advance(5000);assert.equal(find('.timer-seconds').textContent,'10s');assert.equal(find('.question-timer').style.getPropertyValue('--timer-hue'),'80');assert.ok(find('.timer-fill').style.transform.includes('0.666'));
