@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import * as core from '../public/core.js';
 import * as statistics from '../public/stats.js';
+import * as personalTools from '../public/personal.js';
 import { icon } from '../public/icons.js';
 import { messages, translator } from '../public/i18n.js';
 import * as zip from 'fflate';
@@ -13,7 +14,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 test('records count answers and flips once, persist early exits, pause background/dialog time, and translate',async()=>{
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/#/stats',runScripts:'outside-only',pretendToBeVisual:true});
   const w=dom.window;let now=new Date(2026,9,19,12).getTime(),visible=true,focused=true;const timers=new Map(),timeouts=new Map();let timerId=0;
-  Object.assign(w,core,statistics,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
+  Object.assign(w,core,statistics,personalTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:true})});
   w.Date.now=()=>now;w.setInterval=fn=>{const id=++timerId;timers.set(id,fn);return id;};w.clearInterval=id=>timers.delete(id);w.setTimeout=(fn,delay)=>{const id=++timerId;timeouts.set(id,{fn,at:now+delay});return id;};w.clearTimeout=id=>timeouts.delete(id);
   Object.defineProperty(w.document,'visibilityState',{get:()=>visible?'visible':'hidden'});
   w.Audio=class{play(){return Promise.resolve();}};w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){}});
