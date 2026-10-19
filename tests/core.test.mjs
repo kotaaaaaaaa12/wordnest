@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createQuiz, createFlashcards, isCorrect, normalize, questionPool, validateSet, parseImport, portable } from '../public/core.js';
+import { studyKey, studyStatus, createQuiz, createFlashcards, isCorrect, normalize, questionPool, validateSet, parseImport, portable } from '../public/core.js';
 import { messages } from '../public/i18n.js';
 import { seed } from './fixture.js';
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate';
@@ -50,4 +50,23 @@ test('flashcards preserve every registered word in both directions and all three
   assert.deepEqual(seed,original);
   assert.equal(createFlashcards({words:[{english:'one',meaning:'一つ'}]},'en-ja','original').length,1);
   assert.throws(()=>createFlashcards(seed,'en-ja','other'),/invalidOrder/);
+});
+
+test('clear status follows quiz content and preserves independent direction flags',()=>{
+  const set={...structuredClone(seed),id:'progress-set'},key=studyKey(set);
+  assert.equal(studyStatus(set,{}),'none');
+  const progress={[set.id]:{key,'en-ja':true}};
+  assert.equal(studyStatus(set,progress),'en-ja');
+  progress[set.id]['ja-en']=true;
+  assert.equal(studyStatus(set,progress),'both');
+  delete progress[set.id]['en-ja'];
+  assert.equal(studyStatus(set,progress),'ja-en');
+  const reordered={...set,title:'A new name',words:[...set.words].reverse().map(word=>({...word,explanation:'A new note'}))};
+  assert.equal(studyKey(reordered),key);
+  assert.equal(studyStatus(reordered,progress),'ja-en');
+  const edited=structuredClone(set);edited.words[0].meaning='A different meaning';
+  assert.equal(studyStatus(edited,progress),'none');
+  assert.notEqual(studyKey({...set,words:set.words.slice(1)}),key);
+  assert.equal(studyStatus({...set,id:'imported-copy'},progress),'none');
+  assert.equal(studyStatus(set,{[set.id]:{key,'en-ja':'true'}}),'none');
 });

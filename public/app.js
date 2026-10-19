@@ -1,5 +1,5 @@
 import { icon } from './icons.js';
-import { normalize, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, isCorrect, portable, parseImport } from './core.js';
+import { normalize, studyKey, studyStatus, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, isCorrect, portable, parseImport } from './core.js';
 import { messages, translator } from './i18n.js';
 import { zipSync, unzipSync, strToU8, strFromU8 } from './vendor/fflate.js';
 const $ = (s, root = document) => root.querySelector(s);
@@ -65,9 +65,23 @@ function render() {
   if(state.screen!=='quiz' || state.route!=='home')stopQuizClock();
   if (focusId && document.getElementById(focusId) && !['language'].includes(focusId)) { const el=document.getElementById(focusId); el.focus({preventScroll:true}); if(selection && el.setSelectionRange) el.setSelectionRange(...selection); }
 }
+function readStudyProgress() {
+  try { const value=JSON.parse(storage.get('wordnest-progress','{}'));return value && typeof value==='object' && !Array.isArray(value)?value:{}; } catch { return {}; }
+}
+function recordQuizClear(quiz) {
+  const set=state.sets.find(set=>set.id===quiz.setId);
+  if(!set || studyKey(set)!==quiz.setKey)return;
+  const progress=readStudyProgress(),previous=progress[set.id];
+  progress[set.id]={key:quiz.setKey,'en-ja':previous?.key===quiz.setKey && previous['en-ja']===true,'ja-en':previous?.key===quiz.setKey && previous['ja-en']===true,[quiz.mode]:true};
+  storage.set('wordnest-progress',JSON.stringify(progress));
+}
+function setCard(set,progress) {
+  const status=studyStatus(set,progress),label=status==='none'?t('notCleared'):status==='both'?t('bothCleared'):t('directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'});
+  return `<article class="set-card study-${status}" data-study-status="${status}" data-set-id="${e(set.id)}"><div class="card-head"><span class="set-symbol">${icon('book')}</span><span class="study-status">${status==='none'?'':icon(status==='both'?'trophy':'check')}${e(label)}</span></div><button class="card-open" data-action="open" data-id="${e(set.id)}"><h3>${e(set.title)}</h3><span class="visually-hidden">${t('openSet')}</span></button><div class="card-bottom"><span>${t('wordsCount',{n:set.words.length})}</span><button class="icon-btn" data-action="open" data-id="${e(set.id)}" aria-label="${t('openSet')}">${icon('arrow')}</button></div></article>`;
+}
 function home() {
-  const visible=state.sets.filter(s=>normalize(s.title).includes(normalize(state.search)));
-  return `<section class="library-view"><div class="section-bar"><div class="section-heading"><h1>${t('library')}</h1><span class="count">${t('setsCount',{n:state.sets.length})}</span></div><button class="icon-btn" data-action="reload" aria-label="${t('refresh')}">${icon('refresh')}</button></div><div class="toolbar"><div class="search">${icon('search')}<input id="search" type="search" placeholder="${t('search')}" aria-label="${t('search')}" value="${e(state.search)}"></div></div><div class="grid">${visible.map(s=>`<article class="set-card"><div class="card-head"><span class="set-symbol">${icon('book')}</span></div><button class="card-open" data-action="open" data-id="${e(s.id)}"><h3>${e(s.title)}</h3><span class="visually-hidden">${t('openSet')}</span></button><div class="card-bottom"><span>${t('wordsCount',{n:s.words.length})}</span><button class="icon-btn" data-action="open" data-id="${e(s.id)}" aria-label="${t('openSet')}">${icon('arrow')}</button></div></article>`).join('')}</div>${!visible.length?`<div class="empty"><h2>${t(state.sets.length?'noResults':'empty')}</h2>${!state.sets.length?`<p>${t('emptyHelp')}</p>`:''}</div>`:''}</section>`;
+  const visible=state.sets.filter(s=>normalize(s.title).includes(normalize(state.search))),progress=readStudyProgress();
+  return `<section class="library-view"><div class="section-bar"><div class="section-heading"><h1>${t('library')}</h1><span class="count">${t('setsCount',{n:state.sets.length})}</span></div><button class="icon-btn" data-action="reload" aria-label="${t('refresh')}">${icon('refresh')}</button></div><div class="toolbar"><div class="search">${icon('search')}<input id="search" type="search" placeholder="${t('search')}" aria-label="${t('search')}" value="${e(state.search)}"></div></div><div class="grid">${visible.map(set=>setCard(set,progress)).join('')}</div>${!visible.length?`<div class="empty"><h2>${t(state.sets.length?'noResults':'empty')}</h2>${!state.sets.length?`<p>${t('emptyHelp')}</p>`:''}</div>`:''}</section>`;
 }
 const currentSet=()=>state.sets.find(s=>s.id===state.setId);
 function flowTitle(title) { return `<div class="flow-title"><p class="set-context">${e(currentSet()?.title)}</p><h1>${t(title)}</h1></div>`; }
@@ -330,17 +344,17 @@ const actions={
   'back-mode'(){state.screen='mode';state.error='';render();},
   mode(button){state.mode=button.dataset.mode;if(state.activity==='cards'){state.screen='order';render();return;}state.screen='count';const max=questionPool(currentSet(),state.mode).length;state.count=Math.min(5,max);state.countChoice=max<5?'all':5;state.custom=false;state.error='';render();},
   count(button){const value=button.dataset.count;state.custom=value==='custom';if(!state.custom){state.countChoice=value==='all'?'all':Number(value);state.count=value==='all'?questionPool(currentSet(),state.mode).length:Number(value);}state.error='';render();},
-  start(){const max=questionPool(currentSet(),state.mode).length,count=state.custom?Number(state.customValue):state.count;if(!Number.isInteger(count)||count<1||count>max){state.error=t('invalidCount',{n:max});render();return;}try{const set=currentSet();state.quiz={title:set.title,mode:state.mode,questions:createQuiz(set,state.mode,count),index:0,answers:[],typed:''};state.screen='quiz';state.error='';startQuestionClock();render();window.scrollTo(0,0);}catch(err){state.error=message(err);render();}},
+  start(){const max=questionPool(currentSet(),state.mode).length,count=state.custom?Number(state.customValue):state.count;if(!Number.isInteger(count)||count<1||count>max){state.error=t('invalidCount',{n:max});render();return;}try{const set=currentSet();state.quiz={setId:set.id,setKey:studyKey(set),title:set.title,mode:state.mode,questions:createQuiz(set,state.mode,count),index:0,answers:[],typed:''};state.screen='quiz';state.error='';startQuestionClock();render();window.scrollTo(0,0);}catch(err){state.error=message(err);render();}},
   answer(button){submitAnswer(state.quiz.questions[state.quiz.index].options[Number(button.dataset.option)]);},
   skip(){submitAnswer('',true);},
-  next(){const qz=state.quiz;if(!qz.answers[qz.index])return;if(qz.index===qz.questions.length-1){state.screen='result';const perfect=qz.answers.every(a=>a.correct);render();if(perfect){play('confetti');confetti();}window.scrollTo(0,0);}else{qz.index++;qz.typed='';startQuestionClock();render();window.scrollTo(0,0);}},
+  next(){const qz=state.quiz;if(!qz.answers[qz.index])return;if(qz.index===qz.questions.length-1){state.screen='result';const perfect=qz.answers.length===qz.questions.length && qz.answers.every(a=>a.correct);if(perfect)recordQuizClear(qz);render();if(perfect){play('confetti');confetti();}window.scrollTo(0,0);}else{qz.index++;qz.typed='';startQuestionClock();render();window.scrollTo(0,0);}},
   async quit(){if(await confirmDialog('quitTitle',t('quitHelp'),'confirmQuit'))actions['back-home']();},
   'retry-mistakes'(){
     const previous=state.quiz;if(state.screen!=='result' || !previous)return;
     const missed=previous.questions.filter((_,index)=>previous.answers[index] && !previous.answers[index].correct);
     if(!missed.length)return;
     const questions=shuffle(missed).map(question=>({...structuredClone(question),options:shuffle(question.options)}));
-    state.quiz={title:previous.title,mode:previous.mode,questions,index:0,answers:[],typed:'',isRetry:true};
+    state.quiz={setId:previous.setId,setKey:previous.setKey,title:previous.title,mode:previous.mode,questions,index:0,answers:[],typed:'',isRetry:true};
     state.screen='quiz';state.error='';startQuestionClock();render();window.scrollTo(0,0);
   },
   again(){state.screen='count';state.quiz=null;state.error='';render();window.scrollTo(0,0);},
@@ -401,6 +415,7 @@ document.addEventListener('submit',async event=>{
 });
 document.addEventListener('visibilitychange',updateQuizClock);
 window.addEventListener('pageshow',updateQuizClock);
+window.addEventListener('storage',event=>{if(event.key==='wordnest-progress' && state.route==='home' && state.screen==='home')render();});
 window.addEventListener('hashchange',()=>navigate(location.hash.startsWith('#/edit')?'edit':'home',true));
 window.addEventListener('beforeunload',event=>{if(state.dirty||state.saving){event.preventDefault();event.returnValue='';}});
 load();

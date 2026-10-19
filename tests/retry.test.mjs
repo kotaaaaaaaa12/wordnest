@@ -20,6 +20,7 @@ test('both quiz directions retry only incorrect, skipped, and timed-out question
   w.fetch=async path=>({ok:true,status:200,json:async()=>path==='/api/sets'?{sets:[{...seed,id:'seed',revision:1}],orderRevision:0}:{authenticated:false,configured:true}});
   const find=selector=>w.document.querySelector(selector);
   const prompt=()=>find('.question-word').textContent;
+  const savedProgress=()=>{try{return JSON.parse(w.localStorage.getItem('wordnest-progress')) || {};}catch{return {};}};
   async function click(selector){const element=find(selector);assert.ok(element,selector);element.click();await tick();await tick();}
   function advance(milliseconds){now+=milliseconds;for(const callback of [...intervals.values()])callback();}
   async function answer(mode,correct=true){
@@ -30,7 +31,9 @@ test('both quiz directions retry only incorrect, skipped, and timed-out question
     await tick();assert.ok(find('.feedback').textContent.includes(word.explanation));assert.equal(intervals.size,0);
   }
   try{
+    w.localStorage.setItem('wordnest-progress','{invalid');
     w.eval(source);await tick();await tick();
+    assert.equal(find('.set-card').dataset.studyStatus,'none');
     for(const [mode,round] of [['en-ja',0],['ja-en',1]]){
       await click('[data-action="open"]');await click('[data-activity="quiz"]');await click(`[data-mode="${mode}"]`);await click('[data-action="start"]');
       const missed=[],choices=new Map();
@@ -40,7 +43,7 @@ test('both quiz directions retry only incorrect, skipped, and timed-out question
         if(i===2)await click('[data-action="skip"]');else if(i===3)advance(15000);else await answer(mode,i!==1);
         await click('[data-action="next"]');
       }
-      assert.equal(find('.score-number').textContent.trim(),'2 / 5');assert.ok(find('[data-action="retry-mistakes"]').textContent.includes('3'));assert.equal(celebrations,round);
+      assert.equal(find('.score-number').textContent.trim(),'2 / 5');assert.equal(core.studyStatus({...seed,id:'seed'},savedProgress()),round?'en-ja':'none');assert.ok(find('[data-action="retry-mistakes"]').textContent.includes('3'));assert.equal(celebrations,round);
       await click('[data-action="retry-mistakes"]');assert.equal(find('.timer-seconds').textContent,'15s');assert.equal(find('.feedback'),null);assert.equal(intervals.size,1);
       const seen=[];let lastMissed;
       for(let i=0;i<3;i++){
@@ -51,6 +54,20 @@ test('both quiz directions retry only incorrect, skipped, and timed-out question
       assert.deepEqual([...seen].sort(),[...missed].sort());assert.equal(new Set(seen).size,3);assert.equal(find('.score-number').textContent.trim(),'2 / 3');assert.ok(find('[data-action="retry-mistakes"]').textContent.includes('1'));
       await click('[data-action="retry-mistakes"]');assert.equal(prompt(),lastMissed);assert.equal(find('.timer-seconds').textContent,'15s');if(mode==='en-ja')assert.equal(w.document.querySelectorAll('.option').length,4);await answer(mode);await click('[data-action="next"]');
       assert.equal(find('.score-number').textContent.trim(),'1 / 1');assert.equal(find('[data-action="retry-mistakes"]'),null);assert.equal(celebrations,round+1);assert.equal(intervals.size,0);await click('[data-action="back-home"]');
+      assert.equal(find('.set-card').dataset.studyStatus,round?'both':'en-ja');
+      assert.ok(find('.study-status').textContent.includes(round?'Both cleared':'EN → JP cleared'));
+      await click('[data-action="reload"]');
+      assert.equal(find('.set-card').dataset.studyStatus,round?'both':'en-ja');
     }
+    w.localStorage.removeItem('wordnest-progress');await click('[data-action="reload"]');
+    assert.equal(find('.set-card').dataset.studyStatus,'none');
+    await click('[data-action="open"]');await click('[data-activity="quiz"]');await click('[data-mode="ja-en"]');await click('[data-action="start"]');
+    for(let i=0;i<5;i++){await answer('ja-en');if(i<4)assert.equal(w.localStorage.getItem('wordnest-progress'),null);await click('[data-action="next"]');}
+    await click('[data-action="back-home"]');assert.equal(find('.set-card').dataset.studyStatus,'ja-en');
+    const persisted=w.localStorage.getItem('wordnest-progress');assert.ok(persisted);
+    await click('[data-action="open"]');await click('[data-activity="cards"]');await click('[data-mode="en-ja"]');await click('[data-action="start-cards"]');
+    for(let i=0;i<seed.words.length;i++)await click('[data-action="flip-card"]');
+    await click('[data-action="back-home"]');assert.equal(w.localStorage.getItem('wordnest-progress'),persisted);
+    w.localStorage.setItem('wordnest-progress','[]');await click('[data-action="reload"]');assert.equal(find('.set-card').dataset.studyStatus,'none');
   }finally{dom.window.close();}
 });

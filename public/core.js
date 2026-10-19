@@ -56,3 +56,21 @@ export function parseImport(value) {
   if (!items.length || items.length > 100) throw new Error('invalidImport');
   return items.map(validateSet);
 }
+
+// Keep progress tied to quiz content, independent of titles, notes, and display order.
+export function studyKey(set) {
+  const words=set.words.map(word=>[normalize(word.english),normalize(word.meaning)]).sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0);
+  const content=JSON.stringify(words);
+  let first=2166136261,second=2246822507;
+  for(let i=0;i<content.length;i++){
+    first=Math.imul(first^content.charCodeAt(i),16777619);
+    second=Math.imul(second^content.charCodeAt(i),3266489909);
+  }
+  return `${content.length}:${first>>>0}:${second>>>0}`;
+}
+export function studyStatus(set,progress) {
+  const entry=progress?.[set.id];
+  if(!entry || entry.key!==studyKey(set))return 'none';
+  const english=entry['en-ja']===true,japanese=entry['ja-en']===true;
+  return english && japanese?'both':english?'en-ja':japanese?'ja-en':'none';
+}

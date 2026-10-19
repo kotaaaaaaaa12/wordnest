@@ -218,3 +218,9 @@ The interface uses selected [Lucide](https://lucide.dev/) SVG icons with a consi
 ### Flashcard text layout
 
 Flashcards grow to fit the longer face, so full meanings remain readable in both directions. Both faces share a grid cell to keep the card height stable when flipping. Long content uses normal page scrolling rather than a clipped inner scroll area. The Japanese UI calls this mode “単語カード”.
+
+The main content starts at the top of the page, with horizontal centering only. Set icons start gray, become orange after an EN → JP clear, purple after a JP → EN clear, and green after both directions are cleared. A text label and check/trophy icon also identify the state.
+
+### Quiz clear progress
+
+Clear progress is saved in this browser for each word set and quiz direction. A perfect completed round earns a clear for the selected question count. Finishing all missed-question retries also earns a clear; incomplete or incorrect rounds and flashcards do not. Clears remain earned after later mistakes. Progress survives reloads and is separate from the shared word sets in D1; it is not included in set exports. Editing English words or meanings invalidates the clear state. Renaming, changing explanations, and reordering preserve it. Previous sessions cannot be recovered because earlier versions did not store results.
