@@ -1,4 +1,4 @@
-import { rankingApi, rankingSchema } from './rankings.js';
+import { rankingApi, rankingAdminApi, rankingSchema } from './rankings.js';
 import { validateSet } from '../public/core.js';
 const initialized = new WeakMap();
 const encoder = new TextEncoder();
@@ -101,6 +101,7 @@ async function api(request, env) {
   }
   if(path==='/api/rankings' || path.startsWith('/api/ranking/'))return rankingApi(request,env.DB,body);
   if (!await authenticated(request, env)) return reply({ error: 'unauthorized' }, 401);
+  if(path.startsWith('/api/admin/'))return rankingAdminApi(request,env.DB,body);
   if (path === '/api/sets/order' && method === 'PUT') {
     const data=await body(request);
     if(!Array.isArray(data.ids) || data.ids.length>200 || data.ids.some(id=>typeof id!=='string' || !/^[a-zA-Z0-9-]{1,80}$/.test(id)) || new Set(data.ids).size!==data.ids.length || !Number.isInteger(data.revision) || data.revision<0) return reply({error:'invalidSetOrder'},400);
@@ -148,7 +149,7 @@ export default {
     try { return await api(request, env); }
     catch (error) {
       const known = ['invalidTitle', 'invalidWords', 'duplicateWord', 'invalidImport', 'jsonRequired', 'tooLarge'];
-      if((error.status && error.message.startsWith('ranking')) || ['invalidRankingData','invalidRankingName'].includes(error.message))return reply({error:error.message},error.status || 400);
+      if((error.status && error.message.startsWith('ranking')) || ['invalidRankingData','invalidRankingName','invalidRankingMessage'].includes(error.message))return reply({error:error.message},error.status || 400);
       if (known.includes(error.message)) return reply({ error: error.message }, error.status || 400);
       console.error('API request failed', error.message);
       return reply({ error: 'serverError' }, 500);

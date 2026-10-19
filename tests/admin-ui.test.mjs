@@ -50,8 +50,8 @@ test('administrator access lives at Settings bottom and controls Edit and its gu
     assert.equal(find('#modal [data-action="import"]'),null);assert.ok(find('#admin-password'));
     await login('incorrect-password');assert.equal(find('[role="alert"]').textContent,messages.en.wrongPassword);assert.equal(find('.nav [data-nav="edit"]'),null);assert.equal(find('#admin-password').value,'');
     await login();assert.ok(find('.nav [data-nav="edit"]'));assert.equal(find('#admin-password'),null);assert.ok(find('#guide-edit'));
-    const sections=[...w.document.querySelectorAll('.guide-section')];assert.equal(sections.at(-1).getAttribute('aria-labelledby'),'guide-edit');assert.equal(sections.at(-2).getAttribute('aria-labelledby'),'guide-settings');
-    assert.ok(sections.at(-1).textContent.includes('Import'));assert.equal(sections.at(-2).textContent.includes('Import'),false);
+    const sections=[...w.document.querySelectorAll('.guide-section')];assert.equal(sections.at(-1).getAttribute('aria-labelledby'),'guide-admin');assert.equal(sections.at(-2).getAttribute('aria-labelledby'),'guide-edit');
+    assert.ok(sections.at(-2).textContent.includes('Import'));assert.equal(sections.at(-3).textContent.includes('Import'),false);
     find('#settings-language').value='ja';find('#settings-language').dispatchEvent(new w.Event('change',{bubbles:true}));
     assert.equal(find('#admin-settings-title').textContent,'管理者用');assert.equal(find('[data-admin-open]').textContent.trim(),'編集画面を開く');assert.ok(find('#guide-edit+ul').textContent.includes('管理者パスワード'));
     await click('[data-admin-open]');assert.equal(w.location.hash,'#/edit');assert.ok(find('.editor-toolbar'));assert.equal(find('[data-action="logout"]'),null);assert.equal(find('input[type="password"]'),null);assert.equal(find('#login-form'),null);

@@ -1,44 +1,66 @@
 export const RANKING_KEY='wordnest-ranking-v1';
 export const rankingMetrics={totalMs:'totalTime',averageMs:'averageTime',answered:'answeredQuestions',correct:'correctQuestions',accuracy:'accuracy',flips:'cardFlips',streak:'currentStreak',longest:'longestStreak'};
 export function rankingName(value){const name=String(value || '').trim().normalize('NFC');if([...name].length<1 || [...name].length>20 || /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/.test(name))throw new Error('invalidRankingName');return name;}
+export function rankingNameKey(value){return String(value).normalize('NFKC').replace(/[\u200b-\u200d\ufeff]/g,'').replace(/\s+/g,' ').trim().toLowerCase();}
 export class RankingClient {
   constructor({storage,fetch=globalThis.fetch,snapshot,onChange=()=>{},crypto=globalThis.crypto}={}){
-    this.storage=storage;this.fetch=fetch;this.snapshot=snapshot;this.onChange=onChange;this.crypto=crypto;this.queue=Promise.resolve();this.profile=null;this.lastSent='';this.error='';
+    this.storage=storage;this.fetch=fetch;this.snapshot=snapshot;this.onChange=onChange;this.crypto=crypto;this.queue=Promise.resolve();this.profile=null;this.lastSent='';this.error='';this.lastCheckedAt=0;
   }
   preferences(){try{const value=JSON.parse(this.storage?.getItem(RANKING_KEY) || 'null');return value && ['joined','declined'].includes(value.choice)?value:null;}catch{return null;}}
   save(value){try{if(!this.storage)throw new Error();this.storage.setItem(RANKING_KEY,JSON.stringify(value));}catch{throw new Error('rankingStorageError');}this.onChange();}
   token(){return [...this.crypto.getRandomValues(new Uint8Array(32))].map(byte=>byte.toString(16).padStart(2,'0')).join('');}
-  async join(value){const name=rankingName(value),previous=this.preferences();this.save({...previous,token:previous?.token || this.token(),name,choice:'joined',pending:this.token()});return this.sync(true);}
+  async join(value){const name=rankingName(value),previous=this.preferences();if(previous?.notice){if(!previous.notice.acknowledged)throw new Error('rankingNoticeRequired');if(rankingNameKey(name)===rankingNameKey(previous.notice.removedName))throw new Error('rankingNameUnchanged');}this.save({...previous,token:previous?.token || this.token(),name,choice:'joined',pending:this.token()});return this.sync(true);}
   async decline(){const previous=this.preferences();this.save({...previous,choice:'declined',pending:previous?.token?this.token():null});return this.sync(true);}
   async request(path,method='GET',data,token,keepalive=false){
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);
     try{
       const response=await this.fetch(path,{method,credentials:'same-origin',signal:controller.signal,keepalive,headers:{...(data?{'Content-Type':'application/json'}:{}),...(token?{Authorization:`Bearer ${token}`}:{})},...(data?{body:JSON.stringify(data)}:{})});
       const result=await response.json();if(!response.ok)throw new Error(result.error || 'serverError');return result;
-    }catch(error){if(error?.message && ['rankingConflict','rankingDisabled','rankingUnauthorized','rankingRateLimit','invalidRankingData','invalidRankingName','rankingStorageError','serverError'].includes(error.message))throw error;throw new Error('networkError');}
+    }catch(error){if(error?.message && ['rankingConflict','rankingDisabled','rankingUnauthorized','rankingRateLimit','invalidRankingData','invalidRankingName','rankingStorageError','serverError','rankingNoticeRequired','rankingNameUnchanged'].includes(error.message))throw error;throw new Error('networkError');}
     finally{clearTimeout(timeout);}
   }
-  remember(profile){this.profile=profile;const prefs=this.preferences();if(profile && prefs && prefs.id!==profile.id)this.save({...prefs,id:profile.id});}
+  remember(profile){
+    this.profile=profile;const prefs=this.preferences();if(!profile || !prefs)return;
+    const notice=profile.notice || null;
+    if(prefs.id!==profile.id || JSON.stringify(prefs.notice || null)!==JSON.stringify(notice))this.save({...prefs,id:profile.id,notice});
+  }
+  applyRemoval(profile){
+    this.profile=profile;this.error='';const prefs=this.preferences();if(!prefs)return;
+    const next={...prefs,id:profile.id,choice:'declined',pending:null,notice:profile.notice};
+    if(JSON.stringify(next)!==JSON.stringify(prefs))this.save(next);else this.onChange();
+  }
+  acknowledgeNotice(noticeId){
+    const work=this.queue.catch(()=>{}).then(async()=>{
+      const prefs=this.preferences();if(!prefs?.token)return;
+      const result=await this.request('/api/ranking/notice','POST',{revision:this.profile?.revision || 0,noticeId},prefs.token);
+      this.remember(result.profile);return result;
+    });this.queue=work;return work;
+  }
   sync(force=false){
     const work=this.queue.catch(()=>{}).then(()=>this.flush(force));
     this.queue=work;return work;
   }
   async flush(force){
-    let prefs=this.preferences();if(!prefs?.token || (prefs.choice==='declined' && !prefs.pending))return;
-    const first=this.snapshot(),fingerprint=JSON.stringify(first);
-    if(!force && !prefs.pending && fingerprint===this.lastSent)return;
+    let prefs=this.preferences();if(!prefs?.token)return;
+    const fingerprint=prefs.choice==='joined'?JSON.stringify(this.snapshot()):'';
+    if(!force && !prefs.pending && Date.now()-this.lastCheckedAt<30000 && (prefs.choice==='declined' || fingerprint===this.lastSent))return;
     try{
       for(let attempt=0;attempt<4;attempt++){
-        prefs=this.preferences();if(!prefs?.token || (prefs.choice==='declined' && !prefs.pending))return;
-        let profile=(await this.request('/api/ranking/profile','GET',undefined,prefs.token)).profile;
+        prefs=this.preferences();if(!prefs?.token)return;
+        let profile=(await this.request('/api/ranking/profile','GET',undefined,prefs.token)).profile;this.lastCheckedAt=Date.now();
         try{
           let current=this.preferences();if(current?.token!==prefs.token)continue;
+          if(profile?.notice){
+            const notice=profile.notice,rejoining=current.pending && current.choice==='joined' && current.notice?.id===notice.id && notice.acknowledged && current.notice.acknowledged && rankingNameKey(current.name)!==rankingNameKey(notice.removedName);
+            if(!rejoining){this.applyRemoval(profile);return;}
+          }
           if(current.pending){
             const intent=current.pending,snapshot=this.snapshot();
-            profile=(await this.request('/api/ranking/profile','POST',{revision:profile?.revision || 0,name:current.name,enabled:current.choice==='joined',epoch:snapshot.epoch,timezone:snapshot.timezone},current.token)).profile;
+            profile=(await this.request('/api/ranking/profile','POST',{revision:profile?.revision || 0,name:current.name,enabled:current.choice==='joined',epoch:snapshot.epoch,timezone:snapshot.timezone,noticeId:current.notice?.id},current.token)).profile;
             const latest=this.preferences();if(latest?.pending!==intent)continue;
             this.error='';this.save({...latest,id:profile.id,pending:null});
           }
+          if(profile?.notice){this.applyRemoval(profile);return;}
           this.remember(profile);current=this.preferences();
           if(current.choice!=='joined')return;
           if(!profile?.enabled){this.save({...current,choice:'declined',pending:null});return;}

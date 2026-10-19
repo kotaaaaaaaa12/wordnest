@@ -34,10 +34,10 @@ function applyTheme() {
 }
 applyTheme();
 systemTheme.addEventListener?.('change', () => { if (themeChoice === 'auto') applyTheme(); });
-const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, sessionKnown:false, adminBusy:false, adminError:'', configured:true, rankingMetric:'totalMs', rankingData:null, rankingBusy:false, rankingError:'', route:routeFromHash(), screen:'home', libraryTab:'sets', collection:null, weakScope:'single', weakMode:'en-ja', weakSetId:null, weakIds:null, weakPickerOpen:false, favoriteSet:'all', wordSearch:'', listLimit:100, selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
+const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, sessionKnown:false, adminBusy:false, adminError:'', configured:true, rankingMetric:'totalMs', rankingData:null, rankingBusy:false, rankingError:'', adminData:null, adminSearch:'', adminStatus:'listed', adminBusyList:false, adminListError:'', route:routeFromHash(), screen:'home', libraryTab:'sets', collection:null, weakScope:'single', weakMode:'en-ja', weakSetId:null, weakIds:null, weakPickerOpen:false, favoriteSet:'all', wordSearch:'', listLimit:100, selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
 const ranking=new RankingClient({storage:learningStorage,fetch:(...args)=>fetch(...args),snapshot:()=>{
   const snapshot=learning.snapshot();return {epoch:learning.epoch,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',days:snapshot.days};
-},onChange:()=>{refreshRankingSettings();if(state.route==='rankings')render();}});
+},onChange:()=>{refreshRankingSettings();queueRankingNotice();if(state.route==='rankings')render();}});
 let soundEnabled = storage.get('wordnest-sound','on') === 'on';
 const sounds = Object.fromEntries(['correct','incorrect','confetti'].map(name => { const audio = new Audio(`/assets/audio/${name}.mp3`); audio.preload='auto'; return [name,audio]; }));
 function play(name) { if (!soundEnabled) return; try { sounds[name].currentTime=0; sounds[name].play()?.catch(()=>{}); } catch {} }
@@ -49,7 +49,7 @@ async function api(path, options={}) {
   let response;
   try { response=await fetch(path,{credentials:'same-origin',...options,headers:{...(options.body?{'Content-Type':'application/json'}:{}),...options.headers}}); } catch { throw new Error('networkError'); }
   let data; try { data=await response.json(); } catch { throw new Error('serverError'); }
-  if (!response.ok) { if (response.status===401) { state.authenticated=false;state.sessionKnown=true;render(); } throw new Error(data.error || 'serverError'); }
+  if (!response.ok) { if (response.status===401) { state.authenticated=false;state.adminData=null;state.sessionKnown=true;render(); } throw new Error(data.error || 'serverError'); }
   return data;
 }
 async function load() {
@@ -57,20 +57,21 @@ async function load() {
   try { const [data, session]=await Promise.all([api('/api/sets'),api('/api/session')]); state.sets=data.sets; state.orderRevision=data.orderRevision; state.authenticated=session.authenticated; state.sessionKnown=true; state.configured=session.configured; state.loaded=true; }
   catch(error) { state.sessionKnown=true;state.loadError=message(error); }
   render();
-  if(state.route==='rankings')refreshRankings();else ranking.sync().catch(()=>{});
-  setTimeout(maybeRankingOnboarding,0);
+  if(state.route==='rankings')refreshRankings();else ranking.sync(true).catch(()=>{});
+  if(state.route==='admin' && state.authenticated)refreshAdministration();
+  queueRankingNotice();setTimeout(maybeRankingOnboarding,0);
 }
-function routeFromHash() { return location.hash==='#/stats'?'stats':location.hash==='#/rankings'?'rankings':location.hash==='#/guide'?'guide':location.hash.startsWith('#/edit')?'edit':'home'; }
+function routeFromHash() { return location.hash==='#/stats'?'stats':location.hash==='#/rankings'?'rankings':location.hash==='#/admin'?'admin':location.hash==='#/guide'?'guide':location.hash.startsWith('#/edit')?'edit':'home'; }
 const routeHref=route=>route==='home'?'#/':`#/${route}`;
 function shell(content) {
-  return `<div class="app-shell"><aside class="sidebar"><a href="#/" data-nav="home" class="brand"><span class="brand-mark">${icon('book')}</span>wordnest<span style="color:var(--accent)">.</span></a><nav class="nav" style="--nav-count:${state.authenticated?5:4}" aria-label="${t('home')}"><a href="#/" data-nav="home" class="${state.route==='home'?'active':''}">${icon('book')}${t('home')}</a><a href="#/stats" data-nav="stats" class="${state.route==='stats'?'active':''}">${icon('stats')}${t('stats')}</a><a href="#/rankings" data-nav="rankings" class="${state.route==='rankings'?'active':''}">${icon('trophy')}${t('rankings')}</a><a href="#/guide" data-nav="guide" class="${state.route==='guide'?'active':''}">${icon('guide')}${t('guide')}</a>${state.authenticated?`<a href="#/edit" data-nav="edit" class="${state.route==='edit'?'active':''}">${icon('edit')}${t('edit')}</a>`:''}</nav><div class="sidebar-bottom"><button class="settings-trigger" data-action="settings">${icon('settings')}${t('settings')}</button></div></aside><main class="main">${content}</main></div>`;
+  return `<div class="app-shell"><aside class="sidebar"><a href="#/" data-nav="home" class="brand"><span class="brand-mark">${icon('book')}</span>wordnest<span style="color:var(--accent)">.</span></a><nav class="nav ${state.authenticated?'nav-admin':''}" style="--nav-count:${state.authenticated?6:4}" aria-label="${t('home')}"><a href="#/" data-nav="home" class="${state.route==='home'?'active':''}">${icon('book')}${t('home')}</a><a href="#/stats" data-nav="stats" class="${state.route==='stats'?'active':''}">${icon('stats')}${t('stats')}</a><a href="#/rankings" data-nav="rankings" class="${state.route==='rankings'?'active':''}">${icon('trophy')}${t('rankings')}</a><a href="#/guide" data-nav="guide" class="${state.route==='guide'?'active':''}">${icon('guide')}${t('guide')}</a>${state.authenticated?`<a href="#/edit" data-nav="edit" class="${state.route==='edit'?'active':''}">${icon('edit')}${t('edit')}</a><a href="#/admin" data-nav="admin" class="${state.route==='admin'?'active':''}">${icon('settings')}${t('admin')}</a>`:''}</nav><div class="sidebar-bottom"><button class="settings-trigger" data-action="settings">${icon('settings')}${t('settings')}</button></div></aside><main class="main">${content}</main></div>`;
 }
 function isTextEntry(element) {
   return element?.tagName==='TEXTAREA' || (element?.tagName==='INPUT' && ['text','search','email','password','tel','url','number'].includes(element.type));
 }
 function render() {
   learning.tick();
-  if(state.sessionKnown && state.route==='edit' && !state.authenticated){state.route='home';state.screen='home';state.quiz=null;state.cards=null;state.collection=null;history.replaceState(null,'',routeHref('home'));}
+  if(state.sessionKnown && ['edit','admin'].includes(state.route) && !state.authenticated){state.route='home';state.screen='home';state.quiz=null;state.cards=null;state.collection=null;history.replaceState(null,'',routeHref('home'));}
   if($('#weak-picker'))state.weakPickerOpen=$('#weak-picker').open;
   document.title=`Wordnest — ${t(state.route==='home'?'home':state.route)}`;
   const active = document.activeElement;
@@ -79,6 +80,7 @@ function render() {
   let content;
   if (state.route==='stats') content=statsView();
   else if (state.route==='rankings') content=rankingsView();
+  else if (state.route==='admin') content=administrationView();
   else if (state.route==='guide') content=guideView();
   else if (state.loadError) content=`<div class="empty"><h2>${e(state.loadError)}</h2>${btn('retry','reload','primary')}</div>`;
   else if (!state.loaded) content=`<div class="loading"><span class="spinner"></span>${t('loading')}</div>`;
@@ -116,7 +118,7 @@ function rankingsView() {
   const prefs=ranking.preferences(),joined=prefs?.choice==='joined',data=state.rankingData,metric=state.rankingMetric;
   const rowMarkup=(row,mine=false)=>`<tr class="${mine?'ranking-self':''}" ${mine?'aria-label="'+e(t('rankingYou'))+'"':''}><td>${row.rank}</td><td><span class="ranking-name">${e(row.name)}</span>${mine?`<span class="ranking-you">${t('rankingYou')}</span>`:''}</td><td>${e(formatStudyMetric(metric,row.value))}</td></tr>`;
   const selfId=prefs?.id,rows=data?.metric===metric?data.rows:[],mine=joined && data?.metric===metric?data.mine:null;
-  return `<section class="rankings-view"><h1>${t('rankings')}</h1><div class="ranking-profile"><div><p>${joined?e(t('rankingAs',{name:prefs.name})):t('rankingNotParticipating')}</p><small>${t(prefs?.pending?'rankingPending':'rankingBrowser')}</small></div><button class="btn ghost small" data-action="ranking-name">${icon('edit')}${t(joined?'rankingChangeName':'rankingJoin')}</button></div><div class="ranking-controls"><label for="ranking-metric">${t('rankingMetric')}<select id="ranking-metric">${Object.entries(rankingMetrics).map(([value,key])=>`<option value="${value}" ${metric===value?'selected':''}>${t(key)}</option>`).join('')}</select></label><button class="btn ghost small" data-action="ranking-refresh" ${state.rankingBusy?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div><p class="ranking-note">${t(metric==='accuracy'?'rankingAccuracyRule':metric==='averageMs'?'rankingAverageRule':'rankingUpdateRule')}</p>${state.rankingError?`<p class="error" role="alert">${e(t(state.rankingError))}</p>`:''}${state.rankingBusy?`<p class="ranking-loading" role="status">${t('rankingLoading')}</p>`:''}${rows.length?`<div class="ranking-table-wrap"><table class="ranking-table"><caption class="visually-hidden">${t(rankingMetrics[metric])}</caption><thead><tr><th scope="col">${t('rankingPosition')}</th><th scope="col">${t('rankingDisplayName')}</th><th scope="col">${t('rankingRecord')}</th></tr></thead><tbody>${rows.filter(row=>joined || row.id!==selfId).map(row=>rowMarkup(row,joined && row.id===selfId)).join('')}</tbody></table></div>`:!state.rankingBusy?`<div class="empty"><p>${t('rankingEmpty')}</p></div>`:''}${mine && !rows.some(row=>row.id===mine.id)?`<div class="ranking-own"><h2>${t('rankingYourPosition')}</h2><table class="ranking-table"><tbody>${rowMarkup(mine,true)}</tbody></table></div>`:''}${joined && !mine && data?.metric===metric && !state.rankingBusy?`<p class="ranking-note">${t(metric==='accuracy'?'rankingAccuracyPending':'rankingNoRecord')}</p>`:''}<p class="ranking-note">${t('rankingTop100',{n:data?.total || 0})}</p></section>`;
+  return `<section class="rankings-view"><h1>${t('rankings')}</h1><div class="ranking-profile"><div><p>${joined?e(t('rankingAs',{name:prefs.name})):t(prefs?.notice?'rankingRemovedTitle':'rankingNotParticipating')}</p><small>${t(prefs?.pending?'rankingPending':prefs?.notice?'rankingRejoinHelp':'rankingBrowser')}</small></div><button class="btn ghost small" data-action="ranking-name">${icon('edit')}${t(joined?'rankingChangeName':'rankingJoin')}</button></div><div class="ranking-controls"><label for="ranking-metric">${t('rankingMetric')}<select id="ranking-metric">${Object.entries(rankingMetrics).map(([value,key])=>`<option value="${value}" ${metric===value?'selected':''}>${t(key)}</option>`).join('')}</select></label><button class="btn ghost small" data-action="ranking-refresh" ${state.rankingBusy?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div><p class="ranking-note">${t(metric==='accuracy'?'rankingAccuracyRule':metric==='averageMs'?'rankingAverageRule':'rankingUpdateRule')}</p>${state.rankingError?`<p class="error" role="alert">${e(t(state.rankingError))}</p>`:''}${state.rankingBusy?`<p class="ranking-loading" role="status">${t('rankingLoading')}</p>`:''}${rows.length?`<div class="ranking-table-wrap"><table class="ranking-table"><caption class="visually-hidden">${t(rankingMetrics[metric])}</caption><thead><tr><th scope="col">${t('rankingPosition')}</th><th scope="col">${t('rankingDisplayName')}</th><th scope="col">${t('rankingRecord')}</th></tr></thead><tbody>${rows.filter(row=>joined || row.id!==selfId).map(row=>rowMarkup(row,joined && row.id===selfId)).join('')}</tbody></table></div>`:!state.rankingBusy?`<div class="empty"><p>${t('rankingEmpty')}</p></div>`:''}${mine && !rows.some(row=>row.id===mine.id)?`<div class="ranking-own"><h2>${t('rankingYourPosition')}</h2><table class="ranking-table"><tbody>${rowMarkup(mine,true)}</tbody></table></div>`:''}${joined && !mine && data?.metric===metric && !state.rankingBusy?`<p class="ranking-note">${t(metric==='accuracy'?'rankingAccuracyPending':'rankingNoRecord')}</p>`:''}<p class="ranking-note">${t('rankingTop100',{n:data?.total || 0})}</p></section>`;
 }
 let rankingRequest=0;
 async function refreshRankings(synchronize=true) {
@@ -129,6 +131,70 @@ async function refreshRankings(synchronize=true) {
   }catch(error){if(request===rankingRequest)state.rankingError=messages.en[error.message]?error.message:'networkError';}
   finally{if(request===rankingRequest){state.rankingBusy=false;if(state.route==='rankings')render();}}
 }
+let rankingNoticeTimer,showingRankingNotice=false;
+const deferredRankingNotices=new Set();
+function queueRankingNotice(){
+  const notice=ranking.preferences()?.notice;
+  if(!notice || notice.acknowledged || deferredRankingNotices.has(notice.id) || showingRankingNotice)return;
+  clearTimeout(rankingNoticeTimer);rankingNoticeTimer=setTimeout(showRankingNotice,0);
+}
+async function showRankingNotice(){
+  const notice=ranking.preferences()?.notice;
+  if(!notice || notice.acknowledged || deferredRankingNotices.has(notice.id) || showingRankingNotice)return;
+  if(modal.open){rankingNoticeTimer=setTimeout(showRankingNotice,500);return;}
+  showingRankingNotice=true;
+  try{
+    await dialog(`<h2 id="modal-title" tabindex="-1">${t('rankingRemovedTitle')}</h2><p>${t('rankingRemovedIntro')}</p><div class="moderation-notice" lang="${notice[lang]?lang:notice.ja?'ja':'en'}">${e(notice[lang] || notice.ja || notice.en)}</div><p>${t('rankingRejoinHelp')}</p><p class="error" id="ranking-notice-error" role="alert" hidden></p><div class="modal-actions"><button class="btn ghost" data-notice-later>${t('noticeLater')}</button><button class="btn primary" data-notice-confirm>${t('noticeConfirm')}</button></div>`,finish=>{
+      let busy=false;
+      modal.oncancel=event=>{event.preventDefault();if(!busy){deferredRankingNotices.add(notice.id);finish(false);}};
+      modal.onclick=async event=>{
+        if(busy)return;
+        if(event.target.closest('[data-notice-later]')){deferredRankingNotices.add(notice.id);finish(false);return;}
+        if(!event.target.closest('[data-notice-confirm]'))return;
+        busy=true;$$('button',modal).forEach(button=>button.disabled=true);
+        try{await ranking.acknowledgeNotice(notice.id);finish(true);}
+        catch(error){if(error.message==='rankingConflict')await ranking.sync(true).catch(()=>{});const current=ranking.preferences()?.notice;if(!current || current.id!==notice.id || current.acknowledged){finish(false);return;}const alert=$('#ranking-notice-error',modal);alert.textContent=message(error);alert.hidden=false;}
+        finally{busy=false;$$('button',modal).forEach(button=>button.disabled=false);}
+      };
+    });
+  }finally{showingRankingNotice=false;queueRankingNotice();}
+}
+function administrationView(){
+  if(!state.authenticated)return '';
+  const data=state.adminData,participants=data?.participants || [],removed=state.adminStatus==='removed';
+  const date=value=>value?new Intl.DateTimeFormat(lang==='ja'?'ja-JP':'en-US',{dateStyle:'short',timeStyle:'short'}).format(new Date(value)):'—';
+  return `<section class="administration-view"><h1>${t('admin')}</h1><p class="ranking-note">${t('adminHelp')}</p><div class="admin-controls"><label for="admin-search">${t('adminSearch')}<input id="admin-search" type="search" maxlength="100" value="${e(state.adminSearch)}"></label><label for="admin-status">${t('adminStatus')}<select id="admin-status"><option value="listed" ${removed?'':'selected'}>${t('adminListed')}</option><option value="removed" ${removed?'selected':''}>${t('adminRemoved')}</option></select></label><button class="btn ghost small" data-action="admin-refresh" ${state.adminBusyList?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div>${state.adminListError?`<p class="error" role="alert">${e(t(state.adminListError))}</p>`:''}${state.adminBusyList?`<p class="ranking-note" role="status">${t('loading')}</p>`:''}<div class="admin-participants">${participants.map(person=>`<article class="admin-participant"><div class="admin-person-head"><div><h2>${e(person.name)}</h2><small>${e(t('adminUpdated',{date:date(person.updatedAt)}))}</small><small class="admin-person-id">${e(person.id.slice(0,12))}</small></div>${removed?`<span class="pill">${t(person.acknowledged?'noticeRead':'noticeUnread')}</span>`:`<button class="btn danger small" data-action="admin-remove" data-id="${e(person.id)}">${icon('trash')}${t('adminRemove')}</button>`}</div>${removed?`<dl class="admin-messages">${person.messageJa?`<dt>${t('moderationMessageJa')}</dt><dd lang="ja">${e(person.messageJa)}</dd>`:''}${person.messageEn?`<dt>${t('moderationMessageEn')}</dt><dd lang="en">${e(person.messageEn)}</dd>`:''}</dl>`:''}</article>`).join('') || (!state.adminBusyList?`<div class="empty"><p>${t('adminEmpty')}</p></div>`:'')}</div>${data && participants.length<data.total?`<button class="btn ghost" data-action="admin-more" ${state.adminBusyList?'disabled':''}>${t('adminMore')}</button>`:''}</section>`;
+}
+let administrationRequest=0;
+async function refreshAdministration(append=false){
+  if(!state.authenticated)return;
+  const request=++administrationRequest,previous=append?state.adminData?.participants || []:[];
+  state.adminBusyList=true;state.adminListError='';if(!append)state.adminData=null;if(state.route==='admin')render();
+  try{
+    const query=new URLSearchParams({status:state.adminStatus,q:state.adminSearch,offset:String(previous.length)}),data=await api('/api/admin/rankings?'+query);
+    if(request===administrationRequest && state.authenticated)state.adminData={...data,participants:[...previous,...data.participants]};
+  }catch(error){if(request===administrationRequest)state.adminListError=messages.en[error.message]?error.message:'networkError';}
+  finally{if(request===administrationRequest){state.adminBusyList=false;if(state.route==='admin')render();}}
+}
+async function removeRankingParticipant(button){
+  if(!state.authenticated || state.route!=='admin')return;
+  const person=state.adminData?.participants.find(person=>person.id===button.dataset.id);if(!person)return;
+  const removed=await dialog(`<button class="icon-btn modal-close" data-moderation-close aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${e(t('adminRemoveTitle',{name:person.name}))}</h2><p>${t('adminRemoveHelp')}</p><form id="moderation-form" class="moderation-form"><label for="moderation-ja">${t('moderationMessageJa')}<textarea id="moderation-ja" maxlength="1000" lang="ja" placeholder="${e(t('moderationExampleJa'))}"></textarea></label><label for="moderation-en">${t('moderationMessageEn')}<textarea id="moderation-en" maxlength="1000" lang="en" placeholder="${e(t('moderationExampleEn'))}"></textarea></label><small>${t('moderationMessageHelp')}</small><p class="error" id="moderation-error" role="alert" hidden></p><div class="modal-actions"><button class="btn ghost" type="button" data-moderation-close>${t('cancel')}</button><button class="btn danger" type="submit">${t('adminRemoveConfirm')}</button></div></form>`,finish=>{
+    let busy=false;
+    modal.oncancel=event=>{event.preventDefault();if(!busy)finish(false);};
+    modal.onclick=event=>{if(event.target.closest('[data-moderation-close]') && !busy)finish(false);};
+    modal.onsubmit=async event=>{
+      if(event.target.id!=='moderation-form')return;event.preventDefault();if(busy)return;
+      const messageJa=$('#moderation-ja').value.trim(),messageEn=$('#moderation-en').value.trim(),alert=$('#moderation-error');
+      if((!messageJa && !messageEn) || [...messageJa].length>500 || [...messageEn].length>500){alert.textContent=t('invalidRankingMessage');alert.hidden=false;return;}
+      busy=true;$$('button,textarea',modal).forEach(element=>element.disabled=true);alert.hidden=true;
+      try{await api('/api/admin/rankings/'+person.id+'/remove',{method:'POST',body:JSON.stringify({revision:person.revision,name:person.name,messageJa,messageEn})});finish(true);}
+      catch(error){alert.textContent=message(error);alert.hidden=false;}
+      finally{busy=false;$$('button,textarea',modal).forEach(element=>element.disabled=false);}
+    };
+  });
+  if(removed){toast(t('adminRemovalSaved'));await refreshAdministration();ranking.sync(true).catch(()=>{});}
+}
 let rankingOnboardingStarted=false;
 function maybeRankingOnboarding(){
   if(rankingOnboardingStarted || ranking.preferences())return;
@@ -136,15 +202,16 @@ function maybeRankingOnboarding(){
   rankingOnboardingStarted=true;rankingNameDialog(true);
 }
 async function rankingNameDialog(initial=false){
-  const prefs=ranking.preferences();
-  const result=await dialog(`<button class="icon-btn modal-close" data-ranking-name-close aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t(prefs?.choice==='joined'?'rankingChangeName':'rankingJoinTitle')}</h2><p>${t('rankingNameHelp')}</p><form id="ranking-name-form" class="ranking-name-form"><label for="ranking-name">${t('rankingDisplayName')}<input id="ranking-name" name="name" value="${e(prefs?.name || '')}" autocomplete="nickname" maxlength="40" required></label><small>${t('rankingNameLimit')}</small><p class="error" id="ranking-name-error" role="alert" hidden></p><div class="modal-actions"><button class="btn ghost" type="button" data-ranking-name-close>${t(initial?'rankingDecline':'cancel')}</button><button class="btn primary" type="submit">${t('rankingSaveName')}</button></div></form>`,finish=>{
+  let prefs=ranking.preferences();
+  if(prefs?.notice && !prefs.notice.acknowledged){deferredRankingNotices.delete(prefs.notice.id);await showRankingNotice();prefs=ranking.preferences();if(prefs?.notice && !prefs.notice.acknowledged)return;}
+  const result=await dialog(`<button class="icon-btn modal-close" data-ranking-name-close aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t(prefs?.choice==='joined'?'rankingChangeName':'rankingJoinTitle')}</h2><p>${t('rankingNameHelp')}</p>${prefs?.notice?`<p>${t('rankingRejoinHelp')}</p>`:''}<form id="ranking-name-form" class="ranking-name-form"><label for="ranking-name">${t('rankingDisplayName')}<input id="ranking-name" name="name" value="${e(prefs?.name || '')}" autocomplete="nickname" maxlength="40" required></label><small>${t('rankingNameLimit')}</small><p class="error" id="ranking-name-error" role="alert" hidden></p><div class="modal-actions"><button class="btn ghost" type="button" data-ranking-name-close>${t(initial?'rankingDecline':'cancel')}</button><button class="btn primary" type="submit">${t('rankingSaveName')}</button></div></form>`,finish=>{
     let busy=false;
     modal.oncancel=event=>{event.preventDefault();if(!busy)finish(initial?'decline':false);};
     modal.onclick=event=>{if(event.target.closest('[data-ranking-name-close]') && !busy)finish(initial?'decline':false);};
     modal.onsubmit=async event=>{
       if(event.target.id!=='ranking-name-form')return;event.preventDefault();if(busy)return;
       busy=true;const input=$('#ranking-name'),error=$('#ranking-name-error'),submit=$('[type="submit"]',modal);submit.disabled=true;error.hidden=true;
-      try{await ranking.join(input.value);finish('joined');}
+      try{await ranking.join(input.value);finish(ranking.preferences()?.notice?'removed':'joined');}
       catch(err){error.textContent=message(err);error.hidden=false;}
       finally{busy=false;if(submit.isConnected)submit.disabled=false;}
     };
@@ -155,7 +222,7 @@ async function rankingNameDialog(initial=false){
 function rankingSettingsSignature(){const prefs=ranking.preferences();return JSON.stringify([prefs?.choice,prefs?.name,prefs?.pending,ranking.error,lang]);}
 function rankingSettingsContent(){
   const prefs=ranking.preferences(),joined=prefs?.choice==='joined';
-  return `<h3 id="ranking-settings-title">${t('rankingParticipation')}</h3><p>${t(prefs?.pending?'rankingPending':joined?'rankingEnabledHelp':'rankingDisabledHelp')}</p>${joined?`<small>${e(t('rankingAs',{name:prefs.name}))}</small>`:''}<button class="btn ghost" data-ranking-settings aria-pressed="${joined}">${t(joined?'rankingDisable':'rankingEnable')}</button>`;
+  return `<h3 id="ranking-settings-title">${t('rankingParticipation')}</h3><p>${t(prefs?.pending?'rankingPending':prefs?.notice?'rankingRejoinHelp':joined?'rankingEnabledHelp':'rankingDisabledHelp')}</p>${joined?`<small>${e(t('rankingAs',{name:prefs.name}))}</small>`:''}<button class="btn ghost" data-ranking-settings aria-pressed="${joined}">${t(joined?'rankingDisable':'rankingEnable')}</button>`;
 }
 function refreshRankingSettings(){const section=$('#ranking-settings');if(section && section.dataset.state!==rankingSettingsSignature()){section.innerHTML=rankingSettingsContent();section.dataset.state=rankingSettingsSignature();}}
 let statsRenderedDay;
@@ -169,7 +236,7 @@ function statsView() {
 }
 function guideView() {
   const section=(id,symbol,title,items)=>`<section class="guide-section" aria-labelledby="${id}"><h2 id="${id}">${icon(symbol)}${t(title)}</h2><ul>${items.map(key=>`<li>${e(t(key))}</li>`).join('')}</ul></section>`;
-  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-personal','star','personalTools',['guideWeak','guideWeakRecovery','guideFavorites','guideSearch','guidePersonalStorage'])}${section('guide-records','stats','stats',['guideStats','statsTimeRule','statsCountRule','statsStreakRule'])}${section('guide-rankings','trophy','rankings',['guideRankings','rankingAccuracyRule','guideRankingPrivacy'])}${section('guide-settings','settings','settings',['guideSettings','guideDeleteData','guideSounds'])}${state.authenticated?section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideTransfers','guideEditShared']):''}</article>`;
+  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-personal','star','personalTools',['guideWeak','guideWeakRecovery','guideFavorites','guideSearch','guidePersonalStorage'])}${section('guide-records','stats','stats',['guideStats','statsTimeRule','statsCountRule','statsStreakRule'])}${section('guide-rankings','trophy','rankings',['guideRankings','rankingAccuracyRule','guideRankingPrivacy'])}${section('guide-settings','settings','settings',['guideSettings','guideDeleteData','guideSounds'])}${state.authenticated?section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideTransfers','guideEditShared'])+section('guide-admin','settings','admin',['guideAdministration']):''}</article>`;
 }
 function readStudyProgress() {
   try { const value=JSON.parse(storage.get('wordnest-progress','{}'));return value && typeof value==='object' && !Array.isArray(value)?value:{}; } catch { return {}; }
@@ -352,7 +419,7 @@ function confirmDialog(title,help,confirm='discard',danger=false) {
 async function discardGuard() { return !state.dirty || await confirmDialog('unsavedTitle',t('unsavedHelp'),'discard',true); }
 async function navigate(route, fromHistory=false) {
   if(state.saving)return;
-  if(route==='edit' && !state.authenticated){route='home';if(fromHistory)history.replaceState(null,'',routeHref(route));}
+  if(['edit','admin'].includes(route) && !state.authenticated){route='home';if(fromHistory)history.replaceState(null,'',routeHref(route));}
   const resumeDraft=route==='edit' && state.route!=='edit' && state.dirty && state.draft;
   if(!resumeDraft && !await discardGuard()) { if(fromHistory)history.pushState(null,'',routeHref(state.route));return; }
   if(state.screen==='quiz' && !await confirmDialog('quitTitle',t('quitHelp'),'confirmQuit')) { if(fromHistory)history.pushState(null,'',routeHref(state.route));return; }
@@ -360,6 +427,7 @@ async function navigate(route, fromHistory=false) {
   if(!fromHistory)history.pushState(null,'',routeHref(route));
   render();window.scrollTo(0,0);
   if(route==='rankings')await refreshRankings();else ranking.sync().catch(()=>{});
+  if(route==='admin' && state.authenticated)await refreshAdministration();
 }
 function markDirty() { state.dirty=true;state.error='';const label=$('#dirty-label');if(label)label.textContent=t('unsaved'); }
 function download(blob,filename) {const link=document.createElement('a');const url=URL.createObjectURL(blob);link.href=url;link.download=filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
@@ -564,6 +632,9 @@ function confetti() {
 const actions={
   settings:settingsDialog,
   'ranking-name':()=>rankingNameDialog(),
+  'admin-refresh':()=>refreshAdministration(),
+  'admin-more':()=>refreshAdministration(true),
+  'admin-remove':removeRankingParticipant,
   'ranking-refresh':()=>refreshRankings(),
   'library-tab'(button){state.libraryTab=button.dataset.tab;state.listLimit=100;state.collection=null;render();},
   'weak-scope'(button){state.weakScope=button.dataset.scope;state.listLimit=100;render();},
@@ -612,7 +683,7 @@ const actions={
   async 'remove-word'(button){if(!await confirmDialog('removeTitle',t('removeHelp'),'remove',true))return;state.draft.words.splice(Number(button.dataset.index),1);markDirty();render();},
   async save(){if(state.saving)return;try{const data=validateSet(state.draft);state.saving=true;state.error='';render();let saved;if(state.draft.id){saved=(await api(`/api/sets/${state.draft.id}`,{method:'PUT',body:JSON.stringify({...data,revision:state.draft.revision})})).set;state.sets=state.sets.map(s=>s.id===saved.id?saved:s);}else{const response=await api('/api/sets',{method:'POST',body:JSON.stringify(data)});saved=response.sets[0];state.sets.unshift(saved);synchronizeSetOrder(response);}state.draft=structuredClone(saved);state.dirty=false;toast(t('saved'));}catch(err){state.error=message(err);}finally{state.saving=false;render();}},
   async delete(){const draft=state.draft;if(!await confirmDialog('deleteTitle',t('deleteHelp',{title:draft.title}),'delete',true))return;state.saving=true;render();try{await deleteSavedSet(draft);}catch(err){state.error=message(err);}finally{state.saving=false;render();}},
-  async logout(){if(!await discardGuard())return;try{await api('/api/logout',{method:'POST'});state.authenticated=false;state.draft=null;state.dirty=false;state.error='';render();}catch(err){toast(message(err));}},
+  async logout(){if(!await discardGuard())return;try{await api('/api/logout',{method:'POST'});state.authenticated=false;state.adminData=null;state.draft=null;state.dirty=false;state.error='';render();}catch(err){toast(message(err));}},
   import:importDialog,
   export:exportDialog,
 };
@@ -653,7 +724,7 @@ document.addEventListener('click',async event=>{
   const button=event.target.closest('[data-action]');if(button && !button.disabled){if(['new','import','export','export-draft','export-selected','manage-sets','save','delete','add-word','remove-word'].includes(button.dataset.action) && (state.route!=='edit' || !state.authenticated))return;if(button.dataset.action==='flip-card' && Date.now()<suppressFlipUntil)return;try{await actions[button.dataset.action]?.(button);}catch(err){toast(message(err));}}
   if(event.detail>0 && event.target.closest('button'))document.activeElement?.closest('button')?.blur();
 });
-document.addEventListener('input',event=>{const el=event.target;if(el.id==='word-search'){state.wordSearch=el.value;state.listLimit=100;render();}else if(el.id==='search'){state.search=el.value;render();}else if(el.id==='custom-count')state.customValue=el.value;else if(el.id==='typed-answer')state.quiz.typed=el.value;else if(el.id==='set-title'){state.draft.title=el.value;markDirty();}else if(el.dataset.word!==undefined){state.draft.words[Number(el.dataset.word)][el.dataset.field]=el.value;markDirty();}});
+document.addEventListener('input',event=>{const el=event.target;if(el.id==='admin-search'){state.adminSearch=el.value;refreshAdministration();}else if(el.id==='word-search'){state.wordSearch=el.value;state.listLimit=100;render();}else if(el.id==='search'){state.search=el.value;render();}else if(el.id==='custom-count')state.customValue=el.value;else if(el.id==='typed-answer')state.quiz.typed=el.value;else if(el.id==='set-title'){state.draft.title=el.value;markDirty();}else if(el.dataset.word!==undefined){state.draft.words[Number(el.dataset.word)][el.dataset.field]=el.value;markDirty();}});
 // Blur before change handlers redraw the app; never focus a committed native picker again.
 document.addEventListener('change',event=>{
   const select=event.target;if(select.tagName!=='SELECT')return;
@@ -661,7 +732,7 @@ document.addEventListener('change',event=>{
   requestAnimationFrame(()=>{if(document.activeElement===select)select.blur();});
 },true);
 document.addEventListener('keyup',event=>{if(event.key==='Escape' && event.target.tagName==='SELECT')event.target.blur();});
-document.addEventListener('change',event=>{const el=event.target;if(el.id==='ranking-metric'){if(state.rankingMetric===el.value)return;state.rankingMetric=el.value;refreshRankings();}else if(el.id==='weak-set'){if(state.weakSetId===el.value)return;state.weakSetId=el.value;state.listLimit=100;render();}else if(el.id==='favorite-set'){if(state.favoriteSet===el.value)return;state.favoriteSet=el.value;state.listLimit=100;render();}else if(el.dataset.weakSet!==undefined){if(el.checked)state.weakIds.add(el.dataset.weakSet);else state.weakIds.delete(el.dataset.weakSet);state.listLimit=100;render();}else if(el.id==='language'){languageChoice=el.value;storage.set('wordnest-language',languageChoice);setLanguage();render();}else if(el.dataset.select){if(el.checked)state.selected.add(el.dataset.select);else state.selected.delete(el.dataset.select);render();}});
+document.addEventListener('change',event=>{const el=event.target;if(el.id==='admin-status'){if(state.adminStatus===el.value)return;state.adminStatus=el.value;refreshAdministration();}else if(el.id==='ranking-metric'){if(state.rankingMetric===el.value)return;state.rankingMetric=el.value;refreshRankings();}else if(el.id==='weak-set'){if(state.weakSetId===el.value)return;state.weakSetId=el.value;state.listLimit=100;render();}else if(el.id==='favorite-set'){if(state.favoriteSet===el.value)return;state.favoriteSet=el.value;state.listLimit=100;render();}else if(el.dataset.weakSet!==undefined){if(el.checked)state.weakIds.add(el.dataset.weakSet);else state.weakIds.delete(el.dataset.weakSet);state.listLimit=100;render();}else if(el.id==='language'){languageChoice=el.value;storage.set('wordnest-language',languageChoice);setLanguage();render();}else if(el.dataset.select){if(el.checked)state.selected.add(el.dataset.select);else state.selected.delete(el.dataset.select);render();}});
 document.addEventListener('submit',async event=>{
   if(event.target.id==='answer-form'){event.preventDefault();if(!state.quiz.typed.trim())return;submitAnswer(state.quiz.typed);}
   if(event.target.id==='admin-login-form'){event.preventDefault();await submitAdmin(event.target);}
