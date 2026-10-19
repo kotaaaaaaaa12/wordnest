@@ -55,7 +55,9 @@ test('flashcards preserve every registered word in both directions and all three
 test('clear status follows quiz content and preserves independent direction flags',()=>{
   const set={...structuredClone(seed),id:'progress-set'},key=studyKey(set);
   assert.equal(studyStatus(set,{}),'none');
-  const progress={[set.id]:{key,'en-ja':true}};
+  assert.equal(studyStatus(set,{[set.id]:{key,'en-ja':true,'ja-en':true}}),'none');
+  assert.equal(studyStatus(set,{[set.id]:{key,scope:'all','en-ja':true,'ja-en':true}}),'none');
+  const progress={[set.id]:{key,scope:'all-first-pass','en-ja':true}};
   assert.equal(studyStatus(set,progress),'en-ja');
   progress[set.id]['ja-en']=true;
   assert.equal(studyStatus(set,progress),'both');
@@ -68,5 +70,5 @@ test('clear status follows quiz content and preserves independent direction flag
   assert.equal(studyStatus(edited,progress),'none');
   assert.notEqual(studyKey({...set,words:set.words.slice(1)}),key);
   assert.equal(studyStatus({...set,id:'imported-copy'},progress),'none');
-  assert.equal(studyStatus(set,{[set.id]:{key,'en-ja':'true'}}),'none');
+  assert.equal(studyStatus(set,{[set.id]:{key,scope:'all-first-pass','en-ja':'true'}}),'none');
 });

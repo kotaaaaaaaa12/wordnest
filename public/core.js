@@ -70,7 +70,7 @@ export function studyKey(set) {
 }
 export function studyStatus(set,progress) {
   const entry=progress?.[set.id];
-  if(!entry || entry.key!==studyKey(set))return 'none';
+  if(!entry || entry.scope!=='all-first-pass' || entry.key!==studyKey(set))return 'none';
   const english=entry['en-ja']===true,japanese=entry['ja-en']===true;
   return english && japanese?'both':english?'en-ja':japanese?'ja-en':'none';
 }

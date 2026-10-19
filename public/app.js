@@ -76,10 +76,12 @@ function readStudyProgress() {
   try { const value=JSON.parse(storage.get('wordnest-progress','{}'));return value && typeof value==='object' && !Array.isArray(value)?value:{}; } catch { return {}; }
 }
 function recordQuizClear(quiz) {
+  if(!quiz.allSelected || quiz.isRetry)return;
   const set=state.sets.find(set=>set.id===quiz.setId);
   if(!set || studyKey(set)!==quiz.setKey)return;
   const progress=readStudyProgress(),previous=progress[set.id];
-  progress[set.id]={key:quiz.setKey,'en-ja':previous?.key===quiz.setKey && previous['en-ja']===true,'ja-en':previous?.key===quiz.setKey && previous['ja-en']===true,[quiz.mode]:true};
+  const sameContent=previous?.scope==='all-first-pass' && previous.key===quiz.setKey;
+  progress[set.id]={key:quiz.setKey,scope:'all-first-pass','en-ja':sameContent && previous['en-ja']===true,'ja-en':sameContent && previous['ja-en']===true,[quiz.mode]:true};
   storage.set('wordnest-progress',JSON.stringify(progress));
 }
 function setCard(set,progress) {
@@ -125,7 +127,7 @@ function flipCard() {
 
 function counts() {
   const max=questionPool(currentSet(),state.mode).length;
-  return `<section class="flow"><button class="back" data-action="back-mode">${icon('back')}${t('back')}</button>${flowTitle('chooseCount')}<span class="pill">${state.mode==='en-ja'?'EN → JP':'JP → EN'}</span><div class="count-grid">${[5,10,15,'all','custom'].map(n=>`<button class="count-btn ${n==='custom'?state.custom?'active':'':!state.custom && state.countChoice===n?'active':''}" data-action="count" data-count="${n}" ${typeof n==='number'&&n>max?'disabled':''}>${typeof n==='number'?n:t(n)}</button>`).join('')}</div>${state.custom?`<label class="custom-count" for="custom-count">${t('countLabel')}<input id="custom-count" type="number" inputmode="numeric" min="1" max="${max}" step="1" value="${e(state.customValue)}"></label>`:''}${state.error?`<p class="error" role="alert">${e(state.error)}</p>`:''}<div class="flow-bottom"><span class="count">${t('available',{n:max})} · ${t('timePerQuestion')}</span><button class="btn primary" data-action="start">${t('start')}${icon('arrow')}</button></div></section>`;
+  return `<section class="flow"><button class="back" data-action="back-mode">${icon('back')}${t('back')}</button>${flowTitle('chooseCount')}<span class="pill">${state.mode==='en-ja'?'EN → JP':'JP → EN'}</span><div class="count-grid">${[5,10,15,'all','custom'].map(n=>`<button class="count-btn ${n==='custom'?state.custom?'active':'':!state.custom && state.countChoice===n?'active':''}" data-action="count" data-count="${n}" ${typeof n==='number'&&n>max?'disabled':''}>${typeof n==='number'?n:t(n)}</button>`).join('')}</div>${state.custom?`<label class="custom-count" for="custom-count">${t('countLabel')}<input id="custom-count" type="number" inputmode="numeric" min="1" max="${max}" step="1" value="${e(state.customValue)}"></label>`:''}${state.error?`<p class="error" role="alert">${e(state.error)}</p>`:''}<p class="notice">${t('clearAllOnly')}</p><div class="flow-bottom"><span class="count">${t('available',{n:max})} · ${t('timePerQuestion')}</span><button class="btn primary" data-action="start">${t('start')}${icon('arrow')}</button></div></section>`;
 }
 const QUESTION_TIME_MS=15000;
 let quizClock=null;
@@ -351,7 +353,7 @@ const actions={
   'back-mode'(){state.screen='mode';state.error='';render();},
   mode(button){state.mode=button.dataset.mode;if(state.activity==='cards'){state.screen='order';render();return;}state.screen='count';const max=questionPool(currentSet(),state.mode).length;state.count=Math.min(5,max);state.countChoice=max<5?'all':5;state.custom=false;state.error='';render();},
   count(button){const value=button.dataset.count;state.custom=value==='custom';if(!state.custom){state.countChoice=value==='all'?'all':Number(value);state.count=value==='all'?questionPool(currentSet(),state.mode).length:Number(value);}state.error='';render();},
-  start(){const max=questionPool(currentSet(),state.mode).length,count=state.custom?Number(state.customValue):state.count;if(!Number.isInteger(count)||count<1||count>max){state.error=t('invalidCount',{n:max});render();return;}try{const set=currentSet();state.quiz={setId:set.id,setKey:studyKey(set),title:set.title,mode:state.mode,questions:createQuiz(set,state.mode,count),index:0,answers:[],typed:''};state.screen='quiz';state.error='';startQuestionClock();render();window.scrollTo(0,0);}catch(err){state.error=message(err);render();}},
+  start(){const max=questionPool(currentSet(),state.mode).length,count=state.custom?Number(state.customValue):state.count;if(!Number.isInteger(count)||count<1||count>max){state.error=t('invalidCount',{n:max});render();return;}try{const set=currentSet();state.quiz={setId:set.id,setKey:studyKey(set),allSelected:!state.custom && state.countChoice==='all' && count===max,title:set.title,mode:state.mode,questions:createQuiz(set,state.mode,count),index:0,answers:[],typed:''};state.screen='quiz';state.error='';startQuestionClock();render();window.scrollTo(0,0);}catch(err){state.error=message(err);render();}},
   answer(button){submitAnswer(state.quiz.questions[state.quiz.index].options[Number(button.dataset.option)]);},
   skip(){submitAnswer('',true);},
   next(){const qz=state.quiz;if(!qz.answers[qz.index])return;if(qz.index===qz.questions.length-1){state.screen='result';const perfect=qz.answers.length===qz.questions.length && qz.answers.every(a=>a.correct);if(perfect)recordQuizClear(qz);render();if(perfect){play('confetti');confetti();}window.scrollTo(0,0);}else{qz.index++;qz.typed='';startQuestionClock();render();window.scrollTo(0,0);}},
@@ -361,7 +363,7 @@ const actions={
     const missed=previous.questions.filter((_,index)=>previous.answers[index] && !previous.answers[index].correct);
     if(!missed.length)return;
     const questions=shuffle(missed).map(question=>({...structuredClone(question),options:shuffle(question.options)}));
-    state.quiz={setId:previous.setId,setKey:previous.setKey,title:previous.title,mode:previous.mode,questions,index:0,answers:[],typed:'',isRetry:true};
+    state.quiz={setId:previous.setId,setKey:previous.setKey,allSelected:previous.allSelected,title:previous.title,mode:previous.mode,questions,index:0,answers:[],typed:'',isRetry:true};
     state.screen='quiz';state.error='';startQuestionClock();render();window.scrollTo(0,0);
   },
   again(){state.screen='count';state.quiz=null;state.error='';render();window.scrollTo(0,0);},
