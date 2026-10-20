@@ -39,7 +39,7 @@ test('first visit asks for a name outside Rankings, supports declining, and reme
     first=await harness(mf,{lang:'ja',hash:'#/guide'});await waitFor(()=>first.find('#ranking-name-form'),'first-visit prompt');
     assert.equal(first.find('#modal-title').textContent,'ランキングに参加');assert.ok(first.find('#modal').textContent.includes('参加しない'));
     await first.click('[data-ranking-name-close]');await waitFor(()=>!first.find('#modal').open,'declined');const preferences=JSON.parse(first.w.localStorage.getItem(rankingTools.RANKING_KEY));assert.equal(preferences.choice,'declined');
-    assert.ok(first.requests.every(([,method])=>method==='GET'));await first.click('.nav [data-nav="rankings"]');await waitFor(()=>!first.find('.ranking-loading'),'public rankings');assert.equal(first.w.document.title,'Wordnest — ランキング');assert.ok(first.find('#ranking-metric'));assert.equal(first.find('#ranking-metric').options.length,8);assert.ok(first.find('.rankings-view').textContent.includes('参加していません'));
+    await waitFor(()=>JSON.parse(first.w.localStorage.getItem(rankingTools.RANKING_KEY))?.id && !JSON.parse(first.w.localStorage.getItem(rankingTools.RANKING_KEY)).pending,'private profile registration');assert.ok(first.requests.some(([path,method])=>path==='/api/ranking/profile' && method==='POST'));assert.match(JSON.parse(first.w.localStorage.getItem(rankingTools.RANKING_KEY)).name,/^Learner [a-f0-9]{8}$/);await first.click('.nav [data-nav="rankings"]');await waitFor(()=>!first.find('.ranking-loading'),'public rankings');assert.equal(first.w.document.title,'Wordnest — ランキング');assert.ok(first.find('#ranking-metric'));assert.equal(first.find('#ranking-metric').options.length,8);assert.ok(first.find('.rankings-view').textContent.includes('参加していません'));
     second=await harness(mf,{preferences});await new Promise(resolve=>setTimeout(resolve,30));assert.equal(second.find('#ranking-name-form'),null);
   }finally{first?.w.close();second?.w.close();await mf.dispose();}
 });
@@ -69,5 +69,19 @@ test('rankings show the same eight formatted values as Statistics and support re
     await click('[data-delete-learning="statistics"]');assert.ok(find('#modal').textContent.includes('ranking records'));await click('[data-dialog="confirm"]');await waitFor(()=>find('#ranking-settings'),'reset complete');assert.equal(tracker.snapshot().answered,0);assert.equal(find('[data-ranking-settings]').getAttribute('aria-pressed'),'true');
     await click('[data-dialog="cancel"]');await click('[data-action="ranking-refresh"]');await waitFor(()=>!find('.ranking-loading'),'cleared rankings');assert.equal(find('.ranking-self'),null);
     await click('[data-action="settings"]');find('#settings-language').value='ja';find('#settings-language').dispatchEvent(new w.Event('change',{bubbles:true}));assert.equal(w.document.title,'Wordnest — ランキング');assert.equal(find('#ranking-settings-title').textContent,'ランキングへの掲載');await click('[data-dialog="cancel"]');assert.equal(find('.rankings-view h1').textContent,'ランキング');
+  }finally{h?.w.close();await mf.dispose();}
+});
+
+test('declining with a learner name syncs privately and Settings can rename without publishing',async()=>{
+  const mf=instance();let h;
+  try{
+    h=await harness(mf,{seed:true});const {w,find,click}=h;
+    await waitFor(()=>find('#ranking-name-form'),'name prompt');assert.ok(find('#modal').textContent.includes(messages.en.learningSyncHelp));find('#ranking-name').value='Hidden learner';await click('[data-ranking-name-close]');
+    await waitFor(()=>JSON.parse(w.localStorage.getItem(rankingTools.RANKING_KEY))?.id && !JSON.parse(w.localStorage.getItem(rankingTools.RANKING_KEY)).pending,'private name registration');
+    await click('.nav [data-nav="rankings"]');await waitFor(()=>!find('.ranking-loading'),'hidden board');assert.equal(find('.ranking-name'),null);
+    await click('[data-action="settings"]');await click('[data-ranking-private-name]');await waitFor(()=>find('#ranking-name-form'),'private rename');assert.equal(find('#modal-title').textContent,messages.en.profileChangeName);h.name('Private new name');
+    await waitFor(()=>find('#ranking-settings') && !JSON.parse(w.localStorage.getItem(rankingTools.RANKING_KEY)).pending,'renamed private profile');const prefs=JSON.parse(w.localStorage.getItem(rankingTools.RANKING_KEY));assert.equal(prefs.name,'Private new name');assert.equal(prefs.choice,'declined');assert.equal(find('[data-ranking-settings]').getAttribute('aria-pressed'),'false');
+    const db=await mf.getD1Database('DB'),row=await db.prepare('SELECT name,enabled,answered FROM ranking_profiles WHERE id=?').bind(prefs.id).first();assert.equal(row.name,'Private new name');assert.equal(row.enabled,0);assert.equal(row.answered,29);
+    assert.ok(find('#ranking-settings').textContent.includes(messages.en.learningSyncHelp));
   }finally{h?.w.close();await mf.dispose();}
 });

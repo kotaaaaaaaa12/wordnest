@@ -34,7 +34,7 @@ function applyTheme() {
 }
 applyTheme();
 systemTheme.addEventListener?.('change', () => { if (themeChoice === 'auto') applyTheme(); });
-const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, sessionKnown:false, adminBusy:false, adminError:'', configured:true, rankingMetric:'totalMs', rankingData:null, rankingBusy:false, rankingError:'', adminData:null, adminStats:null, adminStatsId:null, adminStatsBusy:false, adminStatsError:'', adminSearch:'', adminStatus:'listed', adminBusyList:false, adminListError:'', route:routeFromHash(), screen:'home', libraryTab:'sets', collection:null, weakScope:'single', weakMode:'en-ja', weakSetId:null, weakIds:null, weakPickerOpen:false, favoriteSet:'all', wordSearch:'', listLimit:100, selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
+const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, sessionKnown:false, adminBusy:false, adminError:'', configured:true, rankingMetric:'totalMs', rankingData:null, rankingBusy:false, rankingError:'', adminData:null, adminStats:null, adminStatsId:null, adminStatsBusy:false, adminStatsError:'', adminSearch:'', adminStatus:'all', adminBusyList:false, adminListError:'', route:routeFromHash(), screen:'home', libraryTab:'sets', collection:null, weakScope:'single', weakMode:'en-ja', weakSetId:null, weakIds:null, weakPickerOpen:false, favoriteSet:'all', wordSearch:'', listLimit:100, selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
 const ranking=new RankingClient({storage:learningStorage,fetch:(...args)=>fetch(...args),snapshot:()=>{
   const snapshot=learning.snapshot();return {epoch:learning.epoch,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',days:snapshot.days};
 },onChange:()=>{refreshRankingSettings();queueRankingNotice();if(state.route==='rankings')render();}});
@@ -162,9 +162,9 @@ async function showRankingNotice(){
 function administrationView(){
   if(!state.authenticated)return '';
   if(state.adminStatsId)return administratorStatsView();
-  const data=state.adminData,participants=data?.participants || [],removed=state.adminStatus==='removed';
+  const data=state.adminData,participants=state.adminData?.participants || [];
   const date=value=>value?new Intl.DateTimeFormat(lang==='ja'?'ja-JP':'en-US',{dateStyle:'short',timeStyle:'short'}).format(new Date(value)):'—';
-  return `<section class="administration-view"><h1>${t('admin')}</h1><p class="ranking-note">${t('adminHelp')}</p><div class="admin-controls"><label for="admin-search">${t('adminSearch')}<input id="admin-search" type="search" maxlength="100" value="${e(state.adminSearch)}"></label><label for="admin-status">${t('adminStatus')}<select id="admin-status"><option value="listed" ${removed?'':'selected'}>${t('adminListed')}</option><option value="removed" ${removed?'selected':''}>${t('adminRemoved')}</option></select></label><button class="btn ghost small" data-action="admin-refresh" ${state.adminBusyList?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div>${state.adminListError?`<p class="error" role="alert">${e(t(state.adminListError))}</p>`:''}${state.adminBusyList?`<p class="ranking-note" role="status">${t('loading')}</p>`:''}<div class="admin-participants">${participants.map(person=>`<article class="admin-participant"><div class="admin-person-head"><div><h2>${e(person.name)}</h2><small>${e(t('adminUpdated',{date:date(person.updatedAt)}))}</small><small class="admin-person-id">${e(person.id.slice(0,12))}</small></div><div class="admin-person-actions"><button class="btn ghost small" data-action="admin-stats" data-id="${e(person.id)}">${icon('stats')}${t('adminViewStats')}</button>${removed?`<span class="pill">${t(person.acknowledged?'noticeRead':'noticeUnread')}</span>`:`<button class="btn danger small" data-action="admin-remove" data-id="${e(person.id)}">${icon('trash')}${t('adminRemove')}</button>`}</div></div>${removed?`<dl class="admin-messages">${person.messageJa?`<dt>${t('moderationMessageJa')}</dt><dd lang="ja">${e(person.messageJa)}</dd>`:''}${person.messageEn?`<dt>${t('moderationMessageEn')}</dt><dd lang="en">${e(person.messageEn)}</dd>`:''}</dl>`:''}</article>`).join('') || (!state.adminBusyList?`<div class="empty"><p>${t('adminEmpty')}</p></div>`:'')}</div>${data && participants.length<data.total?`<button class="btn ghost" data-action="admin-more" ${state.adminBusyList?'disabled':''}>${t('adminMore')}</button>`:''}</section>`;
+  return `<section class="administration-view"><h1>${t('admin')}</h1><p class="ranking-note">${t('adminHelp')}</p><div class="admin-controls"><label for="admin-search">${t('adminSearch')}<input id="admin-search" type="search" maxlength="100" value="${e(state.adminSearch)}"></label><label for="admin-status">${t('adminStatus')}<select id="admin-status">${['all','listed','private','removed'].map(status=>`<option value="${status}" ${state.adminStatus===status?'selected':''}>${t({all:'adminAll',listed:'adminListed',private:'adminPrivate',removed:'adminRemoved'}[status])}</option>`).join('')}</select></label><button class="btn ghost small" data-action="admin-refresh" ${state.adminBusyList?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div>${state.adminListError?`<p class="error" role="alert">${e(t(state.adminListError))}</p>`:''}${state.adminBusyList?`<p class="ranking-note" role="status">${t('loading')}</p>`:''}<div class="admin-participants">${participants.map(person=>`<article class="admin-participant"><div class="admin-person-head"><div><h2>${e(person.name)}</h2><small>${e(t('adminUpdated',{date:date(person.updatedAt)}))}</small><small class="admin-person-id">${e(person.id.slice(0,12))}</small></div><div class="admin-person-actions"><button class="btn ghost small" data-action="admin-stats" data-id="${e(person.id)}">${icon('stats')}${t('adminViewStats')}</button>${person.removed?`<span class="pill">${t(person.acknowledged?'noticeRead':'noticeUnread')}</span>`:person.enabled?`<button class="btn danger small" data-action="admin-remove" data-id="${e(person.id)}">${icon('trash')}${t('adminRemove')}</button>`: `<span class="pill">${t('adminPrivate')}</span>`}</div></div>${person.removed?`<dl class="admin-messages">${person.messageJa?`<dt>${t('moderationMessageJa')}</dt><dd lang="ja">${e(person.messageJa)}</dd>`:''}${person.messageEn?`<dt>${t('moderationMessageEn')}</dt><dd lang="en">${e(person.messageEn)}</dd>`:''}</dl>`:''}</article>`).join('') || (!state.adminBusyList?`<div class="empty"><p>${t('adminEmpty')}</p></div>`:'')}</div>${data && participants.length<data.total?`<button class="btn ghost" data-action="admin-more" ${state.adminBusyList?'disabled':''}>${t('adminMore')}</button>`:''}</section>`;
 }
 function studyMetricCards(data){
   const symbols={totalMs:'timer',averageMs:'calendar',answered:'quiz',correct:'check',accuracy:'target',flips:'flip',streak:'flame',longest:'trophy'};
@@ -173,7 +173,7 @@ function studyMetricCards(data){
 function administratorStatsView(){
   const data=state.adminStats,person=data?.participant;
   const date=person?new Intl.DateTimeFormat(lang,{dateStyle:'medium',timeStyle:'short',timeZone:person.timezone}).format(new Date(person.updatedAt)):'';
-  return `<section class="administration-view admin-stats-view"><div class="actions"><button class="btn ghost small" data-action="admin-stats-back">${icon('back')}${t('adminBack')}</button><button class="btn ghost small" data-action="admin-stats-refresh" ${state.adminStatsBusy?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div><h1>${t('stats')}</h1>${person?`<h2 class="admin-stats-name">${e(person.name)}</h2><p class="ranking-note">${e(t('adminUpdated',{date}))}<br>${e(t('adminStatsTimezone',{timezone:person.timezone}))}</p>`:''}<p class="ranking-note">${t('adminStatsScope')}</p>${state.adminStatsBusy?`<p role="status">${t('loading')}</p>`:''}${state.adminStatsError?`<p class="error" role="alert">${e(t(state.adminStatsError))}</p>`:''}${data?(data.summary?studyMetricCards(data.summary):`<p class="ranking-note">${t('adminStatsUnavailable')}</p>`):''}</section>`;
+  return `<section class="administration-view admin-stats-view"><div class="actions"><button class="btn ghost small" data-action="admin-stats-back">${icon('back')}${t('adminBack')}</button><button class="btn ghost small" data-action="admin-stats-refresh" ${state.adminStatsBusy?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div><h1>${t('stats')}</h1>${person?`<h2 class="admin-stats-name">${e(person.name)}</h2><p class="ranking-note">${e(t('adminUpdated',{date}))}<br>${e(t('adminStatsTimezone',{timezone:person.timezone}))}</p>`:''}<p class="ranking-note">${t('adminStatsScope')}</p>${state.adminStatsBusy?`<p role="status">${t('loading')}</p>`:''}${state.adminStatsError?`<p class="error" role="alert">${e(t(state.adminStatsError))}</p>`:''}${data?studyMetricCards(data.summary):''}</section>`;
 }
 let administratorStatsRequest=0;
 async function refreshAdministratorStats(){
@@ -222,28 +222,34 @@ function maybeRankingOnboarding(){
   if(modal.open){setTimeout(maybeRankingOnboarding,500);return;}
   rankingOnboardingStarted=true;rankingNameDialog(true);
 }
-async function rankingNameDialog(initial=false){
+async function rankingNameDialog(initial=false,privateOnly=false){
   let prefs=ranking.preferences();
-  if(prefs?.notice && !prefs.notice.acknowledged){deferredRankingNotices.delete(prefs.notice.id);await showRankingNotice();prefs=ranking.preferences();if(prefs?.notice && !prefs.notice.acknowledged)return;}
-  const result=await dialog(`<button class="icon-btn modal-close" data-ranking-name-close aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t(prefs?.choice==='joined'?'rankingChangeName':'rankingJoinTitle')}</h2><p>${t('rankingNameHelp')}</p>${prefs?.notice?`<p>${t('rankingRejoinHelp')}</p>`:''}<form id="ranking-name-form" class="ranking-name-form"><label for="ranking-name">${t('rankingDisplayName')}<input id="ranking-name" name="name" value="${e(prefs?.name || '')}" autocomplete="nickname" maxlength="40" required></label><small>${t('rankingNameLimit')}</small><p class="error" id="ranking-name-error" role="alert" hidden></p><div class="modal-actions"><button class="btn ghost" type="button" data-ranking-name-close>${t(initial?'rankingDecline':'cancel')}</button><button class="btn primary" type="submit">${t('rankingSaveName')}</button></div></form>`,finish=>{
+  if(!privateOnly && prefs?.notice && !prefs.notice.acknowledged){deferredRankingNotices.delete(prefs.notice.id);await showRankingNotice();prefs=ranking.preferences();if(prefs?.notice && !prefs.notice.acknowledged)return;}
+  await dialog(`<button class="icon-btn modal-close" data-ranking-name-close aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t(privateOnly?'profileChangeName':prefs?.choice==='joined'?'rankingChangeName':'rankingJoinTitle')}</h2><p>${t(privateOnly?'privateNameHelp':'rankingNameHelp')}</p><p>${t('learningSyncHelp')}</p>${prefs?.notice && !privateOnly?`<p>${t('rankingRejoinHelp')}</p>`:''}<form id="ranking-name-form" class="ranking-name-form"><label for="ranking-name">${t('profileName')}<input id="ranking-name" name="name" value="${e(prefs?.name || '')}" autocomplete="nickname" maxlength="40" required></label><small>${t('rankingNameLimit')}</small><p class="error" id="ranking-name-error" role="alert" hidden></p><div class="modal-actions"><button class="btn ghost" type="button" data-ranking-name-close>${t(initial?'rankingDecline':'cancel')}</button><button class="btn primary" type="submit">${t(privateOnly?'save':'rankingSaveName')}</button></div></form>`,finish=>{
     let busy=false;
-    modal.oncancel=event=>{event.preventDefault();if(!busy)finish(initial?'decline':false);};
-    modal.onclick=event=>{if(event.target.closest('[data-ranking-name-close]') && !busy)finish(initial?'decline':false);};
+    const close=async()=>{
+      if(busy)return;if(!initial){finish(false);return;}
+      busy=true;const alert=$('#ranking-name-error');alert.hidden=true;$$('button',modal).forEach(button=>button.disabled=true);
+      try{await ranking.decline($('#ranking-name').value);finish('declined');}
+      catch(error){if(error.message==='invalidRankingName'){alert.textContent=message(error);alert.hidden=false;}else{finish('declined');toast(message(error));}}
+      finally{busy=false;$$('button',modal).forEach(button=>button.disabled=false);}
+    };
+    modal.oncancel=event=>{event.preventDefault();close();};
+    modal.onclick=event=>{if(event.target.closest('[data-ranking-name-close]'))close();};
     modal.onsubmit=async event=>{
       if(event.target.id!=='ranking-name-form')return;event.preventDefault();if(busy)return;
       busy=true;const input=$('#ranking-name'),error=$('#ranking-name-error'),submit=$('[type="submit"]',modal);submit.disabled=true;error.hidden=true;
-      try{await ranking.join(input.value);finish(ranking.preferences()?.notice?'removed':'joined');}
+      try{await (privateOnly?ranking.rename(input.value):ranking.join(input.value));finish(ranking.preferences()?.notice?'removed':'joined');}
       catch(err){error.textContent=message(err);error.hidden=false;}
       finally{busy=false;if(submit.isConnected)submit.disabled=false;}
     };
   });
-  if(result==='decline')try{await ranking.decline();}catch(error){toast(message(error));}
   if(state.route==='rankings')await refreshRankings();
 }
 function rankingSettingsSignature(){const prefs=ranking.preferences();return JSON.stringify([prefs?.choice,prefs?.name,prefs?.pending,ranking.error,lang]);}
 function rankingSettingsContent(){
   const prefs=ranking.preferences(),joined=prefs?.choice==='joined';
-  return `<h3 id="ranking-settings-title">${t('rankingParticipation')}</h3><p>${t(prefs?.pending?'rankingPending':prefs?.notice?'rankingRejoinHelp':joined?'rankingEnabledHelp':'rankingDisabledHelp')}</p>${joined?`<small>${e(t('rankingAs',{name:prefs.name}))}</small>`:''}<button class="btn ghost" data-ranking-settings aria-pressed="${joined}">${t(joined?'rankingDisable':'rankingEnable')}</button>`;
+  return `<h3 id="ranking-settings-title">${t('rankingParticipation')}</h3><p>${t(prefs?.pending?'rankingPending':prefs?.notice?'rankingRejoinHelp':joined?'rankingEnabledHelp':'rankingDisabledHelp')}</p><p>${t('learningSyncHelp')}</p>${prefs?.name?`<small>${e(t('profileAs',{name:prefs.name}))}</small>`:''}<button class="btn ghost" data-ranking-private-name>${t('profileChangeName')}</button><button class="btn ghost" data-ranking-settings aria-pressed="${joined}">${t(joined?'rankingDisable':'rankingEnable')}</button>`;
 }
 function refreshRankingSettings(){const section=$('#ranking-settings');if(section && section.dataset.state!==rankingSettingsSignature()){section.innerHTML=rankingSettingsContent();section.dataset.state=rankingSettingsSignature();}}
 let statsRenderedDay;
@@ -565,6 +571,7 @@ async function settingsDialog() {
       };
       modal.onclick=event=>{
         const deletion=event.target.closest('[data-delete-learning]');
+        if(event.target.closest('[data-ranking-private-name]')){finish('private-name');return;}
         if(event.target.closest('[data-ranking-settings]')){finish(ranking.preferences()?.choice==='joined'?'ranking-off':'ranking-name');return;}
         if(deletion){finish({deleteData:deletion.dataset.deleteLearning,scroll:modal.scrollTop});return;}
         if(event.target.closest('[data-admin-open]')){finish('edit');return;}
@@ -573,6 +580,7 @@ async function settingsDialog() {
         if(event.target.closest('[data-settings-sound]')){soundEnabled=!soundEnabled;storage.set('wordnest-sound',soundEnabled?'on':'off');modal.innerHTML=settingsContent();$('#modal-title',modal)?.focus({preventScroll:true});return;}
       };
     });
+    if(action==='private-name'){await rankingNameDialog(false,true);continue;}
     if(action==='ranking-name'){await rankingNameDialog();continue;}
     if(action==='ranking-off'){ranking.decline().then(()=>{if(state.route==='rankings')refreshRankings(false);}).catch(error=>toast(message(error)));continue;}
     if(action?.deleteData){scroll=action.scroll;await deleteLearningData(action.deleteData);continue;}

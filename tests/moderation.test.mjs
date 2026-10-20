@@ -46,7 +46,7 @@ test('administrators remove participants with private notices; acknowledgement a
     const second=await remove(mf,cookie,ranking,'','A second notice.');assert.equal(second.status,200);assert.notEqual(second.data.noticeId,deletion.data.noticeId);
     assert.equal((await api(mf,'/api/ranking/notice',{method:'POST',token:prefs.token,body:{revision:0,noticeId:deletion.data.noticeId}})).status,409);
     const returning=participant(mf,ranking.storage).ranking;await returning.sync(true);assert.equal(returning.preferences().notice.id,second.data.noticeId);assert.equal(returning.preferences().notice.acknowledged,false);assert.equal(returning.preferences().choice,'declined');
-    const db=await mf.getD1Database('DB'),row=await db.prepare('SELECT days,answered,total_ms FROM ranking_profiles WHERE id=?').bind(prefs.id).first();assert.equal(row.days,'{}');assert.equal(row.answered,0);assert.equal(row.total_ms,0);
+    const db=await mf.getD1Database('DB'),row=await db.prepare('SELECT days,answered,total_ms FROM ranking_profiles WHERE id=?').bind(prefs.id).first();assert.deepEqual(JSON.parse(row.days),tracker.snapshot().days);assert.equal(row.answered,31);assert.equal(row.total_ms,tracker.snapshot().totalMs);
   }finally{await mf.dispose();}
 });
 test('stale uploads and queued profile edits cannot undo moderation; later acknowledged notices stay confirmed across visits',async()=>{
@@ -103,8 +103,43 @@ test('individual statistics require administrator authentication and match synce
     // Materialized streaks can be stale: detail must use day totals and the current participant date.
     const db=await mf.getD1Database('DB');await db.prepare('UPDATE ranking_profiles SET days=?,streak=42 WHERE id=?').bind(JSON.stringify({'2001-01-01':days['2001-01-01']}),prefs.id).run();
     assert.equal((await api(mf,path,{cookie})).data.summary.streak,0);
-    await ranking.sync(true);await ranking.decline();assert.equal((await api(mf,path,{cookie})).data.summary,null);
+    await ranking.sync(true);await ranking.decline();assert.deepEqual((await api(mf,path,{cookie})).data.summary,summarizeStudyDays({},today));
     await api(mf,'/api/logout',{method:'POST',cookie});
     assert.equal((await api(mf,path)).status,401);
+  }finally{await mf.dispose();}
+});
+
+test('administrators can search all learners and inspect private records while public boards exclude them',async()=>{
+  const mf=instance(),{ranking,tracker}=participant(mf);
+  try{
+    tracker.answer(true);tracker.answer(false);tracker.flip();await ranking.decline('Private Pat');
+    const prefs=ranking.preferences(),cookie=await login(mf),path='/api/admin/rankings/'+prefs.id+'/stats';
+    assert.equal(prefs.choice,'declined');assert.ok(prefs.id);
+    const all=await api(mf,'/api/admin/rankings?q=Pat',{cookie});assert.equal(all.data.total,1);assert.equal(all.data.participants[0].enabled,0);
+    assert.equal((await api(mf,'/api/admin/rankings?status=private&q=Pat',{cookie})).data.total,1);
+    assert.equal((await api(mf,'/api/admin/rankings?status=listed&q=Pat',{cookie})).data.total,0);
+    assert.equal((await api(mf,path)).status,401);assert.equal((await api(mf,path,{token:prefs.token})).status,401);
+    for(const metric of Object.keys(rankingMetrics)){const board=await api(mf,'/api/rankings?metric='+metric+'&self='+prefs.id);assert.equal(board.data.mine,null);assert.equal(board.data.rows.length,0);}
+    assert.equal((await api(mf,path,{cookie})).data.summary.answered,2);
+    tracker.answer(true);await ranking.sync();assert.equal((await api(mf,path,{cookie})).data.summary.answered,3,'private changes bypass the unchanged-data throttle');
+    await ranking.rename('Private Renamed');assert.equal(ranking.preferences().choice,'declined');assert.equal((await api(mf,'/api/admin/rankings?q=Renamed',{cookie})).data.participants[0].name,'Private Renamed');
+    await ranking.join('Visible');await ranking.decline();assert.equal((await api(mf,path,{cookie})).data.summary.answered,3,'opt-out preserves records');
+    await ranking.join('Visible');assert.equal((await remove(mf,cookie,ranking)).status,200);await ranking.sync(true);tracker.answer(true);await ranking.sync(true);
+    assert.equal((await api(mf,path,{cookie})).data.summary.answered,4,'moderated learners continue private syncing');assert.equal((await api(mf,'/api/rankings?metric=answered')).data.rows.length,0);
+    await ranking.rename('Private replacement');assert.equal(ranking.preferences().choice,'declined');assert.ok(ranking.preferences().notice);assert.equal((await api(mf,path,{cookie})).data.participant.name,'Private replacement');
+    tracker.reset();await ranking.sync(true);assert.equal((await api(mf,path,{cookie})).data.summary.answered,0,'private resets clear server records');
+  }finally{await mf.dispose();}
+});
+test('legacy declined browsers gain stable private identities, retry offline upgrades, and upload on exit',async()=>{
+  const mf=instance(),saved=storage();let offline=true;
+  saved.setItem(RANKING_KEY,JSON.stringify({choice:'declined'}));
+  const {tracker,ranking}=participant(mf,saved,(path,options)=>{if(offline)throw new Error('Offline');return mf.dispatchFetch(origin+path,options);});
+  try{
+    tracker.answer(true);await assert.rejects(ranking.sync(true),/networkError/);const token=ranking.preferences().token;assert.equal(token.length,64);assert.ok(ranking.preferences().pending);
+    offline=false;await ranking.sync(true);assert.equal(ranking.preferences().token,token);assert.match(ranking.preferences().name,/^Learner [a-f0-9]{8}$/);assert.equal(ranking.preferences().choice,'declined');
+    const cookie=await login(mf),path='/api/admin/rankings/'+ranking.preferences().id+'/stats';assert.equal((await api(mf,path,{cookie})).data.summary.answered,1);
+    tracker.answer(false);ranking.flushOnExit();
+    for(let i=0;i<100;i++){if((await api(mf,path,{cookie})).data.summary.answered===2)break;await new Promise(resolve=>setTimeout(resolve,5));}
+    assert.equal((await api(mf,path,{cookie})).data.summary.answered,2);assert.equal((await api(mf,'/api/rankings?metric=answered')).data.rows.length,0);
   }finally{await mf.dispose();}
 });

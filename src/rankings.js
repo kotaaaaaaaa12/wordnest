@@ -92,23 +92,23 @@ export async function rankingApi(request,db,readBody){
         if(!moderation.acknowledged || data.noticeId!==moderation.notice_id)throw fail('rankingNoticeRequired',409);
         if(rankingNameKey(name)===moderation.removed_key)throw fail('rankingNameUnchanged',400);
       }
-      const clear=!data.enabled || row.epoch!==epoch;
+      const clear=row.epoch!==epoch;
       const statements=[db.prepare(`UPDATE ranking_profiles SET name=?,enabled=?,epoch=?,timezone=?,revision=revision+1,updated_at=?${clear?','+emptyStats:''} WHERE id=? AND revision=? RETURNING *`).bind(name,Number(data.enabled),epoch,timezone,now,id,data.revision)];
       if(moderation && data.enabled)statements.push(db.prepare('UPDATE ranking_moderation SET active=0 WHERE profile_id=? AND notice_id=? AND acknowledged=1 AND EXISTS(SELECT 1 FROM ranking_profiles WHERE id=? AND revision=? AND enabled=1 AND name=?)').bind(id,moderation.notice_id,id,data.revision+1,name));
       const results=await db.batch(statements);updated=results[0].results[0];
     }
     if(!updated)throw fail('rankingConflict',409);return json({profile:await publicProfile(db,updated)});
   }
-  if(!row || !row.enabled)throw fail('rankingDisabled',409);
+  if(!row)throw fail('rankingDisabled',409);
   if(path==='/api/ranking/stats' && method==='DELETE'){
     const epoch=validEpoch(data.epoch);
-    const updated=await db.prepare(`UPDATE ranking_profiles SET ${emptyStats},epoch=?,revision=revision+1,updated_at=? WHERE id=? AND revision=? AND enabled=1 RETURNING *`).bind(epoch,now,id,data.revision).first();
+    const updated=await db.prepare(`UPDATE ranking_profiles SET ${emptyStats},epoch=?,revision=revision+1,updated_at=? WHERE id=? AND revision=? RETURNING *`).bind(epoch,now,id,data.revision).first();
     if(!updated)throw fail('rankingConflict',409);return json({profile:await publicProfile(db,updated)});
   }
   if(path==='/api/ranking/stats' && method==='PUT'){
     const epoch=validEpoch(data.epoch),timezone=validZone(data.timezone),days=validDays(data.days,dateInZone(timezone)),summary=summarizeStudyDays(days,dateInZone(timezone));
     if(row.epoch!==epoch)throw fail('rankingConflict',409);
-    const updated=await db.prepare(`UPDATE ranking_profiles SET days=?,timezone=?,total_ms=?,average_ms=?,answered=?,correct=?,accuracy=?,flips=?,streak=?,longest=?,last_study_day=?,revision=revision+1,updated_at=? WHERE id=? AND revision=? AND epoch=? AND enabled=1 RETURNING *`).bind(JSON.stringify(days),timezone,summary.totalMs,summary.averageMs,summary.answered,summary.correct,summary.accuracy,summary.flips,summary.streak,summary.longest,summary.lastStudyDay,now,id,data.revision,epoch).first();
+    const updated=await db.prepare(`UPDATE ranking_profiles SET days=?,timezone=?,total_ms=?,average_ms=?,answered=?,correct=?,accuracy=?,flips=?,streak=?,longest=?,last_study_day=?,revision=revision+1,updated_at=? WHERE id=? AND revision=? AND epoch=? RETURNING *`).bind(JSON.stringify(days),timezone,summary.totalMs,summary.averageMs,summary.answered,summary.correct,summary.accuracy,summary.flips,summary.streak,summary.longest,summary.lastStudyDay,now,id,data.revision,epoch).first();
     if(!updated)throw fail('rankingConflict',409);return json({profile:await publicProfile(db,updated),summary});
   }
   return json({error:'methodNotAllowed'},405);
@@ -128,14 +128,14 @@ export async function rankingAdminApi(request,db,readBody){
     if(!row)return json({error:'notFound'},404);
     // Recalculate streaks in the participant's timezone, including days without uploads.
     const summary=summarizeStudyDays(JSON.parse(row.days),dateInZone(row.timezone));
-    return json({participant:{id:row.id,name:row.name,enabled:Boolean(row.enabled),timezone:row.timezone,updatedAt:row.updated_at},summary:row.enabled?summary:null});
+    return json({participant:{id:row.id,name:row.name,enabled:Boolean(row.enabled),timezone:row.timezone,updatedAt:row.updated_at},summary});
   }
   if(path==='/api/admin/rankings' && request.method==='GET'){
-    const status=url.searchParams.get('status') || 'listed',q=(url.searchParams.get('q') || '').trim(),offset=Number(url.searchParams.get('offset') || 0);
-    if(!['listed','removed'].includes(status) || q.length>100 || !Number.isSafeInteger(offset) || offset<0 || offset>1000000)throw fail('invalidRankingData');
-    const filter=status==='removed'?'m.active=1':'p.enabled=1 AND COALESCE(m.active,0)=0';
+    const status=url.searchParams.get('status') || 'all',q=(url.searchParams.get('q') || '').trim(),offset=Number(url.searchParams.get('offset') || 0);
+    if(!['all','listed','private','removed'].includes(status) || q.length>100 || !Number.isSafeInteger(offset) || offset<0 || offset>1000000)throw fail('invalidRankingData');
+    const filter={all:'1=1',listed:'p.enabled=1 AND COALESCE(m.active,0)=0',private:'p.enabled=0 AND COALESCE(m.active,0)=0',removed:'m.active=1'}[status];
     const base=`FROM ranking_profiles p LEFT JOIN ranking_moderation m ON m.profile_id=p.id WHERE (${filter}) AND instr(lower(p.name),lower(?))>0`;
-    const result=await db.batch([db.prepare(`SELECT p.id,CASE WHEN m.active=1 THEN m.removed_name ELSE p.name END AS name,p.revision,p.updated_at AS updatedAt,m.notice_id AS noticeId,m.removed_at AS removedAt,m.message_ja AS messageJa,m.message_en AS messageEn,m.acknowledged ${base} ORDER BY p.updated_at DESC,p.id LIMIT 50 OFFSET ?`).bind(q,offset),db.prepare(`SELECT COUNT(*) AS total ${base}`).bind(q)]);
+    const result=await db.batch([db.prepare(`SELECT p.id,p.name,p.revision,p.enabled,COALESCE(m.active,0) AS removed,p.updated_at AS updatedAt,m.notice_id AS noticeId,m.removed_at AS removedAt,m.message_ja AS messageJa,m.message_en AS messageEn,m.acknowledged ${base} ORDER BY p.updated_at DESC,p.id LIMIT 50 OFFSET ?`).bind(q,offset),db.prepare(`SELECT COUNT(*) AS total ${base}`).bind(q)]);
     return json({participants:result[0].results,total:result[1].results[0].total,offset});
   }
   const match=path.match(/^\/api\/admin\/rankings\/([a-f0-9]{64})\/remove$/);
@@ -150,7 +150,7 @@ export async function rankingAdminApi(request,db,readBody){
     const noticeId=crypto.randomUUID(),now=new Date().toISOString();
     const result=await db.batch([
       db.prepare(`INSERT INTO ranking_moderation (profile_id,notice_id,removed_name,removed_key,message_ja,message_en,removed_at,acknowledged,active) SELECT id,?,?,?,?,?,?,0,1 FROM ranking_profiles WHERE id=? AND ${condition} AND enabled=1 ON CONFLICT(profile_id) DO UPDATE SET notice_id=excluded.notice_id,removed_name=excluded.removed_name,removed_key=excluded.removed_key,message_ja=excluded.message_ja,message_en=excluded.message_en,removed_at=excluded.removed_at,acknowledged=0,active=1`).bind(noticeId,row.name,rankingNameKey(row.name),messageJa,messageEn,now,row.id,expected),
-      db.prepare(`UPDATE ranking_profiles SET enabled=0,${emptyStats},revision=revision+1,updated_at=? WHERE id=? AND ${condition} AND enabled=1 AND EXISTS(SELECT 1 FROM ranking_moderation WHERE profile_id=? AND notice_id=?) RETURNING id`).bind(now,row.id,expected,row.id,noticeId)
+      db.prepare(`UPDATE ranking_profiles SET enabled=0,revision=revision+1,updated_at=? WHERE id=? AND ${condition} AND enabled=1 AND EXISTS(SELECT 1 FROM ranking_moderation WHERE profile_id=? AND notice_id=?) RETURNING id`).bind(now,row.id,expected,row.id,noticeId)
     ]);
     if(!result[1].results.length)throw fail('rankingConflict',409);
     return json({ok:true,noticeId});

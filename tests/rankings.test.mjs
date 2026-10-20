@@ -35,7 +35,8 @@ test('D1 rankings match all eight local Statistics measures, enforce 30 answers,
     assert.equal((await api(mf,'/api/ranking/stats','PUT',{revision:staleRevision,epoch:staleEpoch,timezone,days},token)).status,409);
     tracker.answer(true);await ranking.sync(true);assert.equal((await ranking.list('answered')).mine.value,1);
     await ranking.decline();assert.equal(tracker.snapshot().answered,1);assert.equal((await api(mf,'/api/rankings?metric=answered&self='+prefs.id)).data.mine,null);
-    assert.equal((await api(mf,'/api/ranking/stats','PUT',{revision:ranking.profile.revision,epoch:tracker.epoch,timezone,days},token)).status,409);
+    assert.equal((await api(mf,'/api/ranking/stats','PUT',{revision:ranking.profile.revision,epoch:tracker.epoch,timezone,days:tracker.snapshot().days},token)).status,200);
+    assert.equal((await api(mf,'/api/rankings?metric=answered&self='+prefs.id)).data.mine,null);
     await ranking.join('Back again');assert.equal(ranking.preferences().id,prefs.id);assert.equal((await ranking.list('answered')).mine.value,1);
     const revision=ranking.profile.revision;
     for(const bad of [{...days,[today]:{ms:-1,answered:1,correct:1,flips:0}},{'2026-99-99':{ms:0,answered:0,correct:0,flips:0}},{[today]:{ms:0,answered:1,correct:2,flips:0}}])assert.equal((await api(mf,'/api/ranking/stats','PUT',{revision,epoch:tracker.epoch,timezone,days:bad},token)).status,400);

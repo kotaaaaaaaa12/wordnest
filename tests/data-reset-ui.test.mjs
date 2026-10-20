@@ -18,7 +18,17 @@ async function harness({lang='en',authenticated=false}={}){
   w.Audio=class{play(){return Promise.resolve();}};
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
   const requests=[],set={...structuredClone(seed),id:'seed',revision:1};
-  w.fetch=async(path,options={})=>{requests.push([path,options.method || 'GET']);return {ok:true,status:200,json:async()=>path==='/api/sets'?{sets:[set],orderRevision:0}:{authenticated,configured:true}};};
+  let profile=null;
+  w.fetch=async(path,options={})=>{
+    const method=options.method || 'GET';requests.push([path,method]);let result;
+    if(path==='/api/ranking/profile'){
+      if(method==='POST'){const body=JSON.parse(options.body);profile={id:'a'.repeat(64),name:body.name,enabled:body.enabled,epoch:body.epoch,revision:(profile?.revision || 0)+1,notice:null};}
+      result={profile};
+    }else if(path==='/api/ranking/stats'){
+      const body=JSON.parse(options.body);profile={...profile,revision:profile.revision+1,epoch:body.epoch};result={profile};
+    }else result=path==='/api/sets'?{sets:[set],orderRevision:0}:{authenticated,configured:true};
+    return {ok:true,status:200,json:async()=>result};
+  };
   w.localStorage.setItem('wordnest-language',lang);w.localStorage.setItem('wordnest-theme','dark');w.localStorage.setItem('wordnest-dark-palette','midnight');w.localStorage.setItem('unrelated-data','keep');
   const personal=new personalTools.PersonalWords(w.localStorage),question=personalTools.sourceQuestions([set],'en-ja')[0],word=personalTools.wordIdentity(set.id,set.words[0]);
   function seedData(){
@@ -46,7 +56,7 @@ test('all five Settings deletion choices confirm their scope, cancel safely, and
       assert.deepEqual(status(),Object.fromEntries(['clears','weak','favorites','statistics'].map(key=>[key,type!=='all' && type!==key])));
       assert.ok(find('#admin-password'));assert.equal(find('#toast').textContent,messages.en.learningDataDeleted);
       assert.equal(w.localStorage.getItem('wordnest-theme'),'dark');assert.equal(w.localStorage.getItem('wordnest-dark-palette'),'midnight');assert.equal(w.localStorage.getItem('wordnest-language'),'en');assert.equal(w.localStorage.getItem('unrelated-data'),'keep');
-      assert.ok(requests.every(([,method])=>method==='GET'));
+      assert.ok(requests.every(([path,method])=>method==='GET' || path.startsWith('/api/ranking/')),'personal resets must not mutate shared word sets');
       await click('[data-dialog="cancel"]');assert.equal(w.document.querySelectorAll('.set-card').length,1);
       assert.equal(find('.set-card').dataset.studyStatus,type==='clears'||type==='all'?'none':'both');
       await click('.nav [data-nav="stats"]');assert.equal(find('[data-stat="answeredQuestions"]').textContent,type==='statistics'||type==='all'?'0':'1');

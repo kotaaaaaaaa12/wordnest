@@ -10,7 +10,15 @@ export class RankingClient {
   save(value){try{if(!this.storage)throw new Error();this.storage.setItem(RANKING_KEY,JSON.stringify(value));}catch{throw new Error('rankingStorageError');}this.onChange();}
   token(){return [...this.crypto.getRandomValues(new Uint8Array(32))].map(byte=>byte.toString(16).padStart(2,'0')).join('');}
   async join(value){const name=rankingName(value),previous=this.preferences();if(previous?.notice){if(!previous.notice.acknowledged)throw new Error('rankingNoticeRequired');if(rankingNameKey(name)===rankingNameKey(previous.notice.removedName))throw new Error('rankingNameUnchanged');}this.save({...previous,token:previous?.token || this.token(),name,choice:'joined',pending:this.token()});return this.sync(true);}
-  async decline(){const previous=this.preferences();this.save({...previous,choice:'declined',pending:previous?.token?this.token():null});return this.sync(true);}
+  async decline(value){
+    const previous=this.preferences(),token=previous?.token || this.token();
+    const name=value?.trim()?rankingName(value):previous?.name || `Learner ${this.token().slice(0,8)}`;
+    this.save({...previous,token,name,choice:'declined',pending:this.token()});return this.sync(true);
+  }
+  async rename(value){
+    const name=rankingName(value),previous=this.preferences(),token=previous?.token || this.token();
+    this.save({...previous,token,name,choice:previous?.choice || 'declined',pending:this.token()});return this.sync(true);
+  }
   async request(path,method='GET',data,token,keepalive=false){
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);
     try{
@@ -26,7 +34,7 @@ export class RankingClient {
   }
   applyRemoval(profile){
     this.profile=profile;this.error='';const prefs=this.preferences();if(!prefs)return;
-    const next={...prefs,id:profile.id,choice:'declined',pending:null,notice:profile.notice};
+    const next={...prefs,id:profile.id,name:profile.name,choice:'declined',pending:null,notice:profile.notice};
     if(JSON.stringify(next)!==JSON.stringify(prefs))this.save(next);else this.onChange();
   }
   acknowledgeNotice(noticeId){
@@ -41,9 +49,11 @@ export class RankingClient {
     this.queue=work;return work;
   }
   async flush(force){
-    let prefs=this.preferences();if(!prefs?.token)return;
-    const fingerprint=prefs.choice==='joined'?JSON.stringify(this.snapshot()):'';
-    if(!force && !prefs.pending && Date.now()-this.lastCheckedAt<30000 && (prefs.choice==='declined' || fingerprint===this.lastSent))return;
+    let prefs=this.preferences();if(!prefs)return;
+    // Upgrade browsers that previously declined before a server identity was created.
+    if(!prefs.token || !prefs.name){const token=prefs.token || this.token();this.save({...prefs,token,name:prefs.name || `Learner ${this.token().slice(0,8)}`,pending:this.token()});prefs=this.preferences();}
+    const fingerprint=JSON.stringify(this.snapshot());
+    if(!force && !prefs.pending && Date.now()-this.lastCheckedAt<30000 && fingerprint===this.lastSent)return;
     try{
       for(let attempt=0;attempt<4;attempt++){
         prefs=this.preferences();if(!prefs?.token)return;
@@ -52,21 +62,23 @@ export class RankingClient {
           let current=this.preferences();if(current?.token!==prefs.token)continue;
           if(profile?.notice){
             const notice=profile.notice,rejoining=current.pending && current.choice==='joined' && current.notice?.id===notice.id && notice.acknowledged && current.notice.acknowledged && rankingNameKey(current.name)!==rankingNameKey(notice.removedName);
-            if(!rejoining){this.applyRemoval(profile);return;}
+            if(!rejoining && (current.choice==='joined' || !current.pending)){this.applyRemoval(profile);current=this.preferences();}
           }
+          if(!profile && !current.pending){this.save({...current,pending:this.token()});current=this.preferences();}
           if(current.pending){
             const intent=current.pending,snapshot=this.snapshot();
             profile=(await this.request('/api/ranking/profile','POST',{revision:profile?.revision || 0,name:current.name,enabled:current.choice==='joined',epoch:snapshot.epoch,timezone:snapshot.timezone,noticeId:current.notice?.id},current.token)).profile;
             const latest=this.preferences();if(latest?.pending!==intent)continue;
             this.error='';this.save({...latest,id:profile.id,pending:null});
           }
-          if(profile?.notice){this.applyRemoval(profile);return;}
+          if(profile?.notice)this.applyRemoval(profile);
           this.remember(profile);current=this.preferences();
-          if(current.choice!=='joined')return;
-          if(!profile?.enabled){this.save({...current,choice:'declined',pending:null});return;}
+          if(!profile)return;
+          if(!profile.enabled && current.choice==='joined'){this.save({...current,choice:'declined',pending:null});current=this.preferences();}
+          if(profile.enabled && current.choice==='declined'){this.save({...current,pending:this.token()});continue;}
           let snapshot=this.snapshot();
           if(profile.epoch!==snapshot.epoch){profile=(await this.request('/api/ranking/stats','DELETE',{revision:profile.revision,epoch:snapshot.epoch},current.token)).profile;this.remember(profile);snapshot=this.snapshot();}
-          const latest=this.preferences();if(latest?.choice!=='joined' || latest.pending || latest.token!==current.token)continue;
+          const latest=this.preferences();if(latest?.pending || latest?.token!==current.token)continue;
           const sent=JSON.stringify(snapshot),result=await this.request('/api/ranking/stats','PUT',{...snapshot,revision:profile.revision},current.token);
           this.remember(result.profile);this.lastSent=sent;this.error='';this.onChange();return result;
         }catch(error){if(['rankingConflict','rankingDisabled'].includes(error.message))continue;throw error;}
@@ -76,7 +88,7 @@ export class RankingClient {
   }
   async list(metric){const prefs=this.preferences(),query=new URLSearchParams({metric});if(prefs?.choice==='joined' && prefs.id)query.set('self',prefs.id);return this.request('/api/rankings?'+query);}
   flushOnExit(){
-    const prefs=this.preferences();if(!prefs?.token || prefs.choice!=='joined' || prefs.pending || !this.profile?.enabled)return;
+    const prefs=this.preferences();if(!prefs?.token || prefs.pending || !this.profile)return;
     const snapshot=this.snapshot();if(snapshot.epoch!==this.profile.epoch)return;
     const body=JSON.stringify({...snapshot,revision:this.profile.revision});
     if(new TextEncoder().encode(body).length>60000)return;
