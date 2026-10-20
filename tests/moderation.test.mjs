@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { build } from 'esbuild';
-import { LearningTracker } from '../public/stats.js';
+import { summarizeStudyDays, LearningTracker } from '../public/stats.js';
 import { RankingClient, rankingMetrics, RANKING_KEY } from '../public/rankings.js';
 import { rankingSchema } from '../src/rankings.js';
 const bundle=await build({entryPoints:['src/worker.js'],bundle:true,write:false,format:'esm',platform:'browser',target:'es2022'});
@@ -80,5 +80,31 @@ test('a reviewed name tolerates new study uploads while a renamed participant re
     await ranking.sync(true);await ranking.acknowledgeNotice(ranking.preferences().notice.id);await ranking.join('Changed name');
     response=await api(mf,'/api/admin/rankings/'+reviewed.id+'/remove',{method:'POST',cookie,body:{...reviewed,messageJa:'Old confirmation',messageEn:''}});assert.equal(response.status,409);assert.equal((await ranking.list('answered')).mine.name,'Changed name');
     assert.equal((await api(mf,'/api/admin/rankings?status=anything',{cookie})).status,400);assert.equal((await api(mf,'/api/admin/rankings?offset=-1',{cookie})).status,400);
+  }finally{await mf.dispose();}
+});
+
+test('individual statistics require administrator authentication and match synced study days in the participant timezone',async()=>{
+  const mf=instance(),{ranking}=participant(mf);
+  try{
+    await ranking.join('Stats Person');const prefs=ranking.preferences(),path='/api/admin/rankings/'+prefs.id+'/stats';
+    assert.equal((await api(mf,path)).status,401);
+    assert.equal((await api(mf,path,{token:prefs.token})).status,401);
+    const cookie=await login(mf),zone='Pacific/Kiritimati';
+    const today=new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const days={'2001-01-01':{ms:60000,answered:3,correct:1,flips:4},[today]:{ms:120000,answered:1,correct:1,flips:2}};
+    const upload=await api(mf,'/api/ranking/stats',{method:'PUT',token:prefs.token,body:{revision:ranking.profile.revision,epoch:'',timezone:zone,days}});assert.equal(upload.status,200);
+    const response=await api(mf,path,{cookie});assert.equal(response.status,200);assert.deepEqual(response.data.summary,summarizeStudyDays(days,today));
+    assert.equal(response.data.summary.accuracy,0.5);assert.equal(response.data.summary.averageMs,90000);assert.equal(response.data.participant.timezone,zone);assert.equal(response.data.participant.name,'Stats Person');
+    assert.equal('days' in response.data,false);assert.equal(JSON.stringify(response.data).includes(prefs.token),false);
+    const raw=await mf.dispatchFetch(origin+path,{headers:{Cookie:cookie}});assert.equal(raw.headers.get('cache-control'),'no-store');
+    assert.equal((await api(mf,'/api/admin/rankings/'+'f'.repeat(64)+'/stats',{cookie})).status,404);
+    assert.equal((await api(mf,'/api/rankings?metric=accuracy')).data.rows.length,0,'public accuracy retains its 30-answer threshold');
+    assert.equal('summary' in (await api(mf,'/api/ranking/profile',{token:prefs.token})).data,false);
+    // Materialized streaks can be stale: detail must use day totals and the current participant date.
+    const db=await mf.getD1Database('DB');await db.prepare('UPDATE ranking_profiles SET days=?,streak=42 WHERE id=?').bind(JSON.stringify({'2001-01-01':days['2001-01-01']}),prefs.id).run();
+    assert.equal((await api(mf,path,{cookie})).data.summary.streak,0);
+    await ranking.sync(true);await ranking.decline();assert.equal((await api(mf,path,{cookie})).data.summary,null);
+    await api(mf,'/api/logout',{method:'POST',cookie});
+    assert.equal((await api(mf,path)).status,401);
   }finally{await mf.dispose();}
 });

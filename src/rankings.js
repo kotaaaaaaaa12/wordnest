@@ -122,6 +122,14 @@ function moderationMessage(value){
 }
 export async function rankingAdminApi(request,db,readBody){
   const url=new URL(request.url),path=url.pathname;
+  const statsMatch=path.match(/^\/api\/admin\/rankings\/([a-f0-9]{64})\/stats$/);
+  if(statsMatch && request.method==='GET'){
+    const row=await db.prepare('SELECT id,name,enabled,timezone,days,updated_at FROM ranking_profiles WHERE id=?').bind(statsMatch[1]).first();
+    if(!row)return json({error:'notFound'},404);
+    // Recalculate streaks in the participant's timezone, including days without uploads.
+    const summary=summarizeStudyDays(JSON.parse(row.days),dateInZone(row.timezone));
+    return json({participant:{id:row.id,name:row.name,enabled:Boolean(row.enabled),timezone:row.timezone,updatedAt:row.updated_at},summary:row.enabled?summary:null});
+  }
   if(path==='/api/admin/rankings' && request.method==='GET'){
     const status=url.searchParams.get('status') || 'listed',q=(url.searchParams.get('q') || '').trim(),offset=Number(url.searchParams.get('offset') || 0);
     if(!['listed','removed'].includes(status) || q.length>100 || !Number.isSafeInteger(offset) || offset<0 || offset>1000000)throw fail('invalidRankingData');

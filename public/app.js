@@ -34,7 +34,7 @@ function applyTheme() {
 }
 applyTheme();
 systemTheme.addEventListener?.('change', () => { if (themeChoice === 'auto') applyTheme(); });
-const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, sessionKnown:false, adminBusy:false, adminError:'', configured:true, rankingMetric:'totalMs', rankingData:null, rankingBusy:false, rankingError:'', adminData:null, adminSearch:'', adminStatus:'listed', adminBusyList:false, adminListError:'', route:routeFromHash(), screen:'home', libraryTab:'sets', collection:null, weakScope:'single', weakMode:'en-ja', weakSetId:null, weakIds:null, weakPickerOpen:false, favoriteSet:'all', wordSearch:'', listLimit:100, selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
+const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, sessionKnown:false, adminBusy:false, adminError:'', configured:true, rankingMetric:'totalMs', rankingData:null, rankingBusy:false, rankingError:'', adminData:null, adminStats:null, adminStatsId:null, adminStatsBusy:false, adminStatsError:'', adminSearch:'', adminStatus:'listed', adminBusyList:false, adminListError:'', route:routeFromHash(), screen:'home', libraryTab:'sets', collection:null, weakScope:'single', weakMode:'en-ja', weakSetId:null, weakIds:null, weakPickerOpen:false, favoriteSet:'all', wordSearch:'', listLimit:100, selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
 const ranking=new RankingClient({storage:learningStorage,fetch:(...args)=>fetch(...args),snapshot:()=>{
   const snapshot=learning.snapshot();return {epoch:learning.epoch,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',days:snapshot.days};
 },onChange:()=>{refreshRankingSettings();queueRankingNotice();if(state.route==='rankings')render();}});
@@ -49,7 +49,7 @@ async function api(path, options={}) {
   let response;
   try { response=await fetch(path,{credentials:'same-origin',...options,headers:{...(options.body?{'Content-Type':'application/json'}:{}),...options.headers}}); } catch { throw new Error('networkError'); }
   let data; try { data=await response.json(); } catch { throw new Error('serverError'); }
-  if (!response.ok) { if (response.status===401) { state.authenticated=false;state.adminData=null;state.sessionKnown=true;render(); } throw new Error(data.error || 'serverError'); }
+  if (!response.ok) { if (response.status===401) { state.authenticated=false;state.adminData=null;state.adminStats=null;state.adminStatsId=null;state.sessionKnown=true;render(); } throw new Error(data.error || 'serverError'); }
   return data;
 }
 async function load() {
@@ -161,9 +161,30 @@ async function showRankingNotice(){
 }
 function administrationView(){
   if(!state.authenticated)return '';
+  if(state.adminStatsId)return administratorStatsView();
   const data=state.adminData,participants=data?.participants || [],removed=state.adminStatus==='removed';
   const date=value=>value?new Intl.DateTimeFormat(lang==='ja'?'ja-JP':'en-US',{dateStyle:'short',timeStyle:'short'}).format(new Date(value)):'—';
-  return `<section class="administration-view"><h1>${t('admin')}</h1><p class="ranking-note">${t('adminHelp')}</p><div class="admin-controls"><label for="admin-search">${t('adminSearch')}<input id="admin-search" type="search" maxlength="100" value="${e(state.adminSearch)}"></label><label for="admin-status">${t('adminStatus')}<select id="admin-status"><option value="listed" ${removed?'':'selected'}>${t('adminListed')}</option><option value="removed" ${removed?'selected':''}>${t('adminRemoved')}</option></select></label><button class="btn ghost small" data-action="admin-refresh" ${state.adminBusyList?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div>${state.adminListError?`<p class="error" role="alert">${e(t(state.adminListError))}</p>`:''}${state.adminBusyList?`<p class="ranking-note" role="status">${t('loading')}</p>`:''}<div class="admin-participants">${participants.map(person=>`<article class="admin-participant"><div class="admin-person-head"><div><h2>${e(person.name)}</h2><small>${e(t('adminUpdated',{date:date(person.updatedAt)}))}</small><small class="admin-person-id">${e(person.id.slice(0,12))}</small></div>${removed?`<span class="pill">${t(person.acknowledged?'noticeRead':'noticeUnread')}</span>`:`<button class="btn danger small" data-action="admin-remove" data-id="${e(person.id)}">${icon('trash')}${t('adminRemove')}</button>`}</div>${removed?`<dl class="admin-messages">${person.messageJa?`<dt>${t('moderationMessageJa')}</dt><dd lang="ja">${e(person.messageJa)}</dd>`:''}${person.messageEn?`<dt>${t('moderationMessageEn')}</dt><dd lang="en">${e(person.messageEn)}</dd>`:''}</dl>`:''}</article>`).join('') || (!state.adminBusyList?`<div class="empty"><p>${t('adminEmpty')}</p></div>`:'')}</div>${data && participants.length<data.total?`<button class="btn ghost" data-action="admin-more" ${state.adminBusyList?'disabled':''}>${t('adminMore')}</button>`:''}</section>`;
+  return `<section class="administration-view"><h1>${t('admin')}</h1><p class="ranking-note">${t('adminHelp')}</p><div class="admin-controls"><label for="admin-search">${t('adminSearch')}<input id="admin-search" type="search" maxlength="100" value="${e(state.adminSearch)}"></label><label for="admin-status">${t('adminStatus')}<select id="admin-status"><option value="listed" ${removed?'':'selected'}>${t('adminListed')}</option><option value="removed" ${removed?'selected':''}>${t('adminRemoved')}</option></select></label><button class="btn ghost small" data-action="admin-refresh" ${state.adminBusyList?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div>${state.adminListError?`<p class="error" role="alert">${e(t(state.adminListError))}</p>`:''}${state.adminBusyList?`<p class="ranking-note" role="status">${t('loading')}</p>`:''}<div class="admin-participants">${participants.map(person=>`<article class="admin-participant"><div class="admin-person-head"><div><h2>${e(person.name)}</h2><small>${e(t('adminUpdated',{date:date(person.updatedAt)}))}</small><small class="admin-person-id">${e(person.id.slice(0,12))}</small></div><div class="admin-person-actions"><button class="btn ghost small" data-action="admin-stats" data-id="${e(person.id)}">${icon('stats')}${t('adminViewStats')}</button>${removed?`<span class="pill">${t(person.acknowledged?'noticeRead':'noticeUnread')}</span>`:`<button class="btn danger small" data-action="admin-remove" data-id="${e(person.id)}">${icon('trash')}${t('adminRemove')}</button>`}</div></div>${removed?`<dl class="admin-messages">${person.messageJa?`<dt>${t('moderationMessageJa')}</dt><dd lang="ja">${e(person.messageJa)}</dd>`:''}${person.messageEn?`<dt>${t('moderationMessageEn')}</dt><dd lang="en">${e(person.messageEn)}</dd>`:''}</dl>`:''}</article>`).join('') || (!state.adminBusyList?`<div class="empty"><p>${t('adminEmpty')}</p></div>`:'')}</div>${data && participants.length<data.total?`<button class="btn ghost" data-action="admin-more" ${state.adminBusyList?'disabled':''}>${t('adminMore')}</button>`:''}</section>`;
+}
+function studyMetricCards(data){
+  const symbols={totalMs:'timer',averageMs:'calendar',answered:'quiz',correct:'check',accuracy:'target',flips:'flip',streak:'flame',longest:'trophy'};
+  return `<div class="stats-grid">${Object.entries(rankingMetrics).map(([metric,key])=>`<article class="stat-card"><h2>${icon(symbols[metric])}${t(key)}</h2><p data-stat="${key}">${e(formatStudyMetric(metric,data[metric]))}</p>${key==='averageTime'?`<small>${t(data.activeDays===1?'averageOneDay':'averageDays',{n:new Intl.NumberFormat(lang).format(data.activeDays)})}</small>`:''}</article>`).join('')}</div>`;
+}
+function administratorStatsView(){
+  const data=state.adminStats,person=data?.participant;
+  const date=person?new Intl.DateTimeFormat(lang,{dateStyle:'medium',timeStyle:'short',timeZone:person.timezone}).format(new Date(person.updatedAt)):'';
+  return `<section class="administration-view admin-stats-view"><div class="actions"><button class="btn ghost small" data-action="admin-stats-back">${icon('back')}${t('adminBack')}</button><button class="btn ghost small" data-action="admin-stats-refresh" ${state.adminStatsBusy?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div><h1>${t('stats')}</h1>${person?`<h2 class="admin-stats-name">${e(person.name)}</h2><p class="ranking-note">${e(t('adminUpdated',{date}))}<br>${e(t('adminStatsTimezone',{timezone:person.timezone}))}</p>`:''}<p class="ranking-note">${t('adminStatsScope')}</p>${state.adminStatsBusy?`<p role="status">${t('loading')}</p>`:''}${state.adminStatsError?`<p class="error" role="alert">${e(t(state.adminStatsError))}</p>`:''}${data?(data.summary?studyMetricCards(data.summary):`<p class="ranking-note">${t('adminStatsUnavailable')}</p>`):''}</section>`;
+}
+let administratorStatsRequest=0;
+async function refreshAdministratorStats(){
+  if(!state.authenticated || !state.adminStatsId)return;
+  const id=state.adminStatsId,request=++administratorStatsRequest;
+  state.adminStats=null;state.adminStatsBusy=true;state.adminStatsError='';render();
+  try{
+    const data=await api('/api/admin/rankings/'+id+'/stats');
+    if(state.authenticated && state.adminStatsId===id && request===administratorStatsRequest)state.adminStats=data;
+  }catch(error){if(request===administratorStatsRequest)state.adminStatsError=messages.en[error.message]?error.message:'networkError';}
+  finally{if(request===administratorStatsRequest){state.adminStatsBusy=false;if(state.route==='admin')render();}}
 }
 let administrationRequest=0;
 async function refreshAdministration(append=false){
@@ -228,11 +249,9 @@ function refreshRankingSettings(){const section=$('#ranking-settings');if(sectio
 let statsRenderedDay;
 function statsView() {
   statsRenderedDay=localDay(Date.now());
-  const data=learning.snapshot(),locale=lang==='ja'?'ja-JP':'en-US',number=value=>new Intl.NumberFormat(locale).format(value);
-  const metricIcons={totalMs:'timer',averageMs:'calendar',answered:'quiz',correct:'check',accuracy:'target',flips:'flip',streak:'flame',longest:'trophy'};
-  const cards=Object.entries(rankingMetrics).map(([metric,key])=>[key,metricIcons[metric],formatStudyMetric(metric,data[metric])]);
+  const data=learning.snapshot(),locale=lang==='ja'?'ja-JP':'en-US';
   const maximum=Math.max(...data.recent.map(day=>day.ms),1),dateFormat=new Intl.DateTimeFormat(locale,{month:'numeric',day:'numeric'});
-  return `<section class="stats-view"><h1>${t('stats')}</h1><p class="stats-note">${t('statsLocal')}</p>${!learning.persistent?`<p class="error" role="status">${t('statsStorageError')}</p>`:''}<div class="stats-grid">${cards.map(([key,symbol,value])=>`<article class="stat-card"><h2>${icon(symbol)}${t(key)}</h2><p data-stat="${key}">${e(value)}</p>${key==='averageTime'?`<small>${t(data.activeDays===1?'averageOneDay':'averageDays',{n:number(data.activeDays)})}</small>`:''}</article>`).join('')}</div><section class="stats-chart" aria-labelledby="recent-time"><h2 id="recent-time">${t('recentTime')}</h2><ol class="stats-bars">${data.recent.map(day=>{const [year,month,date]=day.date.split('-').map(Number),label=dateFormat.format(new Date(year,month-1,date));return `<li><span class="bar-value">${e(formatDuration(day.ms))}</span><span class="bar-track" aria-hidden="true"><span style="height:${day.ms?Math.max(2,day.ms/maximum*100):0}%"></span></span><time datetime="${day.date}">${e(label)}</time></li>`;}).join('')}</ol></section><div class="stats-details"><p>${t('statsTimeRule')}</p><p>${t('statsCountRule')}</p><p>${t('statsStreakRule')}</p></div></section>`;
+  return `<section class="stats-view"><h1>${t('stats')}</h1><p class="stats-note">${t('statsLocal')}</p>${!learning.persistent?`<p class="error" role="status">${t('statsStorageError')}</p>`:''}${studyMetricCards(data)}<section class="stats-chart" aria-labelledby="recent-time"><h2 id="recent-time">${t('recentTime')}</h2><ol class="stats-bars">${data.recent.map(day=>{const [year,month,date]=day.date.split('-').map(Number),label=dateFormat.format(new Date(year,month-1,date));return `<li><span class="bar-value">${e(formatDuration(day.ms))}</span><span class="bar-track" aria-hidden="true"><span style="height:${day.ms?Math.max(2,day.ms/maximum*100):0}%"></span></span><time datetime="${day.date}">${e(label)}</time></li>`;}).join('')}</ol></section><div class="stats-details"><p>${t('statsTimeRule')}</p><p>${t('statsCountRule')}</p><p>${t('statsStreakRule')}</p></div></section>`;
 }
 function guideView() {
   const section=(id,symbol,title,items)=>`<section class="guide-section" aria-labelledby="${id}"><h2 id="${id}">${icon(symbol)}${t(title)}</h2><ul>${items.map(key=>`<li>${e(t(key))}</li>`).join('')}</ul></section>`;
@@ -423,6 +442,7 @@ async function navigate(route, fromHistory=false) {
   const resumeDraft=route==='edit' && state.route!=='edit' && state.dirty && state.draft;
   if(!resumeDraft && !await discardGuard()) { if(fromHistory)history.pushState(null,'',routeHref(state.route));return; }
   if(state.screen==='quiz' && !await confirmDialog('quitTitle',t('quitHelp'),'confirmQuit')) { if(fromHistory)history.pushState(null,'',routeHref(state.route));return; }
+  if(route!==state.route){administratorStatsRequest++;state.adminStatsId=null;state.adminStats=null;state.adminStatsBusy=false;state.adminStatsError='';}
   state.route=route;state.collection=null;state.screen='home';state.quiz=null;state.cards=null;if(!resumeDraft){state.dirty=false;state.draft=null;state.error='';}
   if(!fromHistory)history.pushState(null,'',routeHref(route));
   render();window.scrollTo(0,0);
@@ -635,6 +655,9 @@ const actions={
   'admin-refresh':()=>refreshAdministration(),
   'admin-more':()=>refreshAdministration(true),
   'admin-remove':removeRankingParticipant,
+  'admin-stats':button=>{if(!state.authenticated || state.route!=='admin')return;state.adminStatsId=button.dataset.id;return refreshAdministratorStats();},
+  'admin-stats-refresh':()=>refreshAdministratorStats(),
+  'admin-stats-back':()=>{administratorStatsRequest++;state.adminStats=null;state.adminStatsId=null;state.adminStatsBusy=false;state.adminStatsError='';render();},
   'ranking-refresh':()=>refreshRankings(),
   'library-tab'(button){state.libraryTab=button.dataset.tab;state.listLimit=100;state.collection=null;render();},
   'weak-scope'(button){state.weakScope=button.dataset.scope;state.listLimit=100;render();},
@@ -683,7 +706,7 @@ const actions={
   async 'remove-word'(button){if(!await confirmDialog('removeTitle',t('removeHelp'),'remove',true))return;state.draft.words.splice(Number(button.dataset.index),1);markDirty();render();},
   async save(){if(state.saving)return;try{const data=validateSet(state.draft);state.saving=true;state.error='';render();let saved;if(state.draft.id){saved=(await api(`/api/sets/${state.draft.id}`,{method:'PUT',body:JSON.stringify({...data,revision:state.draft.revision})})).set;state.sets=state.sets.map(s=>s.id===saved.id?saved:s);}else{const response=await api('/api/sets',{method:'POST',body:JSON.stringify(data)});saved=response.sets[0];state.sets.unshift(saved);synchronizeSetOrder(response);}state.draft=structuredClone(saved);state.dirty=false;toast(t('saved'));}catch(err){state.error=message(err);}finally{state.saving=false;render();}},
   async delete(){const draft=state.draft;if(!await confirmDialog('deleteTitle',t('deleteHelp',{title:draft.title}),'delete',true))return;state.saving=true;render();try{await deleteSavedSet(draft);}catch(err){state.error=message(err);}finally{state.saving=false;render();}},
-  async logout(){if(!await discardGuard())return;try{await api('/api/logout',{method:'POST'});state.authenticated=false;state.adminData=null;state.draft=null;state.dirty=false;state.error='';render();}catch(err){toast(message(err));}},
+  async logout(){if(!await discardGuard())return;try{await api('/api/logout',{method:'POST'});state.authenticated=false;state.adminData=null;state.adminStats=null;state.adminStatsId=null;state.draft=null;state.dirty=false;state.error='';render();}catch(err){toast(message(err));}},
   import:importDialog,
   export:exportDialog,
 };

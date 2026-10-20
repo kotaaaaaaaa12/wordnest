@@ -1,7 +1,13 @@
 export const messages = {
   en: {
+    adminViewStats:"View statistics",
+    adminBack:"Back to participants",
+    adminStatsTimezone:"Participant timezone: {timezone}",
+    adminStatsScope:"Administrator-only view of the latest records synced for rankings. Records stored only on a participant’s device are not available.",
+    adminStatsUnavailable:"Published records have been deleted or participation is disabled. Local learning records cannot be viewed here.",
+
     admin:"Administration",
-    adminHelp:"Manage ranking participants and send a private removal notice.",
+    adminHelp:"Search ranking participants, view their synced statistics, and manage private removal notices.",
     adminSearch:"Search display names",
     adminStatus:"Participant status",
     adminListed:"Listed",
@@ -29,7 +35,7 @@ export const messages = {
     noticeUnread:"Not yet acknowledged",
     rankingNoticeRequired:"Acknowledge the removal notice before participating again.",
     rankingNameUnchanged:"Choose a different display name from the one that was removed. Changes only to spacing, letter case, or character width do not count.",
-    guideAdministration:"Administration is visible only after entering the administrator password in Settings. Search listed or removed ranking participants. To remove someone, enter a private notice in Japanese, English, or both and confirm the participant. Removed users must acknowledge the notice and choose a different name before rejoining. Their local learning data remains available.",
+    guideAdministration:"Administration is visible only after entering the administrator password in Settings. Search listed or removed ranking participants. View statistics opens the eight synced learning measures for administrators only. Records stored only on a participant’s device are unavailable. To remove someone, enter a private notice in Japanese, English, or both and confirm the participant. Removed users must acknowledge the notice and choose a different name before rejoining. Their local learning data remains available.",
 
     rankings:"Rankings",
     rankingAs:"Listed as {name}",
@@ -191,8 +197,14 @@ export const messages = {
     eyebrow:'YOUR DAILY WORDS', headline:'Small steps.\nStronger vocabulary.', intro:'Choose a set, find your rhythm, and make those words yours.', library:'Your word sets', setsCount:'{n} sets', wordsCount:'{n} words', search:'Search word sets', noResults:'No matching word sets.', empty:'No word sets yet', emptyHelp:"Word sets will appear here once available.", openSet:'Practice this set', export:'Export', import:'Import', selectAll:'Select all', clearSelection:'Clear selection', selected:'{n} selected', exportSelected:'Export selected', selectionHelp:'Select one set for JSON, or several for a ZIP.', footer:'One word at a time.', loading:'Loading your word sets…', retry:'Try again', back:'Back', chooseMode:'How do you want to practice?', modeHelp:'Two ways to make the words stick.', choice:'Multiple choice', choiceHelp:'Read the English word. Choose its meaning.', typing:'Type the word', typingHelp:'Read the meaning. Write the English word.', chooseCount:'Question count', countHelp:'How many questions would you like?', all:'All', custom:'Custom', questions:'questions', available:'{n} unique questions available', start:'Start practice', countLabel:'Number of questions', invalidCount:'Enter a whole number from 1 to {n}.', needFour:"Multiple choice requires three distinct incorrect meanings.", questionOf:'Question {n} of {total}', correctCount:'{n} correct', quit:'End practice', quitTitle:'End this practice?', quitHelp:'Your current answers will not be kept.', cancel:'Cancel', confirmQuit:'Return home', meaningPrompt:'Choose the meaning', englishPrompt:'Type the English word', answerPlaceholder:'Your answer', check:'Check answer', skip:'I don’t know', next:'Next question', results:'See results', correct:'Correct', incorrect:'Incorrect', correctAnswer:'Correct answer', yourAnswer:'Your answer', skipped:'Skipped', explanation:'Explanation', perfect:'Perfect score', completed:'Results', perfectHelp:'A perfect score. Enjoy the moment!', completedHelp:'Every attempt is a step forward. Keep going.', score:'{n} of {total} correct', review:'Your practice, in review', again:'Practice again', returnHome:'Return home', word:'English word', meaning:'Meaning', optional:'Optional', title:'Set title', newSet:'New set', editTitle:'Edit word sets', editIntro:'Build your own word sets. Keep them clear, useful, and yours.', loginTitle:'Unlock editor', loginHelp:'Enter the editing password to manage shared word sets on this browser.', password:'Editing password', login:'Unlock editor', passwordSetup:'Set an ADMIN_PASSWORD secret of at least 12 characters in Cloudflare to enable editing.', logout:'Lock editor', unlocked:'Editor unlocked', sessionNote:'This browser stays signed in for up to 30 days.', save:'Save changes', saved:'Saved. Your word set is ready.', unsaved:'Unsaved changes', unsavedTitle:'Leave without saving?', unsavedHelp:'Your latest edits have not been saved.', discard:'Discard changes', keepEditing:'Keep editing', addWord:'Add word', removeWord:'Remove word', deleteSet:'Delete set', deleteTitle:'Delete this word set?', deleteHelp:'“{title}” will be removed from shared storage. Export a copy first if you want a backup.', delete:'Delete', newTitle:'Untitled word set', editorEmpty:"Choose a set to edit, or create or import one using the buttons above.", importTitle:'Import word sets', importHelp:'Choose JSON files or a ZIP containing JSON files. Imported sets are added as new copies; existing sets stay as they are.', chooseFiles:'Choose files', importReady:'{n} sets · {words} words', importConfirm:'Import {n} sets', importDone:'Imported {n} word sets.', exportDone:'Download ready.', invalidTitle:'Use a title between 1 and 150 characters.', invalidWords:'Add 1–1,000 complete words. English: up to 150 characters. Meaning: up to 300. Explanation: up to 2,000.', duplicateWord:'Each English word may appear only once in a set.', invalidImport:'The file does not contain valid word sets.', invalidMode:'Choose a practice mode.', tooLarge:'Keep the total imported JSON below 2 MB (ZIP files below 8 MB).', setLimit:'Shared storage supports up to 200 word sets.', wrongPassword:'That password is not correct.', unauthorized:'Your editing session ended. Unlock the editor again.', tooManyAttempts:'Too many attempts. Wait 15 minutes and try again.', conflict:'This set changed on another browser. Export your current draft, then reload before editing again.', serverError:'Something went wrong while saving or loading. Please try again.', databaseMissing:'The D1 database is not connected. Check the DB binding in Cloudflare.', networkError:'Could not connect. Check your connection and try again.', forbidden:'This request is not allowed.', notFound:'This item is no longer available.', jsonRequired:'A JSON request is required.', methodNotAllowed:'This action is not supported.', wordNumber:'Word {n}', setTitlePlaceholder:'e.g. English words 1–50', englishPlaceholder:'e.g. achieve', meaningPlaceholder:'e.g. 達成する', explanationPlaceholder:'Example sentence, usage note, or memory tip', importPreview:'Preview', importing:'Importing…', saving:'Saving…', close:'Close', reload:'Reload', draftExport:"Export draft", homeCount:'Ready for a little progress?', step:'Step {n} of 3', chooseSet:'Choose a word set', correctLabel:'Correct', incorrectLabel:'Incorrect', removeTitle:'Remove this word?', removeHelp:'This word will be removed from the draft. Save changes to apply it.', remove:'Remove', importSelect:'Choose at least one set to import.', fileHint:'JSON / ZIP · multiple files supported', selection:'Select {title}', refresh:'Refresh sets', importedSelection:'Select the sets you want to import.', missingSounds:'Sound files are optional; add them to assets/audio.',
   },
   ja: {
+    adminViewStats:"学習記録を見る",
+    adminBack:"参加者一覧に戻る",
+    adminStatsTimezone:"参加者のタイムゾーン：{timezone}",
+    adminStatsScope:"管理者限定で、ランキング用に最後に同期された記録を表示します。参加者の端末内だけに保存されている記録は確認できません。",
+    adminStatsUnavailable:"公開用の記録が削除されたか、ランキングへの参加が無効になっています。端末内の学習記録はここでは確認できません。",
+
     admin:"管理",
-    adminHelp:"ランキング参加者の削除と、本人への通知を管理できます。",
+    adminHelp:"ランキング参加者を検索し、同期済みの学習記録の確認や、削除と本人への通知を管理できます。",
     adminSearch:"掲載名を検索",
     adminStatus:"参加者の状態",
     adminListed:"掲載中",
@@ -220,7 +232,7 @@ export const messages = {
     noticeUnread:"未確認",
     rankingNoticeRequired:"削除通知を確認してから、再参加してください。",
     rankingNameUnchanged:"削除時とは異なる掲載名を入力してください。空白・大文字と小文字・全角と半角だけの変更は、名前の変更として扱いません。",
-    guideAdministration:"設定で管理者パスワードを入力すると、管理タブが表示されます。ランキングの掲載中・削除済みの参加者を検索できます。削除する際は、日本語・英語の片方または両方で本人向けの通知文を入力し、対象者を確認して確定します。本人は通知を確認し、別の掲載名を登録すると再参加できます。端末内の学習データは保持されます。",
+    guideAdministration:"設定で管理者パスワードを入力すると、管理タブが表示されます。ランキングの掲載中・削除済みの参加者を検索できます。「学習記録を見る」から、管理者限定で同期済みの8項目を確認できます。参加者の端末内だけにある記録は取得できません。削除する際は、日本語・英語の片方または両方で本人向けの通知文を入力し、対象者を確認して確定します。本人は通知を確認し、別の掲載名を登録すると再参加できます。端末内の学習データは保持されます。",
 
     rankings:"ランキング",
     rankingAs:"掲載名：{name}",
