@@ -55,5 +55,27 @@ test('combined English prompts appear once and other valid senses never become d
   const bank=[...first.words,...second.words,{english:'run',meaning:'流れる'},{english:'read',meaning:'読む'},{english:'eat',meaning:'食べる'},{english:'sleep',meaning:'眠る'}];
   const meanings=bank.map(word=>word.meaning),quiz=quizFromPool(pool,'en-ja',1,meanings,bank);
   assert.equal(quiz[0].options.length,4);assert.deepEqual(quiz[0].options.filter(option=>option!==quiz[0].answer).sort(),['読む','食べる','眠る'].sort());
-  assert.equal(canMultipleChoice(pool,meanings.slice(0,4),bank),false);
+  assert.equal(canMultipleChoice(pool,meanings.slice(0,4),bank.slice(0,4)),false);
+  assert.equal(canMultipleChoice(pool,[pool[0].answer],bank),true);
+});
+
+test('one difficult word uses its complete original set for all three distractors',()=>{
+  const personal=new PersonalWords(storage()),target=sourceQuestions([set],'en-ja')[0];personal.answer(target.sources,false);personal.answer(target.sources,false);
+  const unrelated={id:'other',title:'Other',words:[{english:'red',meaning:'赤い'},{english:'blue',meaning:'青い'},{english:'green',meaning:'緑の'},{english:'yellow',meaning:'黄色い'}]};
+  const sets=[set,unrelated],pool=collectionQuestions(sets,'en-ja',{kind:'weak',record:key=>personal.record(key)}),bank=sets.flatMap(source=>source.words.map(word=>catalogWord(source,word)));
+  assert.equal(pool.length,1);assert.equal(canMultipleChoice(pool,pool.map(q=>q.answer),bank),true);
+  for(let i=0;i<40;i++){
+    const questions=quizFromPool(pool,'en-ja',1,pool.map(q=>q.answer),bank);assert.equal(questions.length,1);assert.equal(questions[0].prompt,'start');
+    assert.deepEqual(questions[0].options.filter(option=>option!==questions[0].answer).sort(),['終える','走る','読む'].sort());assert.deepEqual(questions[0].sources,pool[0].sources);
+  }
+});
+test('each combined question uses its own source set; small sets fall back only as needed',()=>{
+  const other={id:'other',title:'Other',words:[{english:'red',meaning:'赤い'},{english:'blue',meaning:'青い'},{english:'green',meaning:'緑の'},{english:'yellow',meaning:'黄色い'}]},sets=[set,other];
+  const personal=new PersonalWords(storage());for(const source of sets){const q=sourceQuestions([source],'en-ja')[0];personal.answer(q.sources,false);personal.answer(q.sources,false);}
+  const bank=sets.flatMap(source=>source.words.map(word=>catalogWord(source,word))),pool=collectionQuestions(sets,'en-ja',{kind:'weak',record:key=>personal.record(key)});
+  for(const q of quizFromPool(pool,'en-ja',2,[],bank)){const source=sets.find(source=>source.id===q.sources[0].setId);assert.ok(q.options.every(option=>source.words.some(word=>word.meaning===option)));}
+  const tiny={id:'tiny',title:'Tiny',words:set.words.slice(0,3)},smallPool=sourceQuestions([tiny],'en-ja').slice(0,1),smallBank=[tiny,other].flatMap(source=>source.words.map(word=>catalogWord(source,word)));
+  const q=quizFromPool(smallPool,'en-ja',1,[],smallBank)[0];assert.equal(q.options.length,4);assert.ok(q.options.includes('終える'));assert.equal(q.options.filter(option=>other.words.some(word=>word.meaning===option)).length,2);
+  assert.equal(canMultipleChoice(smallPool,[],tiny.words),false);assert.throws(()=>quizFromPool(smallPool,'en-ja',1,[],tiny.words),/needFour/);
+  assert.equal(quizFromPool(sourceQuestions([tiny],'ja-en').slice(0,1),'ja-en',1,[],tiny.words).length,1);
 });

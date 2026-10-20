@@ -2,7 +2,7 @@ import { RankingClient, rankingMetrics } from './rankings.js';
 import { PersonalWords, wordIdentity, catalogWord, findCatalogWord, sourceQuestions, collectionQuestions, canMultipleChoice, quizFromPool, collectionCards } from './personal.js';
 import { LearningTracker, localDay } from './stats.js';
 import { icon } from './icons.js';
-import { normalize, studyKey, studyStatus, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, isCorrect, portable, parseImport } from './core.js';
+import { normalize, studyKey, studyStatus, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, balanceAnswerPositions, isCorrect, portable, parseImport } from './core.js';
 import { messages, translator } from './i18n.js';
 import { zipSync, unzipSync, strToU8, strFromU8 } from './vendor/fflate.js';
 const $ = (s, root = document) => root.querySelector(s);
@@ -261,7 +261,7 @@ function statsView() {
 }
 function guideView() {
   const section=(id,symbol,title,items)=>`<section class="guide-section" aria-labelledby="${id}"><h2 id="${id}">${icon(symbol)}${t(title)}</h2><ul>${items.map(key=>`<li>${e(t(key))}</li>`).join('')}</ul></section>`;
-  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-personal','star','personalTools',['guideWeak','guideWeakRecovery','guideFavorites','guideSearch','guidePersonalStorage'])}${section('guide-records','stats','stats',['guideStats','statsTimeRule','statsCountRule','statsStreakRule'])}${section('guide-rankings','trophy','rankings',['guideRankings','rankingAccuracyRule','guideRankingPrivacy'])}${section('guide-settings','settings','settings',['guideSettings','guideDeleteData','guideSounds'])}${state.authenticated?section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideTransfers','guideEditShared'])+section('guide-admin','settings','admin',['guideAdministration']):''}</article>`;
+  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-personal','star','personalTools',['guideWeak','guideChoiceOptions','guideWeakRecovery','guideFavorites','guideSearch','guidePersonalStorage'])}${section('guide-records','stats','stats',['guideStats','statsTimeRule','statsCountRule','statsStreakRule'])}${section('guide-rankings','trophy','rankings',['guideRankings','rankingAccuracyRule','guideRankingPrivacy'])}${section('guide-settings','settings','settings',['guideSettings','guideDeleteData','guideSounds'])}${state.authenticated?section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideTransfers','guideEditShared'])+section('guide-admin','settings','admin',['guideAdministration']):''}</article>`;
 }
 function readStudyProgress() {
   try { const value=JSON.parse(storage.get('wordnest-progress','{}'));return value && typeof value==='object' && !Array.isArray(value)?value:{}; } catch { return {}; }
@@ -283,7 +283,7 @@ function libraryTabs() {
   return `<nav class="library-tabs" aria-label="${t('studyTools')}">${[['sets','setsTab'],['weak','weakWords'],['favorites','favorites'],['words','wordSearch']].map(([tab,label])=>`<button data-action="library-tab" data-tab="${tab}" aria-pressed="${state.libraryTab===tab}">${t(label)}</button>`).join('')}</nav>`;
 }
 function home() { return `${libraryTabs()}${state.libraryTab!=='sets' && !personal.persistent?`<p class="error" role="status">${t('personalStorageError')}</p>`:''}${state.libraryTab==='weak'?weakView():state.libraryTab==='favorites'?favoritesView():state.libraryTab==='words'?wordSearchView():setsView()}`; }
-function globalWordBank() {return state.sets.flatMap(set=>set.words);}
+function globalWordBank() {return state.sets.flatMap(set=>set.words.map(({english,meaning})=>({english,meaning,setId:set.id})));}
 function globalMeanings() { return [...new Map(state.sets.flatMap(set=>set.words.map(word=>[normalize(word.meaning),word.meaning]))).values()]; }
 function activeTitle() {return state.collection?t(state.collection.kind==='weak'?'weakWords':'favorites'):currentSet()?.title || '';}
 function activePool(mode=state.mode) {return state.collection?state.collection.pools[mode] || []:sourceQuestions([currentSet()],mode);}
@@ -700,7 +700,8 @@ const actions={
     const previous=state.quiz;if(state.screen!=='result' || !previous)return;
     const missed=previous.questions.filter((_,index)=>previous.answers[index] && !previous.answers[index].correct);
     if(!missed.length)return;
-    const questions=shuffle(missed).map(question=>({...structuredClone(question),options:shuffle(question.options)}));
+    const retryPool=shuffle(missed).map(question=>structuredClone(question));
+    const questions=previous.mode==='en-ja'?balanceAnswerPositions(retryPool):retryPool;
     state.quiz={origin:previous.origin,setId:previous.setId,setKey:previous.setKey,allSelected:previous.allSelected,title:previous.title,mode:previous.mode,questions,index:0,answers:[],typed:'',isRetry:true};
     state.screen='quiz';state.error='';startQuestionClock();render();window.scrollTo(0,0);
   },

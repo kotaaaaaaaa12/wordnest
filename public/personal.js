@@ -1,4 +1,4 @@
-import { normalize, questionPool, shuffle } from './core.js';
+import { normalize, questionPool, shuffle, balanceAnswerPositions } from './core.js';
 const PREFIX='wordnest-personal-v1:';
 // Keep storage keys bounded even when a question has many accepted answers.
 function keyToken(value) {
@@ -41,18 +41,31 @@ export function collectionQuestions(sets,mode,{kind,selectedIds,favorite,record}
   return mergeQuestions(pool,mode);
 }
 function choiceBank(meanings,words) {
-  const meaningsByKey=new Map(meanings.map(meaning=>[normalize(meaning),meaning])),byEnglish=new Map();
-  for(const word of words){const key=normalize(word.english);if(!byEnglish.has(key))byEnglish.set(key,new Set());byEnglish.get(key).add(normalize(word.meaning));}
-  return {meaningsByKey,entries:[...meaningsByKey],byEnglish};
+  // Source words provide candidates even when the practice pool contains only one word.
+  const meaningsByKey=new Map([...meanings,...words.map(word=>word.meaning)].map(meaning=>[normalize(meaning),meaning])),byEnglish=new Map(),bySet=new Map();
+  for(const word of words){
+    const key=normalize(word.english);if(!byEnglish.has(key))byEnglish.set(key,new Set());byEnglish.get(key).add(normalize(word.meaning));
+    if(word.setId){if(!bySet.has(word.setId))bySet.set(word.setId,new Map());bySet.get(word.setId).set(normalize(word.meaning),word.meaning);}
+  }
+  return {meaningsByKey,entries:[...meaningsByKey],byEnglish,bySet};
 }
 function validMeanings(question,bank) {return new Set([normalize(question.answer),...(question.meanings || []).map(normalize),...(bank.byEnglish.get(normalize(question.prompt)) || [])]);}
 function hasChoices(pool,bank) {return pool.length>0 && pool.every(question=>bank.entries.length-[...validMeanings(question,bank)].filter(key=>bank.meaningsByKey.has(key)).length>=3);}
 function sampleIncorrect(question,bank) {
   const valid=validMeanings(question,bank),chosen=new Map();
-  const add=index=>{const [key,value]=bank.entries[index];if(!valid.has(key))chosen.set(key,value);};
-  for(let i=0;i<24 && chosen.size<3;i++)add(Math.floor(Math.random()*bank.entries.length));
-  const offset=Math.floor(Math.random()*bank.entries.length);
-  for(let i=0;i<bank.entries.length && chosen.size<3;i++)add((offset+i)%bank.entries.length);
+  const draw=entries=>{
+    if(!entries.length)return;
+    const add=index=>{const [key,value]=entries[index];if(!valid.has(key))chosen.set(key,value);};
+    for(let i=0;i<24 && chosen.size<3;i++)add(Math.floor(Math.random()*entries.length));
+    const offset=Math.floor(Math.random()*entries.length);
+    for(let i=0;i<entries.length && chosen.size<3;i++)add((offset+i)%entries.length);
+  };
+  const ids=new Set([...(question.sources || []).map(source=>source.setId),...(question.wordRefs || []).map(word=>word.setId)]);
+  const sourceEntries=new Map();
+  for(const id of ids)for(const [key,value] of bank.bySet.get(id) || [])sourceEntries.set(key,value);
+  draw([...sourceEntries]);
+  // Very small source sets may need additional meanings from the rest of the library.
+  if(chosen.size<3)draw(bank.entries);
   return [...chosen.values()];
 }
 export function canMultipleChoice(pool,meanings,words=[]) {return hasChoices(pool,choiceBank(meanings,words));}
@@ -60,7 +73,8 @@ export function quizFromPool(pool,mode,count,meanings,words=[]) {
   if(!Number.isInteger(count) || count<1 || count>pool.length)throw new Error('invalidCount');
   const bank=mode==='en-ja'?choiceBank(meanings,words):null;
   if(bank && !hasChoices(pool,bank))throw new Error('needFour');
-  return shuffle(pool).slice(0,count).map(question=>({...structuredClone(question),options:mode==='en-ja'?shuffle([question.answer,...sampleIncorrect(question,bank)]):[]}));
+  const questions=shuffle(pool).slice(0,count).map(question=>({...structuredClone(question),options:mode==='en-ja'?[question.answer,...sampleIncorrect(question,bank)]:[]}));
+  return mode==='en-ja'?balanceAnswerPositions(questions):questions;
 }
 export function collectionCards(words,mode,order) {
   let cards;

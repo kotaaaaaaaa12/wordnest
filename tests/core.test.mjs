@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { studyKey, studyStatus, createQuiz, createFlashcards, isCorrect, normalize, questionPool, validateSet, parseImport, portable } from '../public/core.js';
+import { balanceAnswerPositions, studyKey, studyStatus, createQuiz, createFlashcards, isCorrect, normalize, questionPool, validateSet, parseImport, portable } from '../public/core.js';
 import { messages } from '../public/i18n.js';
 import { seed } from './fixture.js';
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate';
@@ -9,6 +9,7 @@ test('all question counts are unique and contain exactly four distinct answer ch
     const questions=createQuiz(seed,'en-ja',count);
     assert.equal(questions.length,count);
     assert.equal(new Set(questions.map(q=>normalize(q.prompt))).size,count);
+    const positions=[0,0,0,0];for(const q of questions)positions[q.options.indexOf(q.answer)]++;assert.ok(Math.max(...positions)-Math.min(...positions)<=1);
     for(const q of questions){assert.equal(q.options.length,4);assert.equal(new Set(q.options.map(normalize)).size,4);assert.equal(q.options.filter(o=>normalize(o)===normalize(q.answer)).length,1);assert.ok(q.options.every(o=>seed.words.some(w=>w.meaning===o)));}
   }
 });
@@ -71,4 +72,19 @@ test('clear status follows quiz content and preserves independent direction flag
   assert.notEqual(studyKey({...set,words:set.words.slice(1)}),key);
   assert.equal(studyStatus({...set,id:'imported-copy'},progress),'none');
   assert.equal(studyStatus(set,{[set.id]:{key,scope:'all-first-pass','en-ja':'true'}}),'none');
+});
+
+test('balanced choices randomize remainder positions and order without mutating input',()=>{
+  let state=123456789;const random=()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296;};
+  const single=[{prompt:'word',answer:'correct',options:['correct','one','two','three']}],singlePositions=[0,0,0,0];
+  for(let round=0;round<10000;round++){const q=balanceAnswerPositions(single,random)[0];singlePositions[q.options.indexOf(q.answer)]++;}
+  assert.ok(singlePositions.every(count=>count>2200 && count<2800),JSON.stringify(singlePositions));assert.deepEqual(single[0].options,['correct','one','two','three']);
+  const sequences=new Set();
+  for(let count=1;count<=50;count++){
+    const input=Array.from({length:count},(_,i)=>({...single[0],prompt:String(i),options:[...single[0].options]})),original=structuredClone(input),positions=[0,0,0,0];
+    const round=balanceAnswerPositions(input,random);for(const q of round){assert.equal(new Set(q.options).size,4);assert.equal(q.options.length,4);positions[q.options.indexOf(q.answer)]++;}
+    assert.ok(Math.max(...positions)-Math.min(...positions)<=1);assert.deepEqual(input,original);assert.deepEqual(round.map(q=>q.prompt),input.map(q=>q.prompt));
+    if(count===4)for(let i=0;i<20;i++)sequences.add(balanceAnswerPositions(input,random).map(q=>q.options.indexOf(q.answer)).join(''));
+  }
+  assert.ok(sequences.size>5,'complete position sequences vary between rounds');
 });

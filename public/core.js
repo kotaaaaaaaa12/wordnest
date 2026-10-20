@@ -7,6 +7,16 @@ export function shuffle(values, random = Math.random) {
   }
   return result;
 }
+// Keep the correct positions balanced over a round, without a fixed repeating order.
+export function balanceAnswerPositions(questions, random = Math.random) {
+  const labels=shuffle([0,1,2,3],random);
+  const positions=shuffle(questions.map((_,index)=>labels[index%4]),random);
+  return questions.map((question,index)=>{
+    const options=shuffle(question.options.filter(option=>normalize(option)!==normalize(question.answer)),random);
+    options.splice(positions[index],0,question.answer);
+    return {...question,options};
+  });
+}
 export function validateSet(input) {
   if (!input || typeof input !== 'object' || typeof input.title !== 'string' || !input.title.trim() || input.title.trim().length > 150) throw new Error('invalidTitle');
   if (!Array.isArray(input.words) || !input.words.length || input.words.length > 1000) throw new Error('invalidWords');
@@ -41,7 +51,8 @@ export function createQuiz(set, mode, count) {
   if (!Number.isInteger(count) || count < 1 || count > pool.length) throw new Error('invalidCount');
   const meanings = uniqueMeanings(set);
   if (mode === 'en-ja' && meanings.length < 4) throw new Error('needFour');
-  return shuffle(pool).slice(0, count).map(q => ({ ...q, options: mode === 'en-ja' ? shuffle([q.answer, ...shuffle(meanings.filter(m => normalize(m) !== normalize(q.answer))).slice(0, 3)]) : [] }));
+  const questions=shuffle(pool).slice(0,count).map(q=>({...q,options:mode==='en-ja'?[q.answer,...shuffle(meanings.filter(m=>normalize(m)!==normalize(q.answer))).slice(0,3)]:[]}));
+  return mode==='en-ja'?balanceAnswerPositions(questions):questions;
 }
 export function createFlashcards(set, mode, order = 'original') {
   if (!['en-ja', 'ja-en'].includes(mode)) throw new Error('invalidMode');

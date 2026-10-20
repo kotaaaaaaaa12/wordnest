@@ -14,7 +14,7 @@ async function api(mf,path,method='GET',body,token){const response=await mf.disp
 test('D1 rankings match all eight local Statistics measures, enforce 30 answers, ties, top 100, ownership, resets, and opt-out',async()=>{
   const mf=instance(),storage=memoryStorage(),today=localDay(Date.now()),yesterday=localDay(Date.now()-86400000),old=localDay(Date.now()-5*86400000);
   const days={[today]:{ms:60000,answered:20,correct:15,flips:3},[yesterday]:{ms:120000,answered:9,correct:5,flips:2},[old]:{ms:30000,answered:0,correct:0,flips:0}};
-  storage.setItem('wordnest-learning-v1:historical',JSON.stringify({version:1,days:Object.fromEntries(Object.entries(days).map(([day,data])=>[day,{...data,intervals:[[Date.parse(day+'T00:00:00Z'),Date.parse(day+'T00:00:00Z')+data.ms]]}]))}));
+  storage.setItem('wordnest-learning-v1:historical',JSON.stringify({version:1,days:Object.fromEntries(Object.entries(days).map(([day,data])=>{const [year,month,date]=day.split('-').map(Number),start=new Date(year,month-1,date).getTime();return [day,{...data,intervals:[[start,start+data.ms]]}];}))}));
   const tracker=new LearningTracker({storage,id:'current'}),ranking=client(mf,storage,tracker);
   try{
     await ranking.join('Learner');const prefs=ranking.preferences(),token=prefs.token;assert.equal(token.length,64);assert.notEqual(prefs.id,token);

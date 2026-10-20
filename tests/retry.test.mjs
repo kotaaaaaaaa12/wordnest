@@ -51,12 +51,14 @@ test('both quiz directions retry only incorrect, skipped, and timed-out question
       }
       assert.equal(find('.score-number').textContent.trim(),'2 / 5');assert.equal(core.studyStatus(studySet,savedProgress()),'none');assert.ok(find('[data-action="retry-mistakes"]').textContent.includes('3'));assert.equal(celebrations,round);
       await click('[data-action="retry-mistakes"]');assert.equal(find('.timer-seconds').textContent,'15s');assert.equal(find('.feedback'),null);assert.equal(intervals.size,1);
-      const seen=[];let lastMissed;
+      const seen=[],retryPositions=[0,0,0,0];let lastMissed;
       for(let i=0;i<3;i++){
         seen.push(prompt());if(i===2)lastMissed=prompt();
         if(mode==='en-ja')assert.deepEqual([...w.document.querySelectorAll('.option')].map(b=>b.textContent.slice(1)).sort(),choices.get(prompt()));
+        if(mode==='en-ja'){const answer=studySet.words.find(word=>word.english===prompt()).meaning;retryPositions[[...w.document.querySelectorAll('.option')].findIndex(option=>option.textContent.slice(1)===answer)]++;}
         await answer(mode,i<2);await click('[data-action="next"]');
       }
+      if(mode==='en-ja')assert.ok(Math.max(...retryPositions)-Math.min(...retryPositions)<=1);
       assert.deepEqual([...seen].sort(),[...missed].sort());assert.equal(new Set(seen).size,3);assert.equal(find('.score-number').textContent.trim(),'2 / 3');assert.ok(find('[data-action="retry-mistakes"]').textContent.includes('1'));
       await click('[data-action="retry-mistakes"]');assert.equal(prompt(),lastMissed);assert.equal(find('.timer-seconds').textContent,'15s');if(mode==='en-ja')assert.equal(w.document.querySelectorAll('.option').length,4);await answer(mode);await click('[data-action="next"]');
       assert.equal(find('.score-number').textContent.trim(),'1 / 1');assert.equal(find('[data-action="retry-mistakes"]'),null);assert.equal(celebrations,round+1);assert.equal(intervals.size,0);await click('[data-action="back-home"]');
