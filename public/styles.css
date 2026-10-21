@@ -72,3 +72,5 @@ select:focus,select:focus-visible,select:active{border-color:var(--line);outline
 @media(max-width:760px){.study-calendar{padding:18px 13px}.calendar-layout{grid-template-columns:minmax(0,1fr);gap:20px}.calendar-day{aspect-ratio:1.25;min-height:38px}.calendar-detail{padding:16px}.cards-resume{padding:17px;gap:14px}.cards-resume .btn{width:100%;justify-content:center}.calendar-heading{gap:8px}.calendar-heading h2{font-size:15px}}
 
 .admin-stats-view.stats-view{max-width:1000px}
+
+.editor-empty{align-self:start;margin:0;padding:12px 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--muted);font-size:12px;font-weight:400;line-height:1.8;overflow-wrap:anywhere}

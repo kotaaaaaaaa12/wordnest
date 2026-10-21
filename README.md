@@ -358,3 +358,7 @@ Participant actions use consistent columns for View statistics and the removal b
 Administrator learner details now reuse the personal Statistics chart and calendar components. The authenticated detail API returns validated day totals and the learner's current calendar date alongside the existing summary. Both the seven-day chart and calendar use that learner's timezone; viewing from another timezone does not move their recorded dates. Private and removed learners remain accessible only with an administrator session. Public ranking APIs and their privacy rules are unchanged.
 
 Personal and administrator calendar selections are independent. Refreshing a learner's history preserves its selected month/date when valid; opening a different learner resets the administrator selection. No-history profiles show seven zero-day bars and an empty current-month calendar. Session expiry clears loaded learner details. The calendar's Today shortcut and its Guide references have been removed in both languages; month navigation remains. No database migration is needed.
+
+## Compact editor guidance (version 1.15.1)
+
+When no word set is selected, the editor displays a compact, top-aligned 12px guidance note with modest padding. It no longer stretches the general empty-state panel to match the word-set list height. English and Japanese guidance and editor actions are unchanged.
