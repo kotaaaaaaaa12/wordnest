@@ -116,3 +116,46 @@ export class PersonalWords {
   favorite(key){return this.read('favorite',key)?.on===true;}
   toggleFavorite(key){const on=!this.favorite(key);this.write('favorite',key,{on});return on;}
 }
+
+const CARD_PREFIX='wordnest-cards-v1:';
+const cardIdentity=card=>keyToken(JSON.stringify([card.front,card.back,card.explanation || '',(card.wordRefs || []).map(word=>[word.setId,word.english,word.meaning]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))]));
+export class FlashcardBookmarks {
+  constructor(storage){this.storage=storage;this.pending=new Map();this.epoch=this.readEpoch();this.persistent=Boolean(storage);}
+  readEpoch(){try{return this.storage?.getItem('wordnest-reset-cards') || '';}catch{return this.epoch || '';}}
+  syncReset(){const epoch=this.readEpoch();if(epoch!==this.epoch){this.epoch=epoch;this.pending.clear();}}
+  read(context){
+    this.syncReset();const key=CARD_PREFIX+keyToken(context);let value,raw;
+    try{value=this.pending.get(key);if(!value)raw=this.storage?.getItem(key);}catch{this.persistent=false;return null;}
+    if(!value)try{value=JSON.parse(raw || 'null');}catch{return null;}
+    return value?.version===1 && value.epoch===this.epoch && ['en-ja','ja-en'].includes(value.mode) && ['original','reverse','random'].includes(value.order)?value:null;
+  }
+  start(context,base,mode,order){
+    this.syncReset();const items=order==='random'?shuffle(base):order==='reverse'?[...base].reverse():[...base];
+    const deck={mode,order,items,index:0,flipped:false,checkpoint:{context,epoch:this.epoch,signature:keyToken(JSON.stringify(base.map(cardIdentity))),sequence:items.map(cardIdentity)}};
+    this.save(deck);return deck;
+  }
+  restore(context,base){
+    const saved=this.read(context);if(!saved || !Array.isArray(saved.sequence) || !Number.isInteger(saved.index) || saved.index<0 || saved.index>=base.length || typeof saved.flipped!=='boolean')return null;
+    const identities=base.map(cardIdentity),cards=new Map(base.map((card,index)=>[identities[index],card]));
+    if(saved.signature!==keyToken(JSON.stringify(identities)) || saved.sequence.length!==base.length || new Set(saved.sequence).size!==base.length || saved.sequence.some(id=>!cards.has(id)))return null;
+    return {mode:saved.mode,order:saved.order,index:saved.index,flipped:saved.flipped,items:saved.sequence.map(id=>cards.get(id)),checkpoint:{context,epoch:this.epoch,signature:saved.signature,sequence:saved.sequence}};
+  }
+  save(deck){
+    this.syncReset();const checkpoint=deck.checkpoint;if(!checkpoint || checkpoint.epoch!==this.epoch)return;
+    const key=CARD_PREFIX+keyToken(checkpoint.context),value={version:1,epoch:this.epoch,mode:deck.mode,order:deck.order,index:deck.index,flipped:deck.flipped,signature:checkpoint.signature,sequence:checkpoint.sequence,updated:Date.now()};
+    this.pending.set(key,value);
+    try{
+      if(!this.storage)throw new Error('Storage unavailable');
+      for(const [name,entry] of this.pending){this.storage.setItem(name,JSON.stringify(entry));this.pending.delete(name);}
+      const keys=Array.from({length:this.storage.length},(_,index)=>this.storage.key(index)).filter(name=>name?.startsWith(CARD_PREFIX));
+      if(keys.length>100){const entries=keys.map(name=>{try{return [name,JSON.parse(this.storage.getItem(name))?.updated || 0];}catch{return [name,0];}}).sort((a,b)=>b[1]-a[1]);for(const [name] of entries.filter(([name])=>name!==key).slice(99))this.storage.removeItem(name);}
+      this.persistent=true;
+    }catch{this.persistent=false;}
+  }
+  reset(){
+    if(!this.storage)throw new Error('Storage unavailable');
+    const keys=Array.from({length:this.storage.length},(_,index)=>this.storage.key(index)).filter(key=>key?.startsWith(CARD_PREFIX));
+    this.storage.setItem('wordnest-reset-cards',globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);this.syncReset();
+    for(const key of keys)this.storage.removeItem(key);this.persistent=true;
+  }
+}

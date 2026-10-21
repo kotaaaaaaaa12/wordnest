@@ -102,3 +102,19 @@ export class LearningTracker {
     shards.push(this.data);return summarizeLearning(shards,timestamp);
   }
 }
+
+export function studyActivityLevel(day){
+  if(!day || !(day.ms>0 || day.answered>0 || day.flips>0))return 0;
+  return day.ms>=1800000?4:day.ms>=900000?3:day.ms>=300000?2:1;
+}
+export function studyCalendar(month,days={},timestamp=Date.now()){
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))throw new Error('Invalid calendar month');
+  const [year,number]=month.split('-').map(Number);if(year<1900 || year>9999)throw new Error('Invalid calendar month');
+  const first=new Date(year,number-1,1),length=new Date(year,number,0).getDate(),today=localDay(timestamp);
+  const cells=Array.from({length:42},(_,index)=>{
+    const date=index-first.getDay()+1;if(date<1 || date>length)return null;
+    const key=`${month}-${String(date).padStart(2,'0')}`,day=days[key] || {ms:0,answered:0,correct:0,flips:0};
+    return {date:key,number:date,...day,accuracy:day.answered?day.correct/day.answered:null,level:studyActivityLevel(day),future:key>today,today:key===today};
+  });
+  return {month,cells};
+}

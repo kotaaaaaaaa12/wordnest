@@ -42,7 +42,7 @@ test('password-gated Administration removes a participant, queues a private noti
   try{
     admin=await browser(mf,{hash:'#/guide'});assert.equal(admin.find('.nav [data-nav="admin"]'),null);assert.equal(admin.find('#guide-admin'),null);
     admin.w.location.hash='#/admin';await waitFor(()=>admin.w.location.hash==='#/','anonymous direct link');
-    await admin.click('[data-action="settings"]');admin.input('#admin-password',password);admin.submit('#admin-login-form');await waitFor(()=>admin.find('[data-admin-open]'),'administrator login');
+    await admin.click('[data-action="settings"]');admin.input('#admin-password',password);admin.submit('#admin-login-form');await waitFor(()=>admin.find('[data-admin-lock]'),'administrator login');
     assert.deepEqual([...admin.w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.dataset.nav),['home','stats','rankings','guide','edit','admin']);
     await admin.click('[data-dialog="cancel"]');await admin.click('.nav [data-nav="guide"]');assert.ok(admin.find('#guide-admin'));await admin.click('.nav [data-nav="admin"]');await waitFor(()=>admin.find('.admin-participant'),'learner list');admin.find('#admin-status').value='listed';admin.find('#admin-status').dispatchEvent(new admin.w.Event('change',{bubbles:true}));await waitFor(()=>admin.find('.admin-person-head h2')?.textContent==='Bad <b>Name</b>','listed participant');assert.equal(admin.w.document.title,'Wordnest — Administration');assert.equal(admin.find('.admin-person-head h2').textContent,'Bad <b>Name</b>');assert.equal(admin.find('.admin-person-head h2 b'),null);
     admin.input('#admin-search','Bad');await waitFor(()=>!admin.find('[data-action="admin-refresh"]').disabled,'search');
@@ -84,7 +84,7 @@ test('Administration searches private learners and shows all eight records witho
   const mf=instance(),fixture=await fixtureParticipant(mf);let admin;
   try{
     await fixture.ranking.decline('Private learner');
-    admin=await browser(mf);await admin.click('[data-action="settings"]');admin.input('#admin-password',password);admin.submit('#admin-login-form');await waitFor(()=>admin.find('[data-admin-open]'),'administrator login');await admin.click('[data-dialog="cancel"]');await admin.click('.nav [data-nav="admin"]');
+    admin=await browser(mf);await admin.click('[data-action="settings"]');admin.input('#admin-password',password);admin.submit('#admin-login-form');await waitFor(()=>admin.find('[data-admin-lock]'),'administrator login');await admin.click('[data-dialog="cancel"]');await admin.click('.nav [data-nav="admin"]');
     await waitFor(()=>admin.find('#admin-status'),'all learners');assert.equal(admin.find('#admin-status').value,'all');
     admin.input('#admin-search','Private learner');await waitFor(()=>admin.find('.admin-person-head h2')?.textContent==='Private learner' && !admin.find('[data-action="admin-refresh"]').disabled,'private name search');
     assert.equal(admin.find('[data-action="admin-remove"]'),null);assert.equal(admin.find('.admin-person-actions .pill').textContent,messages.en.adminPrivate);

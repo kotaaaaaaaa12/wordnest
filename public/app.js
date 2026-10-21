@@ -1,6 +1,6 @@
 import { RankingClient, rankingMetrics } from './rankings.js';
-import { PersonalWords, wordIdentity, catalogWord, findCatalogWord, sourceQuestions, collectionQuestions, canMultipleChoice, quizFromPool, collectionCards } from './personal.js';
-import { LearningTracker, localDay } from './stats.js';
+import { FlashcardBookmarks, PersonalWords, wordIdentity, catalogWord, findCatalogWord, sourceQuestions, collectionQuestions, canMultipleChoice, quizFromPool, collectionCards } from './personal.js';
+import { LearningTracker, localDay, studyCalendar } from './stats.js';
 import { icon } from './icons.js';
 import { normalize, studyKey, studyStatus, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, balanceAnswerPositions, isCorrect, portable, parseImport } from './core.js';
 import { messages, translator } from './i18n.js';
@@ -11,6 +11,7 @@ const e = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<
 const storage = { get(key, fallback) { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }, set(key, value) { try { localStorage.setItem(key, value); } catch {} } };
 let learningStorage;try{learningStorage=localStorage;}catch{}
 const personal=new PersonalWords(learningStorage);
+const bookmarks=new FlashcardBookmarks(learningStorage);
 const learning=new LearningTracker({storage:learningStorage,now:()=>Date.now()});
 let languageChoice = storage.get('wordnest-language','auto');
 if (!['auto','en','ja'].includes(languageChoice)) languageChoice = 'auto';
@@ -34,7 +35,7 @@ function applyTheme() {
 }
 applyTheme();
 systemTheme.addEventListener?.('change', () => { if (themeChoice === 'auto') applyTheme(); });
-const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, sessionKnown:false, adminBusy:false, adminError:'', configured:true, rankingMetric:'totalMs', rankingData:null, rankingBusy:false, rankingError:'', adminData:null, adminStats:null, adminStatsId:null, adminStatsBusy:false, adminStatsError:'', adminSearch:'', adminStatus:'all', adminBusyList:false, adminListError:'', route:routeFromHash(), screen:'home', libraryTab:'sets', collection:null, weakScope:'single', weakMode:'en-ja', weakSetId:null, weakIds:null, weakPickerOpen:false, favoriteSet:'all', wordSearch:'', listLimit:100, selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
+const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, sessionKnown:false, adminBusy:false, adminError:'', configured:true, rankingMetric:'totalMs', rankingData:null, rankingBusy:false, rankingError:'', adminData:null, adminStats:null, adminStatsId:null, adminStatsBusy:false, adminStatsError:'', adminSearch:'', adminStatus:'all', adminBusyList:false, adminListError:'', route:routeFromHash(), screen:'home', calendarMonth:null, calendarDate:null, libraryTab:'sets', collection:null, weakScope:'single', weakMode:'en-ja', weakSetId:null, weakIds:null, weakPickerOpen:false, favoriteSet:'all', wordSearch:'', listLimit:100, selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
 const ranking=new RankingClient({storage:learningStorage,fetch:(...args)=>fetch(...args),snapshot:()=>{
   const snapshot=learning.snapshot();return {epoch:learning.epoch,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',days:snapshot.days};
 },onChange:()=>{refreshRankingSettings();queueRankingNotice();if(state.route==='rankings')render();}});
@@ -257,11 +258,29 @@ function statsView() {
   statsRenderedDay=localDay(Date.now());
   const data=learning.snapshot(),locale=lang==='ja'?'ja-JP':'en-US';
   const maximum=Math.max(...data.recent.map(day=>day.ms),1),dateFormat=new Intl.DateTimeFormat(locale,{month:'numeric',day:'numeric'});
-  return `<section class="stats-view"><h1>${t('stats')}</h1><p class="stats-note">${t('statsLocal')}</p>${!learning.persistent?`<p class="error" role="status">${t('statsStorageError')}</p>`:''}${studyMetricCards(data)}<section class="stats-chart" aria-labelledby="recent-time"><h2 id="recent-time">${t('recentTime')}</h2><ol class="stats-bars">${data.recent.map(day=>{const [year,month,date]=day.date.split('-').map(Number),label=dateFormat.format(new Date(year,month-1,date));return `<li><span class="bar-value">${e(formatDuration(day.ms))}</span><span class="bar-track" aria-hidden="true"><span style="height:${day.ms?Math.max(2,day.ms/maximum*100):0}%"></span></span><time datetime="${day.date}">${e(label)}</time></li>`;}).join('')}</ol></section><div class="stats-details"><p>${t('statsTimeRule')}</p><p>${t('statsCountRule')}</p><p>${t('statsStreakRule')}</p></div></section>`;
+  return `<section class="stats-view"><h1>${t('stats')}</h1><p class="stats-note">${t('statsLocal')}</p>${!learning.persistent?`<p class="error" role="status">${t('statsStorageError')}</p>`:''}${studyMetricCards(data)}<section class="stats-chart" aria-labelledby="recent-time"><h2 id="recent-time">${t('recentTime')}</h2><ol class="stats-bars">${data.recent.map(day=>{const [year,month,date]=day.date.split('-').map(Number),label=dateFormat.format(new Date(year,month-1,date));return `<li><span class="bar-value">${e(formatDuration(day.ms))}</span><span class="bar-track" aria-hidden="true"><span style="height:${day.ms?Math.max(2,day.ms/maximum*100):0}%"></span></span><time datetime="${day.date}">${e(label)}</time></li>`;}).join('')}</ol></section>${calendarView(data)}<div class="stats-details"><p>${t('statsTimeRule')}</p><p>${t('statsCountRule')}</p><p>${t('statsStreakRule')}</p></div></section>`;
+}
+function calendarBounds(days){
+  const today=localDay(Date.now()),current=today.slice(0,7),months=Object.keys(days).filter(date=>date<=today).map(date=>date.slice(0,7));
+  return {today,current,first:months.length?months.sort()[0]:current};
+}
+function shiftCalendarMonth(month,offset){
+  const [year,number]=month.split('-').map(Number);return localDay(new Date(year,number-1+offset,1).getTime()).slice(0,7);
+}
+function calendarView(data){
+  const {today,current,first}=calendarBounds(data.days),locale=lang==='ja'?'ja-JP':'en-US';
+  if(!state.calendarMonth || state.calendarMonth<first || state.calendarMonth>current)state.calendarMonth=current;
+  const month=studyCalendar(state.calendarMonth,data.days,Date.now()),dates=month.cells.filter(Boolean);
+  if(!dates.some(day=>day.date===state.calendarDate && !day.future))state.calendarDate=state.calendarMonth===current?today:dates.filter(day=>day.level>0).at(-1)?.date || dates[0].date;
+  const selected=dates.find(day=>day.date===state.calendarDate),dateFrom=key=>{const [year,month,day]=key.split('-').map(Number);return new Date(year,month-1,day);};
+  const title=new Intl.DateTimeFormat(locale,{year:'numeric',month:'long'}).format(dateFrom(month.month+'-01')),fullDate=new Intl.DateTimeFormat(locale,{year:'numeric',month:'long',day:'numeric',weekday:'long'});
+  const weekFormat=new Intl.DateTimeFormat(locale,{weekday:'short'}),weekdays=Array.from({length:7},(_,index)=>weekFormat.format(new Date(2026,0,4+index)));
+  const number=value=>new Intl.NumberFormat(locale).format(value);
+  return `<section class="study-calendar" aria-labelledby="calendar-title"><div class="calendar-heading"><h2 id="calendar-title">${icon('calendar')}${t('studyCalendar')}</h2><button class="text-btn" data-action="calendar-today">${t('calendarToday')}</button></div><p class="calendar-help">${t('calendarHelp')}</p><div class="calendar-layout"><div><div class="calendar-navigation"><button class="icon-btn" data-action="calendar-month" data-offset="-1" aria-label="${t('calendarPrevious')}" ${month.month<=first?'disabled':''}>${icon('back')}</button><h3 aria-live="polite">${e(title)}</h3><button class="icon-btn" data-action="calendar-month" data-offset="1" aria-label="${t('calendarNext')}" ${month.month>=current?'disabled':''}>${icon('arrow')}</button></div><div class="calendar-weekdays" aria-hidden="true">${weekdays.map(day=>`<span>${e(day)}</span>`).join('')}</div><div class="calendar-grid" role="group" aria-label="${e(title)}">${month.cells.map(day=>day?`<button class="calendar-day ${day.today?'is-today':''}" data-action="calendar-day" data-date="${day.date}" data-level="${day.level}" aria-pressed="${day.date===selected.date}" ${day.today?'aria-current="date"':''} ${day.future?'disabled':''} aria-label="${e(fullDate.format(dateFrom(day.date))+': '+t('calendarDaySummary',{time:formatDuration(day.ms),questions:number(day.answered),flips:number(day.flips)}))}"><time datetime="${day.date}">${day.number}</time>${day.level?'<span class="calendar-dot" aria-hidden="true"></span>':''}</button>`:'<span class="calendar-blank" aria-hidden="true"></span>').join('')}</div><div class="calendar-legend"><span>${t('calendarLess')}</span>${[0,1,2,3,4].map(level=>`<span class="calendar-key" data-level="${level}" aria-hidden="true"></span>`).join('')}<span>${t('calendarMore')}</span></div></div><section class="calendar-detail" aria-labelledby="calendar-selected-title" aria-live="polite"><h3 id="calendar-selected-title"><time datetime="${selected.date}">${e(fullDate.format(dateFrom(selected.date)))}</time></h3>${!selected.level?`<p class="calendar-empty">${t('calendarNoActivity')}</p>`:''}<dl>${[['totalTime',formatDuration(selected.ms)],['answeredQuestions',number(selected.answered)],['correctQuestions',number(selected.correct)],['accuracy',formatStudyMetric('accuracy',selected.accuracy)],['cardFlips',number(selected.flips)]].map(([label,value])=>`<div><dt>${t(label)}</dt><dd data-day-stat="${label}">${e(value)}</dd></div>`).join('')}</dl></section></div></section>`;
 }
 function guideView() {
   const section=(id,symbol,title,items)=>`<section class="guide-section" aria-labelledby="${id}"><h2 id="${id}">${icon(symbol)}${t(title)}</h2><ul>${items.map(key=>`<li>${e(t(key))}</li>`).join('')}</ul></section>`;
-  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-personal','star','personalTools',['guideWeak','guideChoiceOptions','guideWeakRecovery','guideFavorites','guideSearch','guidePersonalStorage'])}${section('guide-records','stats','stats',['guideStats','statsTimeRule','statsCountRule','statsStreakRule'])}${section('guide-rankings','trophy','rankings',['guideRankings','rankingAccuracyRule','guideRankingPrivacy'])}${section('guide-settings','settings','settings',['guideSettings','guideDeleteData','guideSounds'])}${state.authenticated?section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideTransfers','guideEditShared'])+section('guide-admin','settings','admin',['guideAdministration']):''}</article>`;
+  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls','guideCardsResume'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-personal','star','personalTools',['guideWeak','guideChoiceOptions','guideWeakRecovery','guideFavorites','guideSearch','guidePersonalStorage'])}${section('guide-records','stats','stats',['guideStats','guideCalendar','statsTimeRule','statsCountRule','statsStreakRule'])}${section('guide-rankings','trophy','rankings',['guideRankings','rankingAccuracyRule','guideRankingPrivacy'])}${section('guide-settings','settings','settings',['guideSettings','guideDeleteData','guideSounds'])}${state.authenticated?section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideTransfers','guideEditShared'])+section('guide-admin','settings','admin',['guideAdministration']):''}</article>`;
 }
 function readStudyProgress() {
   try { const value=JSON.parse(storage.get('wordnest-progress','{}'));return value && typeof value==='object' && !Array.isArray(value)?value:{}; } catch { return {}; }
@@ -288,9 +307,23 @@ function globalMeanings() { return [...new Map(state.sets.flatMap(set=>set.words
 function activeTitle() {return state.collection?t(state.collection.kind==='weak'?'weakWords':'favorites'):currentSet()?.title || '';}
 function activePool(mode=state.mode) {return state.collection?state.collection.pools[mode] || []:sourceQuestions([currentSet()],mode);}
 function activeMeanings() {return state.collection?globalMeanings():uniqueMeanings(currentSet());}
-function activeCards(order='original') {
-  if(state.collection)return collectionCards(state.collection.kind==='weak'?state.collection.pools[state.mode]:state.collection.words,state.mode,order);
-  const set=currentSet();return createFlashcards(set,state.mode,order).map(card=>({...card,wordRefs:[catalogWord(set,card)]}));
+function activeCards(order='original',mode=state.mode) {
+  if(state.collection)return collectionCards(state.collection.kind==='weak'?state.collection.pools[mode]:state.collection.words,mode,order);
+  const set=currentSet();return createFlashcards(set,mode,order).map(card=>({...card,wordRefs:[catalogWord(set,card)]}));
+}
+function cardContext(){
+  if(!state.collection)return JSON.stringify(['set',state.setId]);
+  const ids=state.collection.kind==='weak'?[...weakSetIds()]:state.favoriteSet==='all'?['all']:[state.favoriteSet];
+  return JSON.stringify([state.collection.kind,...ids.sort(),state.collection.kind==='weak'?state.collection.mode:'both']);
+}
+function savedCardDeck(){
+  const context=cardContext(),saved=bookmarks.read(context);if(!saved || (state.collection?.kind==='weak' && saved.mode!==state.collection.mode))return null;
+  return bookmarks.restore(context,activeCards('original',saved.mode));
+}
+function resumeCardsPanel(mode=null){
+  const deck=savedCardDeck();
+  if(!deck || (mode && deck.mode!==mode))return !bookmarks.persistent?`<p class="error" role="status">${t('cardsStorageError')}</p>`:'';
+  return `<aside class="cards-resume"><div><h2>${t('resumeCards')}</h2><p>${t('cardOf',{n:deck.index+1,total:deck.items.length})} · ${deck.mode==='en-ja'?'EN → JP':'JP → EN'} · ${t(deck.order+'Order')}</p><small>${t('cardsResumeHint')}</small></div><button class="btn green" data-action="resume-cards">${t('resumeCards')}${icon('arrow')}</button>${!bookmarks.persistent?`<p class="error" role="status">${t('cardsStorageError')}</p>`:''}</aside>`;
 }
 function favoriteButton(word,showWord=false) {
   const on=personal.favorite(word.wordKey),label=t(on?'removeFavorite':'addFavorite',{word:word.english,set:word.setTitle});
@@ -357,24 +390,26 @@ function activities() {
 function modes() {
   const set=currentSet(); if(!set && !state.collection) {state.screen='home';return home();}
   const cards=state.activity==='cards',enough=cards || canMultipleChoice(activePool('en-ja'),activeMeanings(),state.collection?globalWordBank():[]);
-  return `<section class="flow"><button class="back" data-action="back-activity">${icon('back')}${t('back')}</button>${flowTitle('chooseDirection')}<div class="mode-grid"><button class="mode-card" data-action="mode" data-mode="en-ja" ${!enough?'disabled':''}><span class="direction">EN<span class="arrow">${icon('arrow')}</span>JP</span><h3>${t(cards?'englishFront':'choice')}</h3><p>${t(cards?'englishFrontHelp':'choiceHelp')}</p></button><button class="mode-card" data-action="mode" data-mode="ja-en"><span class="direction">JP<span class="arrow">${icon('arrow')}</span>EN</span><h3>${t(cards?'japaneseFront':'typing')}</h3><p>${t(cards?'japaneseFrontHelp':'typingHelp')}</p></button></div>${!enough?`<p class="notice">${t('needFour')}</p>`:''}</section>`;
+  return `<section class="flow"><button class="back" data-action="back-activity">${icon('back')}${t('back')}</button>${flowTitle('chooseDirection')}${cards?resumeCardsPanel():''}<div class="mode-grid"><button class="mode-card" data-action="mode" data-mode="en-ja" ${!enough?'disabled':''}><span class="direction">EN<span class="arrow">${icon('arrow')}</span>JP</span><h3>${t(cards?'englishFront':'choice')}</h3><p>${t(cards?'englishFrontHelp':'choiceHelp')}</p></button><button class="mode-card" data-action="mode" data-mode="ja-en"><span class="direction">JP<span class="arrow">${icon('arrow')}</span>EN</span><h3>${t(cards?'japaneseFront':'typing')}</h3><p>${t(cards?'japaneseFrontHelp':'typingHelp')}</p></button></div>${!enough?`<p class="notice">${t('needFour')}</p>`:''}</section>`;
 }
 function orders() {
-  return `<section class="flow"><button class="back" data-action="back-mode">${icon('back')}${t('back')}</button>${flowTitle('chooseOrder')}<span class="pill">${state.mode==='en-ja'?'EN → JP':'JP → EN'}</span><div class="order-grid">${['original','reverse','random'].map(order=>`<button class="mode-card ${state.order===order?'active':''}" data-action="order" data-order="${order}" aria-pressed="${state.order===order}"><h3>${t(order+'Order')}</h3><p>${t(order+'OrderHelp')}</p></button>`).join('')}</div><div class="flow-bottom"><span class="count">${t('wordsCount',{n:activeCards().length})}</span><button class="btn primary" data-action="start-cards">${t('startCards')}${icon('arrow')}</button></div></section>`;
+  return `<section class="flow"><button class="back" data-action="back-mode">${icon('back')}${t('back')}</button>${flowTitle('chooseOrder')}${resumeCardsPanel(state.mode)}<span class="pill">${state.mode==='en-ja'?'EN → JP':'JP → EN'}</span><div class="order-grid">${['original','reverse','random'].map(order=>`<button class="mode-card ${state.order===order?'active':''}" data-action="order" data-order="${order}" aria-pressed="${state.order===order}"><h3>${t(order+'Order')}</h3><p>${t(order+'OrderHelp')}</p></button>`).join('')}</div><div class="flow-bottom"><span class="count">${t('wordsCount',{n:activeCards().length})}</span><button class="btn primary" data-action="start-cards">${t('startCards')}${icon('arrow')}</button></div></section>`;
 }
 function cardsView() {
   const deck=state.cards,card=deck.items[deck.index],frontLang=deck.mode==='en-ja'?'en':'ja',backLang=deck.mode==='en-ja'?'ja':'en';
-  return `<section class="flashcards-view"><div class="quiz-meta"><span>${e(state.collection?activeTitle():deck.title)} · ${deck.mode==='en-ja'?'EN → JP':'JP → EN'}</span><button class="text-btn" data-action="back-order">${t('changeOrder')}</button></div><div class="progress" role="progressbar" aria-label="${t('flashcards')}" aria-valuenow="${deck.index+1}" aria-valuemin="0" aria-valuemax="${deck.items.length}"><span style="width:${(deck.index+1)/deck.items.length*100}%"></span></div><div class="quiz-meta" style="margin-bottom:16px"><span id="card-counter" aria-live="polite">${t('cardOf',{n:deck.index+1,total:deck.items.length})}</span><span>${t(deck.order+'Order')}</span></div><div class="card-tools"><small>${state.collection?e(sourceNames(card)):''}</small>${favoriteActions(card.wordRefs)}</div><button class="flashcard ${deck.flipped?'is-flipped':''}" data-action="flip-card" aria-pressed="${deck.flipped}" aria-label="${e(t('flipCardLabel',{word:deck.flipped?card.back:card.front}))}"><span class="flashcard-inner"><span class="flashcard-face flashcard-front" aria-hidden="${deck.flipped}"><span class="eyebrow">${t(deck.mode==='en-ja'?'word':'meaning')}</span><span class="flashcard-text" lang="${frontLang}">${e(card.front)}</span><span class="flashcard-hint">${icon('flip')}${t('tapToFlip')}</span></span><span class="flashcard-face flashcard-back" aria-hidden="${!deck.flipped}"><span class="eyebrow">${t(deck.mode==='en-ja'?'meaning':'word')}</span><span class="flashcard-text" lang="${backLang}">${e(card.back)}</span><span class="flashcard-hint">${icon('flip')}${t('tapToFlipBack')}</span></span></span></button><div class="flashcard-controls"><button class="btn ghost" data-action="previous-card" ${deck.index===0?'disabled':''}>${icon('back')}${t('previousWord')}</button><span class="count">${deck.index+1} / ${deck.items.length}</span><button class="btn green" data-action="next-card" ${deck.index===deck.items.length-1?'disabled':''}>${t('nextWord')}${icon('arrow')}</button></div><p class="swipe-hint">${t('swipeHelp')}</p>${deck.flipped && card.explanation?`<div class="card-explanation"><small>${t('explanation')}</small><p>${e(card.explanation)}</p></div>`:''}<div class="center-actions cards-exit">${btn('returnHome','back-home','ghost')}</div></section>`;
+  return `<section class="flashcards-view">${!bookmarks.persistent?`<p class="error cards-storage-warning" role="status">${t('cardsStorageError')}</p>`:''}<div class="quiz-meta"><span>${e(state.collection?activeTitle():deck.title)} · ${deck.mode==='en-ja'?'EN → JP':'JP → EN'}</span><button class="text-btn" data-action="back-order">${t('changeOrder')}</button></div><div class="progress" role="progressbar" aria-label="${t('flashcards')}" aria-valuenow="${deck.index+1}" aria-valuemin="0" aria-valuemax="${deck.items.length}"><span style="width:${(deck.index+1)/deck.items.length*100}%"></span></div><div class="quiz-meta" style="margin-bottom:16px"><span id="card-counter" aria-live="polite">${t('cardOf',{n:deck.index+1,total:deck.items.length})}</span><span>${t(deck.order+'Order')}</span></div><div class="card-tools"><small>${state.collection?e(sourceNames(card)):''}</small>${favoriteActions(card.wordRefs)}</div><button class="flashcard ${deck.flipped?'is-flipped':''}" data-action="flip-card" aria-pressed="${deck.flipped}" aria-label="${e(t('flipCardLabel',{word:deck.flipped?card.back:card.front}))}"><span class="flashcard-inner"><span class="flashcard-face flashcard-front" aria-hidden="${deck.flipped}"><span class="eyebrow">${t(deck.mode==='en-ja'?'word':'meaning')}</span><span class="flashcard-text" lang="${frontLang}">${e(card.front)}</span><span class="flashcard-hint">${icon('flip')}${t('tapToFlip')}</span></span><span class="flashcard-face flashcard-back" aria-hidden="${!deck.flipped}"><span class="eyebrow">${t(deck.mode==='en-ja'?'meaning':'word')}</span><span class="flashcard-text" lang="${backLang}">${e(card.back)}</span><span class="flashcard-hint">${icon('flip')}${t('tapToFlipBack')}</span></span></span></button><div class="flashcard-controls"><button class="btn ghost" data-action="previous-card" ${deck.index===0?'disabled':''}>${icon('back')}${t('previousWord')}</button><span class="count">${deck.index+1} / ${deck.items.length}</span><button class="btn green" data-action="next-card" ${deck.index===deck.items.length-1?'disabled':''}>${t('nextWord')}${icon('arrow')}</button></div><p class="swipe-hint">${t('swipeHelp')}</p>${deck.flipped && card.explanation?`<div class="card-explanation"><small>${t('explanation')}</small><p>${e(card.explanation)}</p></div>`:''}<div class="center-actions cards-exit">${btn('returnHome','back-home','ghost')}</div></section>`;
 }
 function moveCard(direction) {
   const deck=state.cards;if(state.screen!=='cards' || !deck)return;
   const next=deck.index+direction;if(next<0 || next>=deck.items.length)return;
-  deck.index=next;deck.flipped=false;render();
+  deck.index=next;deck.flipped=false;bookmarks.save(deck);render();
   if(!matchMedia('(prefers-reduced-motion: reduce)').matches) $('.flashcard')?.animate?.([{transform:`translateX(${direction*45}px)`,opacity:.3},{transform:'translateX(0)',opacity:1}],{duration:180,easing:'ease-out'});
 }
 function flipCard() {
   if(state.screen!=='cards' || !state.cards)return;
-  state.cards.flipped=!state.cards.flipped;learning.flip();
+  state.cards.flipped=!state.cards.flipped;bookmarks.save(state.cards);learning.flip();
+  if(!bookmarks.persistent && !$('.cards-storage-warning'))$('.flashcards-view').insertAdjacentHTML('afterbegin',`<p class="error cards-storage-warning" role="status">${t('cardsStorageError')}</p>`);
+  if(bookmarks.persistent)$('.cards-storage-warning')?.remove();
   const card=$('.flashcard'),item=state.cards.items[state.cards.index];
   card.classList.toggle('is-flipped',state.cards.flipped);card.setAttribute('aria-pressed',String(state.cards.flipped));card.setAttribute('aria-label',t('flipCardLabel',{word:state.cards.flipped?item.back:item.front}));
   $('.flashcard-front',card).setAttribute('aria-hidden',String(state.cards.flipped));$('.flashcard-back',card).setAttribute('aria-hidden',String(!state.cards.flipped));
@@ -515,7 +550,7 @@ async function manageSetsDialog() {
 function adminSignature() { return JSON.stringify([state.authenticated,state.configured,state.adminBusy,state.adminError,lang]); }
 function adminSettingsContent() {
   const heading=`<h3 id="admin-settings-title">${t('adminAccess')}</h3>`;
-  if(state.authenticated)return `${heading}<p class="admin-status" role="status">${icon('check')}${t('unlocked')}</p><small>${t('sessionNote')}</small><div class="settings-buttons"><button class="btn primary" data-admin-open>${icon('edit')}${t('openEditor')}</button><button class="btn ghost" data-admin-lock>${icon('lock')}${t('logout')}</button></div>`;
+  if(state.authenticated)return `${heading}<p class="admin-status" role="status">${icon('check')}${t('unlocked')}</p><small>${t('sessionNote')}</small><div class="settings-buttons"><button class="btn ghost" data-admin-lock>${icon('lock')}${t('logout')}</button></div>`;
   if(!state.configured)return `${heading}<p>${t('adminUnavailable')}</p>`;
   return `${heading}<form id="admin-login-form"><label for="admin-password">${t('adminPassword')}<input type="password" id="admin-password" name="password" autocomplete="current-password" required minlength="12" maxlength="512" ${state.adminBusy?'disabled':''}></label>${state.adminError?`<p class="error" role="alert">${e(t(state.adminError))}</p>`:''}<button class="btn primary" type="submit" ${state.adminBusy?'disabled':''}>${icon('lock')}${t(state.adminBusy?'adminChecking':'adminUnlock')}</button></form>`;
 }
@@ -547,6 +582,7 @@ async function deleteLearningData(type) {
   if(!confirmed)return;
   try {
     if(type==='clears' || type==='all'){if(!learningStorage)throw new Error('Storage unavailable');learningStorage.removeItem('wordnest-progress');}
+    if(type==='all')bookmarks.reset();
     if(type==='weak' || type==='all')personal.reset('question');
     if(type==='favorites' || type==='all')personal.reset('favorite');
     if(type==='statistics' || type==='all'){learning.reset();try{await ranking.sync(true);}catch{toast(t('rankingResetPending'));}}
@@ -574,7 +610,6 @@ async function settingsDialog() {
         if(event.target.closest('[data-ranking-private-name]')){finish('private-name');return;}
         if(event.target.closest('[data-ranking-settings]')){finish(ranking.preferences()?.choice==='joined'?'ranking-off':'ranking-name');return;}
         if(deletion){finish({deleteData:deletion.dataset.deleteLearning,scroll:modal.scrollTop});return;}
-        if(event.target.closest('[data-admin-open]')){finish('edit');return;}
         if(event.target.closest('[data-admin-lock]')){finish('lock');return;}
         if(event.target.closest('[data-dialog]')){finish(false);return;}
         if(event.target.closest('[data-settings-sound]')){soundEnabled=!soundEnabled;storage.set('wordnest-sound',soundEnabled?'on':'off');modal.innerHTML=settingsContent();$('#modal-title',modal)?.focus({preventScroll:true});return;}
@@ -584,8 +619,7 @@ async function settingsDialog() {
     if(action==='ranking-name'){await rankingNameDialog();continue;}
     if(action==='ranking-off'){ranking.decline().then(()=>{if(state.route==='rankings')refreshRankings(false);}).catch(error=>toast(message(error)));continue;}
     if(action?.deleteData){scroll=action.scroll;await deleteLearningData(action.deleteData);continue;}
-    if(action==='edit' && state.authenticated)await navigate('edit');
-    else if(action==='lock' && state.authenticated)await actions.logout();
+    if(action==='lock' && state.authenticated)await actions.logout();
     return;
   }
 }
@@ -695,6 +729,9 @@ const actions={
   'admin-stats-refresh':()=>refreshAdministratorStats(),
   'admin-stats-back':()=>{administratorStatsRequest++;state.adminStats=null;state.adminStatsId=null;state.adminStatsBusy=false;state.adminStatsError='';render();},
   'ranking-refresh':()=>refreshRankings(),
+  'calendar-month'(button){const days=learning.snapshot().days,{current,first}=calendarBounds(days),month=shiftCalendarMonth(state.calendarMonth,Number(button.dataset.offset));if(month<first || month>current)return;state.calendarMonth=month;state.calendarDate=null;render();},
+  'calendar-today'(){state.calendarMonth=localDay(Date.now()).slice(0,7);state.calendarDate=localDay(Date.now());render();},
+  'calendar-day'(button){const date=button.dataset.date;if(!studyCalendar(state.calendarMonth,learning.snapshot().days,Date.now()).cells.some(day=>day?.date===date && !day.future))return;state.calendarDate=date;render();},
   'library-tab'(button){state.libraryTab=button.dataset.tab;state.listLimit=100;state.collection=null;render();},
   'weak-scope'(button){state.weakScope=button.dataset.scope;state.listLimit=100;render();},
   'weak-mode'(button){state.weakMode=button.dataset.mode;state.weakSetId=null;state.listLimit=100;render();},
@@ -711,7 +748,8 @@ const actions={
   'back-activity'(){if(state.collection){actions['back-home']();return;}state.screen='activity';state.error='';render();},
   activity(button){state.activity=button.dataset.activity;state.screen='mode';state.order='original';state.error='';render();},
   order(button){state.order=button.dataset.order;render();},
-  'start-cards'(){state.cards={title:activeTitle(),mode:state.mode,order:state.order,index:0,flipped:false,items:activeCards(state.order)};state.screen='cards';render();window.scrollTo(0,0);},
+  'start-cards'(){state.cards={...bookmarks.start(cardContext(),activeCards(),state.mode,state.order),title:activeTitle()};state.screen='cards';render();window.scrollTo(0,0);},
+  'resume-cards'(){const deck=savedCardDeck();if(!deck){render();return;}state.mode=deck.mode;state.order=deck.order;state.cards={...deck,title:activeTitle()};bookmarks.save(state.cards);state.screen='cards';render();window.scrollTo(0,0);},
   'back-order'(){state.screen='order';state.cards=null;render();},
   'flip-card':flipCard,
   'next-card'(){moveCard(1);},
@@ -806,7 +844,7 @@ for(const type of ['pointerdown','click','keydown','input','scroll'])document.ad
 let rankingHeartbeatAt=0;
 function learningHeartbeat(){learning.tick();learning.persist();if(Date.now()-rankingHeartbeatAt>=30000){rankingHeartbeatAt=Date.now();ranking.sync().then(()=>{if(state.route==='rankings')refreshRankings(false);}).catch(()=>{});}if(state.route==='stats' && statsRenderedDay!==localDay(Date.now()))render();setTimeout(learningHeartbeat,1000);}
 setTimeout(learningHeartbeat,1000);
-window.addEventListener('storage',event=>{if(event.key?.startsWith('wordnest-learning-v1:') && state.route==='stats')render();});
+window.addEventListener('storage',event=>{if((event.key?.startsWith('wordnest-learning-v1:') || event.key==='wordnest-reset-learning' || event.key===null) && state.route==='stats')render();});
 window.addEventListener('storage',event=>{if(event.key==='wordnest-progress' && state.route==='home' && state.screen==='home')render();});
 window.addEventListener('hashchange',()=>navigate(routeFromHash(),true));
 window.addEventListener('beforeunload',event=>{learning.setActive(false);if(state.dirty||state.saving){event.preventDefault();event.returnValue='';}});
@@ -821,3 +859,5 @@ window.addEventListener('storage',event=>{
 
 window.addEventListener('online',()=>ranking.sync(true).then(()=>{if(state.route==='rankings')refreshRankings(false);}).catch(()=>{}));
 window.addEventListener('storage',event=>{if(event.key==='wordnest-ranking-v1' || event.key==='wordnest-reset-learning'){refreshRankingSettings();ranking.sync(true).then(()=>{if(state.route==='rankings')refreshRankings(false);}).catch(()=>{});if(state.route==='rankings')render();}});
+
+window.addEventListener('storage',event=>{if((event.key?.startsWith('wordnest-cards-v1:') || event.key==='wordnest-reset-cards' || event.key===null) && state.route==='home' && ['mode','order'].includes(state.screen))render();});

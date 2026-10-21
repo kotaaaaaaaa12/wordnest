@@ -70,7 +70,7 @@ test('Japanese deletion dialogs are localized and deleting all learning data pre
     for(const [type,name] of [['clears','クリア状況'],['weak','苦手単語'],['favorites','お気に入り'],['statistics','学習記録'],['all','すべての学習データ']]){
       await click(`[data-delete-learning="${type}"]`);assert.equal(find('#modal-title').textContent,`「${name}」を削除しますか？`);assert.ok(find('#modal').textContent.includes('この操作は取り消せません。'));await click('[data-dialog="cancel"]');
     }
-    await click('[data-delete-learning="all"]');await click('[data-dialog="confirm"]');assert.deepEqual(status(),{clears:false,weak:false,favorites:false,statistics:false});assert.ok(find('[data-admin-open]'));assert.ok(find('.nav [data-nav="edit"]'));
+    await click('[data-delete-learning="all"]');await click('[data-dialog="confirm"]');assert.deepEqual(status(),{clears:false,weak:false,favorites:false,statistics:false});assert.equal(find('[data-admin-open]'),null);assert.ok(find('[data-admin-lock]'));assert.ok(find('.nav [data-nav="edit"]'));
   }finally{w.close();}
 });
 test('storage deletion errors show an error without falsely reporting success',async()=>{

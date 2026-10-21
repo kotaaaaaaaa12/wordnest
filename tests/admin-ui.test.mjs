@@ -49,12 +49,12 @@ test('administrator access lives at Settings bottom and controls Edit and its gu
     assert.equal([...w.document.querySelectorAll('#modal .settings-section')].at(-1).id,'admin-controls');
     assert.equal(find('#modal [data-action="import"]'),null);assert.ok(find('#admin-password'));
     await login('incorrect-password');assert.equal(find('[role="alert"]').textContent,messages.en.wrongPassword);assert.equal(find('.nav [data-nav="edit"]'),null);assert.equal(find('#admin-password').value,'');
-    await login();assert.ok(find('.nav [data-nav="edit"]'));assert.equal(find('#admin-password'),null);assert.ok(find('#guide-edit'));
+    await login();assert.equal(find('[data-admin-open]'),null);assert.ok(find('.nav [data-nav="edit"]'));assert.equal(find('#admin-password'),null);assert.ok(find('#guide-edit'));
     const sections=[...w.document.querySelectorAll('.guide-section')];assert.equal(sections.at(-1).getAttribute('aria-labelledby'),'guide-admin');assert.equal(sections.at(-2).getAttribute('aria-labelledby'),'guide-edit');
     assert.ok(sections.at(-2).textContent.includes('Import'));assert.equal(sections.at(-3).textContent.includes('Import'),false);
     find('#settings-language').value='ja';find('#settings-language').dispatchEvent(new w.Event('change',{bubbles:true}));
-    assert.equal(find('#admin-settings-title').textContent,'管理者モード');assert.equal(find('[data-admin-open]').textContent.trim(),'編集画面を開く');assert.ok(find('#guide-edit+ul').textContent.includes('管理者パスワード'));
-    await click('[data-admin-open]');assert.equal(w.location.hash,'#/edit');assert.ok(find('.editor-toolbar'));assert.equal(find('[data-action="logout"]'),null);assert.equal(find('input[type="password"]'),null);assert.equal(find('#login-form'),null);
+    assert.equal(find('#admin-settings-title').textContent,'管理者モード');assert.equal(find('[data-admin-open]'),null);assert.equal(find('#admin-controls .settings-buttons').children.length,1);assert.ok(find('#guide-edit+ul').textContent.includes('管理者パスワード'));
+    await click('[data-dialog="cancel"]');await click('.nav [data-nav="edit"]');assert.equal(w.location.hash,'#/edit');assert.ok(find('.editor-toolbar'));assert.equal(find('[data-action="logout"]'),null);assert.equal(find('input[type="password"]'),null);assert.equal(find('#login-form'),null);
     await click('.nav [data-nav="guide"]');await click('[data-action="settings"]');await click('[data-admin-lock]');
     assert.equal(find('.nav [data-nav="edit"]'),null);assert.equal(find('#guide-edit'),null);assert.equal(find('#modal').open,false);
     await click('[data-action="settings"]');assert.equal(find('label[for="admin-password"]').firstChild.textContent,'管理者パスワード');
@@ -73,7 +73,7 @@ test('session expiry hides administrator UI and Settings reauthentication resume
   try{
     await click('[data-action="edit-set"]');input('#set-title','Unsaved draft');expire();await click('[data-action="save"]');
     assert.equal(w.location.hash,'#/');assert.equal(find('.nav [data-nav="edit"]'),null);
-    await click('[data-action="settings"]');await login();await click('[data-admin-open]');
+    await click('[data-action="settings"]');await login();await click('[data-dialog="cancel"]');await click('.nav [data-nav="edit"]');
     assert.equal(find('#set-title').value,'Unsaved draft');assert.equal(find('#dirty-label').textContent,messages.en.unsaved);
     await click('[data-action="settings"]');await click('[data-admin-lock]');assert.ok(find('[data-dialog="confirm"]'));await click('[data-dialog="cancel"]');assert.ok(find('.nav [data-nav="edit"]'));assert.equal(find('#set-title').value,'Unsaved draft');
   }finally{w.close();}
