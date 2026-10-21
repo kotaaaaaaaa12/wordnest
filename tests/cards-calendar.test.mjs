@@ -40,3 +40,8 @@ test('study calendar handles leap years, local midnight, empty days, and fixed s
   assert.deepEqual([0,1,299999,300000,899999,900000,1799999,1800000].map(ms=>studyActivityLevel({ms,answered:0,flips:0})),[0,1,1,2,2,3,3,4]);assert.equal(studyActivityLevel({ms:0,answered:1,flips:0}),1);assert.equal(studyActivityLevel({ms:0,answered:0,flips:1}),1);assert.equal(month.cells[4].accuracy,null);
   assert.throws(()=>studyCalendar('2024-13'));assert.throws(()=>studyCalendar('invalid'));
 });
+test('calendar today and recent-day charts use the explicit learner date across month and leap-day boundaries',async()=>{
+  const {recentStudyDays}=await import('../public/stats.js'),days={'2024-02-29':{ms:900000,answered:4,correct:3,flips:5}},today='2024-03-01',differentLocalDate=new Date(2024,1,28,12).getTime();
+  const recent=recentStudyDays(days,today);assert.deepEqual(recent.map(day=>day.date),['2024-02-24','2024-02-25','2024-02-26','2024-02-27','2024-02-28','2024-02-29','2024-03-01']);assert.equal(recent[5].ms,900000);assert.equal(recent[6].ms,0);
+  const calendar=studyCalendar('2024-03',days,differentLocalDate,today);assert.equal(calendar.cells.find(day=>day?.date===today).today,true);assert.equal(calendar.cells.find(day=>day?.date==='2024-03-02').future,true);
+});

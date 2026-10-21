@@ -127,8 +127,8 @@ export async function rankingAdminApi(request,db,readBody){
     const row=await db.prepare('SELECT id,name,enabled,timezone,days,updated_at FROM ranking_profiles WHERE id=?').bind(statsMatch[1]).first();
     if(!row)return json({error:'notFound'},404);
     // Recalculate streaks in the participant's timezone, including days without uploads.
-    const summary=summarizeStudyDays(JSON.parse(row.days),dateInZone(row.timezone));
-    return json({participant:{id:row.id,name:row.name,enabled:Boolean(row.enabled),timezone:row.timezone,updatedAt:row.updated_at},summary});
+    const days=JSON.parse(row.days),today=dateInZone(row.timezone),summary=summarizeStudyDays(days,today);
+    return json({days,today,participant:{id:row.id,name:row.name,enabled:Boolean(row.enabled),timezone:row.timezone,updatedAt:row.updated_at},summary});
   }
   if(path==='/api/admin/rankings' && request.method==='GET'){
     const status=url.searchParams.get('status') || 'all',q=(url.searchParams.get('q') || '').trim(),offset=Number(url.searchParams.get('offset') || 0);

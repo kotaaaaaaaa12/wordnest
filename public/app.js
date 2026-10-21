@@ -1,6 +1,6 @@
 import { RankingClient, rankingMetrics } from './rankings.js';
 import { FlashcardBookmarks, PersonalWords, wordIdentity, catalogWord, findCatalogWord, sourceQuestions, collectionQuestions, canMultipleChoice, quizFromPool, collectionCards } from './personal.js';
-import { LearningTracker, localDay, studyCalendar } from './stats.js';
+import { LearningTracker, localDay, studyCalendar, recentStudyDays } from './stats.js';
 import { icon } from './icons.js';
 import { normalize, studyKey, studyStatus, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, balanceAnswerPositions, isCorrect, portable, parseImport } from './core.js';
 import { messages, translator } from './i18n.js';
@@ -35,7 +35,7 @@ function applyTheme() {
 }
 applyTheme();
 systemTheme.addEventListener?.('change', () => { if (themeChoice === 'auto') applyTheme(); });
-const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, sessionKnown:false, adminBusy:false, adminError:'', configured:true, rankingMetric:'totalMs', rankingData:null, rankingBusy:false, rankingError:'', adminData:null, adminStats:null, adminStatsId:null, adminStatsBusy:false, adminStatsError:'', adminSearch:'', adminStatus:'all', adminBusyList:false, adminListError:'', route:routeFromHash(), screen:'home', calendarMonth:null, calendarDate:null, libraryTab:'sets', collection:null, weakScope:'single', weakMode:'en-ja', weakSetId:null, weakIds:null, weakPickerOpen:false, favoriteSet:'all', wordSearch:'', listLimit:100, selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
+const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, sessionKnown:false, adminBusy:false, adminError:'', configured:true, rankingMetric:'totalMs', rankingData:null, rankingBusy:false, rankingError:'', adminData:null, adminStats:null, adminStatsId:null, adminStatsBusy:false, adminStatsError:'', adminSearch:'', adminStatus:'all', adminBusyList:false, adminListError:'', route:routeFromHash(), screen:'home', calendars:{self:{month:null,date:null},admin:{month:null,date:null}}, libraryTab:'sets', collection:null, weakScope:'single', weakMode:'en-ja', weakSetId:null, weakIds:null, weakPickerOpen:false, favoriteSet:'all', wordSearch:'', listLimit:100, selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
 const ranking=new RankingClient({storage:learningStorage,fetch:(...args)=>fetch(...args),snapshot:()=>{
   const snapshot=learning.snapshot();return {epoch:learning.epoch,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',days:snapshot.days};
 },onChange:()=>{refreshRankingSettings();queueRankingNotice();if(state.route==='rankings')render();}});
@@ -174,7 +174,7 @@ function studyMetricCards(data){
 function administratorStatsView(){
   const data=state.adminStats,person=data?.participant;
   const date=person?new Intl.DateTimeFormat(lang,{dateStyle:'medium',timeStyle:'short',timeZone:person.timezone}).format(new Date(person.updatedAt)):'';
-  return `<section class="administration-view admin-stats-view"><div class="actions"><button class="btn ghost small" data-action="admin-stats-back">${icon('back')}${t('adminBack')}</button><button class="btn ghost small" data-action="admin-stats-refresh" ${state.adminStatsBusy?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div><h1>${t('stats')}</h1>${person?`<h2 class="admin-stats-name">${e(person.name)}</h2><p class="ranking-note">${e(t('adminUpdated',{date}))}<br>${e(t('adminStatsTimezone',{timezone:person.timezone}))}</p>`:''}<p class="ranking-note">${t('adminStatsScope')}</p>${state.adminStatsBusy?`<p role="status">${t('loading')}</p>`:''}${state.adminStatsError?`<p class="error" role="alert">${e(t(state.adminStatsError))}</p>`:''}${data?studyMetricCards(data.summary):''}</section>`;
+  return `<section class="administration-view admin-stats-view stats-view"><div class="actions"><button class="btn ghost small" data-action="admin-stats-back">${icon('back')}${t('adminBack')}</button><button class="btn ghost small" data-action="admin-stats-refresh" ${state.adminStatsBusy?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div><h1>${t('stats')}</h1>${person?`<h2 class="admin-stats-name">${e(person.name)}</h2><p class="ranking-note">${e(t('adminUpdated',{date}))}<br>${e(t('adminStatsTimezone',{timezone:person.timezone}))}</p>`:''}<p class="ranking-note">${t('adminStatsScope')}</p>${state.adminStatsBusy?`<p role="status">${t('loading')}</p>`:''}${state.adminStatsError?`<p class="error" role="alert">${e(t(state.adminStatsError))}</p>`:''}${data?studyMetricCards(data.summary)+studyCharts(data.days,data.today,'admin'):''}</section>`;
 }
 let administratorStatsRequest=0;
 async function refreshAdministratorStats(){
@@ -256,27 +256,35 @@ function refreshRankingSettings(){const section=$('#ranking-settings');if(sectio
 let statsRenderedDay;
 function statsView() {
   statsRenderedDay=localDay(Date.now());
-  const data=learning.snapshot(),locale=lang==='ja'?'ja-JP':'en-US';
-  const maximum=Math.max(...data.recent.map(day=>day.ms),1),dateFormat=new Intl.DateTimeFormat(locale,{month:'numeric',day:'numeric'});
-  return `<section class="stats-view"><h1>${t('stats')}</h1><p class="stats-note">${t('statsLocal')}</p>${!learning.persistent?`<p class="error" role="status">${t('statsStorageError')}</p>`:''}${studyMetricCards(data)}<section class="stats-chart" aria-labelledby="recent-time"><h2 id="recent-time">${t('recentTime')}</h2><ol class="stats-bars">${data.recent.map(day=>{const [year,month,date]=day.date.split('-').map(Number),label=dateFormat.format(new Date(year,month-1,date));return `<li><span class="bar-value">${e(formatDuration(day.ms))}</span><span class="bar-track" aria-hidden="true"><span style="height:${day.ms?Math.max(2,day.ms/maximum*100):0}%"></span></span><time datetime="${day.date}">${e(label)}</time></li>`;}).join('')}</ol></section>${calendarView(data)}<div class="stats-details"><p>${t('statsTimeRule')}</p><p>${t('statsCountRule')}</p><p>${t('statsStreakRule')}</p></div></section>`;
+  const data=learning.snapshot();
+  return `<section class="stats-view"><h1>${t('stats')}</h1><p class="stats-note">${t('statsLocal')}</p>${!learning.persistent?`<p class="error" role="status">${t('statsStorageError')}</p>`:''}${studyMetricCards(data)}${studyCharts(data.days,statsRenderedDay,'self')}<div class="stats-details"><p>${t('statsTimeRule')}</p><p>${t('statsCountRule')}</p><p>${t('statsStreakRule')}</p></div></section>`;
 }
-function calendarBounds(days){
-  const today=localDay(Date.now()),current=today.slice(0,7),months=Object.keys(days).filter(date=>date<=today).map(date=>date.slice(0,7));
+function studyCharts(days,today,scope){
+  const recent=recentStudyDays(days,today),maximum=Math.max(...recent.map(day=>day.ms),1),dateFormat=new Intl.DateTimeFormat(lang==='ja'?'ja-JP':'en-US',{month:'numeric',day:'numeric',timeZone:'UTC'});
+  return `<section class="stats-chart" aria-labelledby="recent-time"><h2 id="recent-time">${t('recentTime')}</h2><ol class="stats-bars">${recent.map(day=>{const label=dateFormat.format(new Date(day.date+'T12:00:00Z'));return `<li><span class="bar-value">${e(formatDuration(day.ms))}</span><span class="bar-track" aria-hidden="true"><span style="height:${day.ms?Math.max(2,day.ms/maximum*100):0}%"></span></span><time datetime="${day.date}">${e(label)}</time></li>`;}).join('')}</ol></section>${calendarView({days},scope,today)}`;
+}
+function calendarSource(scope){
+  if(scope==='admin' && state.route==='admin' && state.authenticated && state.adminStats)return {days:state.adminStats.days,today:state.adminStats.today};
+  if(scope==='self' && state.route==='stats')return {days:learning.snapshot().days,today:localDay(Date.now())};
+  return null;
+}
+function calendarBounds(days,today){
+  const current=today.slice(0,7),months=Object.keys(days).filter(date=>date<=today).map(date=>date.slice(0,7));
   return {today,current,first:months.length?months.sort()[0]:current};
 }
 function shiftCalendarMonth(month,offset){
   const [year,number]=month.split('-').map(Number);return localDay(new Date(year,number-1+offset,1).getTime()).slice(0,7);
 }
-function calendarView(data){
-  const {today,current,first}=calendarBounds(data.days),locale=lang==='ja'?'ja-JP':'en-US';
-  if(!state.calendarMonth || state.calendarMonth<first || state.calendarMonth>current)state.calendarMonth=current;
-  const month=studyCalendar(state.calendarMonth,data.days,Date.now()),dates=month.cells.filter(Boolean);
-  if(!dates.some(day=>day.date===state.calendarDate && !day.future))state.calendarDate=state.calendarMonth===current?today:dates.filter(day=>day.level>0).at(-1)?.date || dates[0].date;
-  const selected=dates.find(day=>day.date===state.calendarDate),dateFrom=key=>{const [year,month,day]=key.split('-').map(Number);return new Date(year,month-1,day);};
-  const title=new Intl.DateTimeFormat(locale,{year:'numeric',month:'long'}).format(dateFrom(month.month+'-01')),fullDate=new Intl.DateTimeFormat(locale,{year:'numeric',month:'long',day:'numeric',weekday:'long'});
-  const weekFormat=new Intl.DateTimeFormat(locale,{weekday:'short'}),weekdays=Array.from({length:7},(_,index)=>weekFormat.format(new Date(2026,0,4+index)));
+function calendarView(data,scope,today){
+  const {current,first}=calendarBounds(data.days,today),locale=lang==='ja'?'ja-JP':'en-US',view=state.calendars[scope];
+  if(!view.month || view.month<first || view.month>current)view.month=current;
+  const month=studyCalendar(view.month,data.days,Date.now(),today),dates=month.cells.filter(Boolean);
+  if(!dates.some(day=>day.date===view.date && !day.future))view.date=view.month===current?today:dates.filter(day=>day.level>0).at(-1)?.date || dates[0].date;
+  const selected=dates.find(day=>day.date===view.date),dateFrom=key=>{const [year,month,day]=key.split('-').map(Number);return new Date(Date.UTC(year,month-1,day,12));};
+  const title=new Intl.DateTimeFormat(locale,{year:'numeric',month:'long',timeZone:'UTC'}).format(dateFrom(month.month+'-01')),fullDate=new Intl.DateTimeFormat(locale,{year:'numeric',month:'long',day:'numeric',weekday:'long',timeZone:'UTC'});
+  const weekFormat=new Intl.DateTimeFormat(locale,{weekday:'short',timeZone:'UTC'}),weekdays=Array.from({length:7},(_,index)=>weekFormat.format(new Date(Date.UTC(2026,0,4+index,12))));
   const number=value=>new Intl.NumberFormat(locale).format(value);
-  return `<section class="study-calendar" aria-labelledby="calendar-title"><div class="calendar-heading"><h2 id="calendar-title">${icon('calendar')}${t('studyCalendar')}</h2><button class="text-btn" data-action="calendar-today">${t('calendarToday')}</button></div><p class="calendar-help">${t('calendarHelp')}</p><div class="calendar-layout"><div><div class="calendar-navigation"><button class="icon-btn" data-action="calendar-month" data-offset="-1" aria-label="${t('calendarPrevious')}" ${month.month<=first?'disabled':''}>${icon('back')}</button><h3 aria-live="polite">${e(title)}</h3><button class="icon-btn" data-action="calendar-month" data-offset="1" aria-label="${t('calendarNext')}" ${month.month>=current?'disabled':''}>${icon('arrow')}</button></div><div class="calendar-weekdays" aria-hidden="true">${weekdays.map(day=>`<span>${e(day)}</span>`).join('')}</div><div class="calendar-grid" role="group" aria-label="${e(title)}">${month.cells.map(day=>day?`<button class="calendar-day ${day.today?'is-today':''}" data-action="calendar-day" data-date="${day.date}" data-level="${day.level}" aria-pressed="${day.date===selected.date}" ${day.today?'aria-current="date"':''} ${day.future?'disabled':''} aria-label="${e(fullDate.format(dateFrom(day.date))+': '+t('calendarDaySummary',{time:formatDuration(day.ms),questions:number(day.answered),flips:number(day.flips)}))}"><time datetime="${day.date}">${day.number}</time>${day.level?'<span class="calendar-dot" aria-hidden="true"></span>':''}</button>`:'<span class="calendar-blank" aria-hidden="true"></span>').join('')}</div><div class="calendar-legend"><span>${t('calendarLess')}</span>${[0,1,2,3,4].map(level=>`<span class="calendar-key" data-level="${level}" aria-hidden="true"></span>`).join('')}<span>${t('calendarMore')}</span></div></div><section class="calendar-detail" aria-labelledby="calendar-selected-title" aria-live="polite"><h3 id="calendar-selected-title"><time datetime="${selected.date}">${e(fullDate.format(dateFrom(selected.date)))}</time></h3>${!selected.level?`<p class="calendar-empty">${t('calendarNoActivity')}</p>`:''}<dl>${[['totalTime',formatDuration(selected.ms)],['answeredQuestions',number(selected.answered)],['correctQuestions',number(selected.correct)],['accuracy',formatStudyMetric('accuracy',selected.accuracy)],['cardFlips',number(selected.flips)]].map(([label,value])=>`<div><dt>${t(label)}</dt><dd data-day-stat="${label}">${e(value)}</dd></div>`).join('')}</dl></section></div></section>`;
+  return `<section class="study-calendar" aria-labelledby="calendar-title"><div class="calendar-heading"><h2 id="calendar-title">${icon('calendar')}${t('studyCalendar')}</h2></div><p class="calendar-help">${t('calendarHelp')}</p><div class="calendar-layout"><div><div class="calendar-navigation"><button class="icon-btn" data-action="calendar-month" data-calendar-scope="${scope}" data-offset="-1" aria-label="${t('calendarPrevious')}" ${month.month<=first?'disabled':''}>${icon('back')}</button><h3 aria-live="polite">${e(title)}</h3><button class="icon-btn" data-action="calendar-month" data-calendar-scope="${scope}" data-offset="1" aria-label="${t('calendarNext')}" ${month.month>=current?'disabled':''}>${icon('arrow')}</button></div><div class="calendar-weekdays" aria-hidden="true">${weekdays.map(day=>`<span>${e(day)}</span>`).join('')}</div><div class="calendar-grid" role="group" aria-label="${e(title)}">${month.cells.map(day=>day?`<button class="calendar-day ${day.today?'is-today':''}" data-action="calendar-day" data-calendar-scope="${scope}" data-date="${day.date}" data-level="${day.level}" aria-pressed="${day.date===selected.date}" ${day.today?'aria-current="date"':''} ${day.future?'disabled':''} aria-label="${e(fullDate.format(dateFrom(day.date))+': '+t('calendarDaySummary',{time:formatDuration(day.ms),questions:number(day.answered),flips:number(day.flips)}))}"><time datetime="${day.date}">${day.number}</time>${day.level?'<span class="calendar-dot" aria-hidden="true"></span>':''}</button>`:'<span class="calendar-blank" aria-hidden="true"></span>').join('')}</div><div class="calendar-legend"><span>${t('calendarLess')}</span>${[0,1,2,3,4].map(level=>`<span class="calendar-key" data-level="${level}" aria-hidden="true"></span>`).join('')}<span>${t('calendarMore')}</span></div></div><section class="calendar-detail" aria-labelledby="calendar-selected-title" aria-live="polite"><h3 id="calendar-selected-title"><time datetime="${selected.date}">${e(fullDate.format(dateFrom(selected.date)))}</time></h3>${!selected.level?`<p class="calendar-empty">${t('calendarNoActivity')}</p>`:''}<dl>${[['totalTime',formatDuration(selected.ms)],['answeredQuestions',number(selected.answered)],['correctQuestions',number(selected.correct)],['accuracy',formatStudyMetric('accuracy',selected.accuracy)],['cardFlips',number(selected.flips)]].map(([label,value])=>`<div><dt>${t(label)}</dt><dd data-day-stat="${label}">${e(value)}</dd></div>`).join('')}</dl></section></div></section>`;
 }
 function guideView() {
   const section=(id,symbol,title,items)=>`<section class="guide-section" aria-labelledby="${id}"><h2 id="${id}">${icon(symbol)}${t(title)}</h2><ul>${items.map(key=>`<li>${e(t(key))}</li>`).join('')}</ul></section>`;
@@ -725,13 +733,12 @@ const actions={
   'admin-refresh':()=>refreshAdministration(),
   'admin-more':()=>refreshAdministration(true),
   'admin-remove':removeRankingParticipant,
-  'admin-stats':button=>{if(!state.authenticated || state.route!=='admin')return;state.adminStatsId=button.dataset.id;return refreshAdministratorStats();},
+  'admin-stats':button=>{if(!state.authenticated || state.route!=='admin')return;if(state.adminStatsId!==button.dataset.id)state.calendars.admin={month:null,date:null};state.adminStatsId=button.dataset.id;return refreshAdministratorStats();},
   'admin-stats-refresh':()=>refreshAdministratorStats(),
   'admin-stats-back':()=>{administratorStatsRequest++;state.adminStats=null;state.adminStatsId=null;state.adminStatsBusy=false;state.adminStatsError='';render();},
   'ranking-refresh':()=>refreshRankings(),
-  'calendar-month'(button){const days=learning.snapshot().days,{current,first}=calendarBounds(days),month=shiftCalendarMonth(state.calendarMonth,Number(button.dataset.offset));if(month<first || month>current)return;state.calendarMonth=month;state.calendarDate=null;render();},
-  'calendar-today'(){state.calendarMonth=localDay(Date.now()).slice(0,7);state.calendarDate=localDay(Date.now());render();},
-  'calendar-day'(button){const date=button.dataset.date;if(!studyCalendar(state.calendarMonth,learning.snapshot().days,Date.now()).cells.some(day=>day?.date===date && !day.future))return;state.calendarDate=date;render();},
+  'calendar-month'(button){const scope=button.dataset.calendarScope,source=calendarSource(scope);if(!source)return;const view=state.calendars[scope],{current,first}=calendarBounds(source.days,source.today),offset=Number(button.dataset.offset);if(![-1,1].includes(offset))return;const month=shiftCalendarMonth(view.month,offset);if(month<first || month>current)return;view.month=month;view.date=null;render();},
+  'calendar-day'(button){const scope=button.dataset.calendarScope,source=calendarSource(scope);if(!source)return;const view=state.calendars[scope],date=button.dataset.date;if(!studyCalendar(view.month,source.days,Date.now(),source.today).cells.some(day=>day?.date===date && !day.future))return;view.date=date;render();},
   'library-tab'(button){state.libraryTab=button.dataset.tab;state.listLimit=100;state.collection=null;render();},
   'weak-scope'(button){state.weakScope=button.dataset.scope;state.listLimit=100;render();},
   'weak-mode'(button){state.weakMode=button.dataset.mode;state.weakSetId=null;state.listLimit=100;render();},

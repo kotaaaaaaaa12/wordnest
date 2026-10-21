@@ -95,7 +95,7 @@ test('individual statistics require administrator authentication and match synce
     const upload=await api(mf,'/api/ranking/stats',{method:'PUT',token:prefs.token,body:{revision:ranking.profile.revision,epoch:'',timezone:zone,days}});assert.equal(upload.status,200);
     const response=await api(mf,path,{cookie});assert.equal(response.status,200);assert.deepEqual(response.data.summary,summarizeStudyDays(days,today));
     assert.equal(response.data.summary.accuracy,0.5);assert.equal(response.data.summary.averageMs,90000);assert.equal(response.data.participant.timezone,zone);assert.equal(response.data.participant.name,'Stats Person');
-    assert.equal('days' in response.data,false);assert.equal(JSON.stringify(response.data).includes(prefs.token),false);
+    assert.deepEqual(response.data.days,days);assert.equal(response.data.today,today);assert.equal(JSON.stringify(response.data).includes(prefs.token),false);
     const raw=await mf.dispatchFetch(origin+path,{headers:{Cookie:cookie}});assert.equal(raw.headers.get('cache-control'),'no-store');
     assert.equal((await api(mf,'/api/admin/rankings/'+'f'.repeat(64)+'/stats',{cookie})).status,404);
     assert.equal((await api(mf,'/api/rankings?metric=accuracy')).data.rows.length,0,'public accuracy retains its 30-answer threshold');

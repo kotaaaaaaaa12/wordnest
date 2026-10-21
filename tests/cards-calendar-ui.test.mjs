@@ -61,7 +61,7 @@ test('study calendar shows recorded months, daily totals and zero-answer accurac
     await h.click('[data-date="2026-10-20"]');assert.equal(h.find('[data-day-stat="accuracy"]').textContent,'—');assert.equal(h.find('[data-date="2026-10-20"]').dataset.level,'1');
     await h.click('[data-offset="-1"]');assert.match(h.find('.calendar-navigation h3').textContent,/September 2026/);assert.equal(h.find('[data-offset="-1"]').disabled,true);await h.click('[data-date="2026-09-30"]');assert.equal(h.find('[data-day-stat="totalTime"]').textContent,'5m 0s');
     await h.click('[data-action="settings"]');h.find('#settings-language').value='ja';h.find('#settings-language').dispatchEvent(new h.w.Event('change',{bubbles:true}));await h.click('[data-dialog="cancel"]');assert.equal(h.find('#calendar-title').textContent.trim(),'学習カレンダー');assert.equal(h.find('#calendar-selected-title time').dateTime,'2026-09-30');assert.match(h.find('.calendar-navigation h3').textContent,/2026年9月/);
-    await h.click('[data-action="calendar-today"]');assert.equal(h.find('#calendar-selected-title time').dateTime,'2026-10-21');assert.ok(h.find('.calendar-empty'));
+    assert.equal(h.find('[data-action="calendar-today"]'),null);await h.click('[data-offset="1"]');await h.click('[data-date="2026-10-21"]');assert.equal(h.find('#calendar-selected-title time').dateTime,'2026-10-21');assert.ok(h.find('.calendar-empty'));
     await h.click('[data-action="settings"]');await h.click('[data-delete-learning="statistics"]');await h.click('[data-dialog="confirm"]');await h.click('[data-dialog="cancel"]');assert.equal(h.find('[data-offset="-1"]').disabled,true);assert.equal(h.w.document.querySelectorAll('.calendar-day:not([data-level="0"])').length,0);
   }finally{h.close();}
 });

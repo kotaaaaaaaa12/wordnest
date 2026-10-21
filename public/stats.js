@@ -30,8 +30,11 @@ export function summarizeLearning(shards,timestamp=Date.now()) {
   }
   for(const day of Object.values(days)){day.ms=mergeLearningIntervals(day.intervals).reduce((sum,[start,end])=>sum+end-start,0);delete day.intervals;}
   const summary=summarizeStudyDays(days,localDay(timestamp));
-  const recent=Array.from({length:7},(_,index)=>{const date=new Date(timestamp);date.setHours(0,0,0,0);date.setDate(date.getDate()-6+index);const key=localDay(date.getTime());return {date:key,ms:days[key]?.ms || 0};});
+  const recent=recentStudyDays(days,localDay(timestamp));
   return {...summary,days,recent};
+}
+export function recentStudyDays(days,today){
+  return Array.from({length:7},(_,index)=>{const date=new Date(today+'T12:00:00Z');date.setUTCDate(date.getUTCDate()-6+index);const key=date.toISOString().slice(0,10);return {date:key,ms:days[key]?.ms || 0};});
 }
 export function summarizeStudyDays(days,today) {
   let totalMs=0,answered=0,correct=0,flips=0,activeDays=0;
@@ -107,10 +110,10 @@ export function studyActivityLevel(day){
   if(!day || !(day.ms>0 || day.answered>0 || day.flips>0))return 0;
   return day.ms>=1800000?4:day.ms>=900000?3:day.ms>=300000?2:1;
 }
-export function studyCalendar(month,days={},timestamp=Date.now()){
+export function studyCalendar(month,days={},timestamp=Date.now(),today=localDay(timestamp)){
   if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))throw new Error('Invalid calendar month');
   const [year,number]=month.split('-').map(Number);if(year<1900 || year>9999)throw new Error('Invalid calendar month');
-  const first=new Date(year,number-1,1),length=new Date(year,number,0).getDate(),today=localDay(timestamp);
+  const first=new Date(year,number-1,1),length=new Date(year,number,0).getDate();
   const cells=Array.from({length:42},(_,index)=>{
     const date=index-first.getDay()+1;if(date<1 || date>length)return null;
     const key=`${month}-${String(date).padStart(2,'0')}`,day=days[key] || {ms:0,answered:0,correct:0,flips:0};

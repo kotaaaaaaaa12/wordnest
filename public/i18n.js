@@ -5,7 +5,6 @@ export const messages = {
     cardsStorageError:"This browser could not save your flashcard position. It may be lost when this tab closes.",
     guideCardsResume:"Your current card, side, direction, and order are saved automatically in this browser. Choose Resume flashcards to continue, including the same random order. Starting a new deck replaces its bookmark. Changes to the deck’s words, meanings, notes, or order restart it. Deleting all learning data also removes flashcard bookmarks.",
     studyCalendar:"Study calendar",
-    calendarToday:"Today",
     calendarPrevious:"Previous month",
     calendarNext:"Next month",
     calendarHelp:"Select a date for its records. Darker cells show more study time: under 5, 5–14, 15–29, or 30+ minutes. A question attempt or card flip also marks a day. Dates follow this device’s local time.",
@@ -13,7 +12,7 @@ export const messages = {
     calendarMore:"More",
     calendarNoActivity:"No study activity recorded on this date.",
     calendarDaySummary:"{time}; {questions} questions attempted; {flips} card flips",
-    guideCalendar:"The monthly study calendar shows activity by color. Select a date to see study time, questions attempted, correct answers, accuracy, and card flips. Use the arrows to browse recorded months and Today to return to the current month.",
+    guideCalendar:"The monthly study calendar shows activity by color. Select a date to see study time, questions attempted, correct answers, accuracy, and card flips. Use the arrows to browse from the first recorded month through the current month.",
 
 
     readingImport:"Reading the selected files…",
@@ -64,7 +63,7 @@ export const messages = {
     noticeUnread:"Not yet acknowledged",
     rankingNoticeRequired:"Acknowledge the removal notice before participating again.",
     rankingNameUnchanged:"Choose a different display name from the one that was removed. Changes only to spacing, letter case, or character width do not count.",
-    guideAdministration:"Administration is visible only after entering the administrator password in Settings. Search all learners or filter by Listed, Not publicly listed, or Removed. View statistics shows the eight synced measures even when rankings are disabled. To remove a public entry, enter a private notice in Japanese, English, or both and confirm the learner. Removed users must acknowledge it and choose a different display name before rejoining. Records continue syncing privately.",
+    guideAdministration:"Administration is visible only after entering the administrator password in Settings. Search all learners or filter by Listed, Not publicly listed, or Removed. View statistics shows the eight synced measures, the seven-day chart, and a monthly calendar with daily records, even when rankings are disabled. Dates follow the learner’s timezone. To remove a public entry, enter a private notice in Japanese, English, or both and confirm the learner. Removed users must acknowledge it and choose a different display name before rejoining. Records continue syncing privately.",
 
     rankings:"Rankings",
     rankingAs:"Listed as {name}",
@@ -230,7 +229,6 @@ export const messages = {
     cardsStorageError:"単語カードの位置をこのブラウザに保存できません。このタブを閉じると、位置が失われる場合があります。",
     guideCardsResume:"表示中のカード・表裏・出題方向・表示順を、このブラウザに自動保存します。「単語カードの続きから再開」で、ランダム順も同じ並びから再開できます。新しく始めると、その単語帳の再開位置を更新します。単語・意味・解説・登録順が変わると最初からになります。すべての学習データを削除すると、再開位置も削除します。",
     studyCalendar:"学習カレンダー",
-    calendarToday:"今日",
     calendarPrevious:"前の月",
     calendarNext:"次の月",
     calendarHelp:"日付を選ぶと、その日の記録を確認できます。学習時間が5分未満・5〜14分・15〜29分・30分以上の順に色が濃くなります。問題への取り組みやカードをめくった日にも色が付きます。日付は端末の現地時間で区切ります。",
@@ -238,7 +236,7 @@ export const messages = {
     calendarMore:"多い",
     calendarNoActivity:"この日の学習記録はありません。",
     calendarDaySummary:"学習時間 {time}、取り組んだ問題数 {questions}問、カードをめくった回数 {flips}回",
-    guideCalendar:"月ごとの学習カレンダーに学習量を色で表示します。日付を選ぶと、学習時間・取り組んだ問題数・正解数・正答率・カードをめくった回数を確認できます。矢印で記録のある月の範囲を移動し、「今日」で今月に戻れます。",
+    guideCalendar:"月ごとの学習カレンダーに学習量を色で表示します。日付を選ぶと、学習時間・取り組んだ問題数・正解数・正答率・カードをめくった回数を確認できます。矢印で最初の記録がある月から今月まで移動できます。",
 
     readingImport:"選択したファイルを読み込んでいます…",
     importInspectWords:"単語と解説の内容を確認",
@@ -288,7 +286,7 @@ export const messages = {
     noticeUnread:"未確認",
     rankingNoticeRequired:"削除通知を確認してから、再参加してください。",
     rankingNameUnchanged:"削除時とは異なる掲載名を入力してください。空白・大文字と小文字・全角と半角だけの変更は、名前の変更として扱いません。",
-    guideAdministration:"設定で管理者パスワードを入力すると、管理タブが表示されます。すべての学習者を名前で検索し、掲載中・非公開・削除済みで絞り込めます。「学習記録を見る」から、ランキングが非公開の方も同期済みの8項目を確認できます。掲載を削除する際は、日本語・英語の片方または両方で本人向けの通知文を入力し、対象者を確認して確定します。本人は通知を確認し、別の掲載名を登録すると再参加できます。削除後も記録の非公開同期は継続します。",
+    guideAdministration:"設定で管理者パスワードを入力すると、管理タブが表示されます。すべての学習者を名前で検索し、掲載中・非公開・削除済みで絞り込めます。「学習記録を見る」から、ランキングが非公開の方も、同期済みの8項目・直近7日間のグラフ・日別の記録を確認できる月間カレンダーを表示できます。日付は学習者のタイムゾーンで区切ります。掲載を削除する際は、日本語・英語の片方または両方で本人向けの通知文を入力し、対象者を確認して確定します。本人は通知を確認し、別の掲載名を登録すると再参加できます。削除後も記録の非公開同期は継続します。",
 
     rankings:"ランキング",
     rankingAs:"掲載名：{name}",
