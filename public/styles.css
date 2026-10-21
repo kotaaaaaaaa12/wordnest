@@ -64,3 +64,5 @@ select:focus,select:focus-visible,select:active{border-color:var(--line);outline
 
 .admin-person-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.admin-person-actions>.btn{white-space:nowrap}.admin-stats-view>h1{margin-top:24px}.admin-stats-name{font-size:19px;margin-top:18px;overflow-wrap:anywhere}.admin-stats-view .stat-card>p{color:var(--ink)}
 @media(max-width:480px){.admin-person-head{flex-wrap:wrap}.admin-person-actions{justify-content:flex-start;width:100%}}
+
+.import-item.import-entry{display:block}.import-inspect{margin:12px 0 0 28px;font-size:12px}.import-inspect summary{cursor:pointer;color:var(--green);padding:5px 0}.import-inspect ol{padding-left:22px;max-height:320px;overflow:auto}.import-inspect li{padding:10px 4px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}.import-inspect li>strong,.import-inspect li>span,.import-inspect li>small{display:block;white-space:pre-wrap}.import-inspect li>span{margin-top:4px;font-size:12px}.import-inspect li>small{color:var(--muted);font-size:11px;line-height:1.8}

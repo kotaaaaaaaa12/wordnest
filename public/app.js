@@ -47,7 +47,7 @@ function toast(message) { $('#toast').textContent=message; $('#toast').classList
 function message(error) { return t(messages.en[error.message] ? error.message : 'networkError'); }
 async function api(path, options={}) {
   let response;
-  try { response=await fetch(path,{credentials:'same-origin',...options,headers:{...(options.body?{'Content-Type':'application/json'}:{}),...options.headers}}); } catch { throw new Error('networkError'); }
+  try { response=await fetch(path,{cache:'no-store',credentials:'same-origin',...options,headers:{...(options.body?{'Content-Type':'application/json'}:{}),...options.headers}}); } catch { throw new Error('networkError'); }
   let data; try { data=await response.json(); } catch { throw new Error('serverError'); }
   if (!response.ok) { if (response.status===401) { state.authenticated=false;state.adminData=null;state.adminStats=null;state.adminStatsId=null;state.sessionKnown=true;render(); } throw new Error(data.error || 'serverError'); }
   return data;
@@ -608,38 +608,66 @@ async function exportDialog() {
 async function importDialog() {
   if(state.route!=='edit' || !state.authenticated)return;
   if(!await discardGuard())return;
-  let imported=[],selected=new Set(),busy=false;
+  let imported=[],sources=[],selected=new Set(),busy=false,readRevision=0;
   await dialog(`<button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t('importTitle')}</h2><p>${t('importHelp')}</p><label class="file-picker">${t('chooseFiles')}<small>${t('fileHint')}</small><input type="file" id="import-files" accept=".json,.zip,application/json,application/zip" multiple></label><div id="import-preview"></div><p class="error" id="import-error" role="alert" hidden></p><div class="modal-actions"><button class="btn ghost" data-dialog="cancel">${t('cancel')}</button><button class="btn primary" id="import-confirm" disabled>${t('import')}</button></div>`,finish=>{
-    const error=$('#import-error',modal),preview=$('#import-preview',modal),submit=$('#import-confirm',modal);
-    function updatePreview(){preview.innerHTML=imported.length?`<p>${t('importReady',{n:imported.length,words:imported.reduce((n,s)=>n+s.words.length,0)})}</p><p>${t('importedSelection')}</p><div class="actions"><button class="text-btn" id="import-all">${t(selected.size===imported.length?'clearSelection':'selectAll')}</button></div><div class="import-list">${imported.map((s,i)=>`<div class="import-item"><label><input type="checkbox" data-import="${i}" ${selected.has(i)?'checked':''}><span><strong>${e(s.title)}</strong><small>${t('wordsCount',{n:s.words.length})}</small></span></label></div>`).join('')}</div>`:'';submit.disabled=!selected.size;submit.textContent=t('importConfirm',{n:selected.size});}
-    $('#import-files',modal).onchange=async event=>{
-      error.hidden=true;imported=[];selected.clear();submit.disabled=true;preview.innerHTML='';
-      try {
-        const files=[...event.target.files];if(files.length>100||files.reduce((n,f)=>n+f.size,0)>8*1024*1024)throw new Error('tooLarge');
+    const error=$('#import-error',modal),preview=$('#import-preview',modal),submit=$('#import-confirm',modal),picker=$('#import-files',modal);
+    const currentRead=revision=>revision===readRevision && picker.isConnected && modal.open;
+    function updatePreview(){
+      const titles=imported.map(set=>normalize(set.title)),duplicate=titles.some(title=>state.sets.some(set=>normalize(set.title)===title)) || new Set(titles).size<titles.length;
+      preview.innerHTML=imported.length?`<p>${t('importReady',{n:imported.length,words:imported.reduce((n,set)=>n+set.words.length,0)})}</p><p>${t('importedSelection')}</p>${duplicate?`<p class="notice">${t('importDuplicateTitle')}</p>`:''}<div class="actions"><button class="text-btn" id="import-all">${t(selected.size===imported.length?'clearSelection':'selectAll')}</button></div><div class="import-list">${imported.map((set,index)=>`<div class="import-item import-entry"><label><input type="checkbox" data-import="${index}" ${selected.has(index)?'checked':''}><span><strong>${e(set.title)}</strong><small>${e(sources[index])}</small><small>${t('wordsCount',{n:set.words.length})}</small></span></label><details class="import-inspect" data-import-inspect="${index}"><summary>${t('importInspectWords')}</summary><ol></ol></details></div>`).join('')}</div>`:'';
+      submit.disabled=!selected.size;submit.textContent=t('importConfirm',{n:selected.size});
+    }
+    picker.onchange=async event=>{
+      if(busy)return;
+      const revision=++readRevision,files=[...event.target.files];
+      error.hidden=true;imported=[];sources=[];selected.clear();submit.disabled=true;preview.innerHTML=files.length?`<p role="status">${t('readingImport')}</p>`:'';
+      if(!files.length)return;
+      // Keep each read in its own batch: an older asynchronous read must never update a newer selection.
+      const next=[],nextSources=[],append=(value,name)=>{const sets=parseImport(value);next.push(...sets);nextSources.push(...sets.map(()=>name));};
+      try{
+        if(files.length>100 || files.reduce((n,file)=>n+file.size,0)>8*1024*1024)throw new Error('tooLarge');
         let totalBytes=0;
         for(const file of files){
-          if(/\.zip$/i.test(file.name)) {
+          if(/\.zip$/i.test(file.name)){
             const bytes=new Uint8Array(await file.arrayBuffer());let declared=0,count=0;
-            const contents=unzipSync(bytes,{filter:entry=>{if(!/\.json$/i.test(entry.name)||entry.name.startsWith('__MACOSX/'))return false;declared+=entry.originalSize;count++;if(declared+totalBytes>1900000||count>100)throw new Error('tooLarge');return true;}});
-            const entries=Object.values(contents);if(!entries.length)throw new Error('invalidImport');
-            for(const bytes of entries){totalBytes+=bytes.length;if(totalBytes>1900000)throw new Error('tooLarge');imported.push(...parseImport(JSON.parse(strFromU8(bytes))));}
-          } else if(/\.json$/i.test(file.name)){totalBytes+=file.size;if(totalBytes>1900000)throw new Error('tooLarge');imported.push(...parseImport(JSON.parse(await file.text())));}
-          else throw new Error('invalidImport');
+            const contents=unzipSync(bytes,{filter:entry=>{if(!/\.json$/i.test(entry.name) || entry.name.startsWith('__MACOSX/'))return false;declared+=entry.originalSize;count++;if(declared+totalBytes>1900000 || count>100)throw new Error('tooLarge');return true;}});
+            const entries=Object.entries(contents);if(!entries.length)throw new Error('invalidImport');
+            for(const [name,bytes] of entries){totalBytes+=bytes.length;if(totalBytes>1900000)throw new Error('tooLarge');append(JSON.parse(strFromU8(bytes)),file.name+' / '+name);}
+          }else if(/\.json$/i.test(file.name)){
+            totalBytes+=file.size;if(totalBytes>1900000)throw new Error('tooLarge');append(JSON.parse(await file.text()),file.name);
+          }else throw new Error('invalidImport');
         }
-        if(!imported.length||imported.length>100)throw new Error('invalidImport');
-        if(strToU8(JSON.stringify({sets:imported})).length>2*1024*1024)throw new Error('tooLarge');
-        selected=new Set(imported.map((_,i)=>i));updatePreview();
-      }catch(err){imported=[];selected.clear();preview.innerHTML='';error.textContent=messages.en[err.message]?message(err):t('invalidImport');error.hidden=false;submit.disabled=true;}
+        if(!next.length || next.length>100)throw new Error('invalidImport');
+        if(strToU8(JSON.stringify({sets:next})).length>2*1024*1024)throw new Error('tooLarge');
+        if(!currentRead(revision))return;
+        imported=next;sources=nextSources;selected=new Set(imported.map((_,index)=>index));updatePreview();
+      }catch(err){
+        if(!currentRead(revision))return;
+        imported=[];sources=[];selected.clear();preview.innerHTML='';error.textContent=messages.en[err.message]?message(err):t('invalidImport');error.hidden=false;submit.disabled=true;
+      }
     };
-    preview.onclick=event=>{if(event.target.id==='import-all'){selected=selected.size===imported.length?new Set():new Set(imported.map((_,i)=>i));updatePreview();}};
-    preview.onchange=event=>{if(event.target.dataset.import!==undefined){const i=Number(event.target.dataset.import);if(event.target.checked)selected.add(i);else selected.delete(i);submit.disabled=!selected.size;submit.textContent=t('importConfirm',{n:selected.size});}};
+    preview.addEventListener('toggle',event=>{
+      const details=event.target;if(!details.matches('details[data-import-inspect]') || !details.open || details.dataset.loaded)return;
+      const set=imported[Number(details.dataset.importInspect)];if(!set)return;
+      $('ol',details).innerHTML=set.words.map(word=>`<li><strong>${e(word.english)}</strong><span>${e(word.meaning)}</span>${word.explanation?`<small>${e(word.explanation)}</small>`:''}</li>`).join('');details.dataset.loaded='true';
+    },true);
+    preview.onclick=event=>{if(busy)return;if(event.target.id==='import-all'){selected=selected.size===imported.length?new Set():new Set(imported.map((_,index)=>index));updatePreview();}};
+    preview.onchange=event=>{if(busy)return;if(event.target.dataset.import!==undefined){const index=Number(event.target.dataset.import);if(event.target.checked)selected.add(index);else selected.delete(index);submit.disabled=!selected.size;submit.textContent=t('importConfirm',{n:selected.size});}};
     submit.onclick=async()=>{
-      if(busy||!selected.size)return;busy=true;submit.disabled=true;submit.textContent=t('importing');error.hidden=true;modal.oncancel=event=>event.preventDefault();$$('[data-dialog]',modal).forEach(b=>b.disabled=true);$('#import-files',modal).disabled=true;
-      try{const data=await api('/api/sets',{method:'POST',body:JSON.stringify({sets:imported.filter((_,i)=>selected.has(i))})});state.sets.unshift(...data.sets);synchronizeSetOrder(data);state.dirty=false;state.draft=structuredClone(data.sets[0]);toast(t('importDone',{n:data.sets.length}));finish(true);render();}
-      catch(err){error.textContent=message(err);error.hidden=false;busy=false;submit.disabled=false;submit.textContent=t('importConfirm',{n:selected.size});$$('[data-dialog]',modal).forEach(b=>b.disabled=false);$('#import-files',modal).disabled=false;modal.oncancel=event=>{event.preventDefault();finish(false);};}
+      if(busy || !selected.size)return;
+      const requested=structuredClone(imported.filter((_,index)=>selected.has(index)));
+      busy=true;readRevision++;submit.disabled=true;submit.textContent=t('importing');error.hidden=true;modal.oncancel=event=>event.preventDefault();$$('[data-dialog]',modal).forEach(button=>button.disabled=true);picker.disabled=true;$$('input,button',preview).forEach(element=>element.disabled=true);
+      try{
+        const data=await api('/api/sets',{method:'POST',body:JSON.stringify({sets:requested})});
+        let matches=false;try{matches=Array.isArray(data.sets) && JSON.stringify(data.sets.map(validateSet))===JSON.stringify(requested.map(validateSet));}catch{}
+        if(!matches)throw new Error('importMismatch');
+        state.sets.unshift(...data.sets);synchronizeSetOrder(data);state.dirty=false;state.draft=structuredClone(data.sets[0]);state.error='';toast(t('importDone',{n:data.sets.length}));finish(true);render();
+      }catch(err){
+        error.textContent=message(err);error.hidden=false;busy=false;const mismatch=err.message==='importMismatch';submit.disabled=mismatch;submit.textContent=t('importConfirm',{n:selected.size});$$('[data-dialog]',modal).forEach(button=>button.disabled=false);picker.disabled=mismatch;$$('input,button',preview).forEach(element=>element.disabled=mismatch);modal.oncancel=event=>{event.preventDefault();finish(false);};
+      }
     };
   });
-  render();
+  readRevision++;render();
 }
 function submitAnswer(answer,skipped=false,forceTimeout=false) {
   const qz=state.quiz;if(!qz || state.screen!=='quiz' || qz.answers[qz.index])return;
