@@ -65,9 +65,9 @@ Open **Settings** from the sidebar or the gear button in the mobile header.
 
 The original default light and dark palettes are unchanged. Light and dark theme choices are saved separately on this browser; Auto switches between those saved choices. Theme preferences are applied in the document head before the page is painted. Favorite stars have a solid yellow fill in every theme. Clear-status colors keep their established meanings across palettes.
 
-Settings contains no word-set management actions. Its bottom Administrator access section accepts the existing `ADMIN_PASSWORD`, reveals Edit after successful server authentication, and offers Open editor and Lock editor while authenticated. There is no password wall on the Edit page; anonymous `#/edit` links return to Practice. After enabling editing, the toolbar contains **New set**, **Import**, **Export**, and **Manage sets**. Lock editor is available only in Settings.
+Settings contains no word-set management actions. Its bottom Administrator mode section accepts the existing `ADMIN_PASSWORD`, reveals Edit after successful server authentication, and offers Open editor and Exit administrator mode while authenticated. There is no password wall on the Edit page; anonymous `#/edit` links return to Practice. After enabling administrator mode, the toolbar contains **New set**, **Import**, **Export**, and **Manage sets**. Exit administrator mode is available only in Settings.
 
-Practice cards contain no export checkboxes or New set buttons. The editor provides creation and backup actions directly; they remain hidden while the editor is locked. Focus outlines and focus shadows are suppressed throughout the interface, including modal headings and buttons. Direction cards have no sticky hover highlight, and pointer clicks do not leave the selected button focused.
+Practice cards contain no export checkboxes or New set buttons. The editor provides creation and backup actions directly; they remain hidden while administrator mode is inactive. Focus outlines and focus shadows are suppressed throughout the interface, including modal headings and buttons. Direction cards have no sticky hover highlight, and pointer clicks do not leave the selected button focused.
 
 When upgrading from version 1.0, the untouched automatically generated starter set is removed once. A starter set that was edited or renamed is preserved, along with all user-created and imported sets. No example sets are automatically added afterward.
 
@@ -117,13 +117,13 @@ After choosing **Flashcards** and a direction, choose **Original order**, **Reve
 
 ## Editing and shared storage
 
-- Enable editing with the administrator password at the bottom of Settings. Authentication reveals the Edit tab and the editing guide; locking or an expired-session response hides both. Unsaved drafts remain in memory after session expiry and can be resumed after authenticating again.
+- Enable administrator mode with the administrator password at the bottom of Settings. Authentication reveals Edit, Administration, and their guides; ending administrator mode or an expired-session response hides them. Unsaved drafts remain in memory after session expiry and can be resumed after authenticating again.
 - Word sets are shared across browsers and stored in D1, not in local storage.
 - The editor supports a title, English word, meaning, and optional explanation.
 - Save changes explicitly. Saving keeps the editor open.
 - Switching sets or pages with unsaved edits opens a confirmation dialog. Closing/reloading the page uses the browser's native unsaved-changes warning when supported.
 - A signed, HttpOnly cookie remembers editor authentication for up to 30 days in the authenticated browser profile. Other browsers/profiles need the password separately. This is browser authentication, not hardware-device attestation.
-- Lock editor clears that browser's cookie. Changing `ADMIN_PASSWORD` invalidates every existing editor session.
+- Exit administrator mode clears that browser's cookie. Changing `ADMIN_PASSWORD` invalidates every existing editor session.
 - The server checks authentication for every write, validates all imported data, rejects cross-origin writes, and limits password attempts per client IP to 10 in a 15-minute window.
 - Concurrent edits are checked using revision numbers. A stale save/delete is rejected. Export your draft before refreshing to preserve your work.
 - Up to 200 sets and 1,000 words per set are supported. Titles: 150 characters. English: 150. Meaning: 300. Explanation: 2,000.
@@ -142,7 +142,7 @@ Enable editing in **Settings**, open **Edit**, then open **Manage sets**.
 - The server validates the complete set list and checks the collection revision. A stale reordering request cannot silently overwrite changes from another browser.
 - Existing installations automatically get a persistent display order based on their previous visible order. No manual migration is required.
 
-Delete sets through **Edit → Manage sets** after unlocking the editor.
+Delete sets through **Edit → Manage sets** after enabling administrator mode.
 
 ## Export and import
 
@@ -295,7 +295,7 @@ Only text-entry fields restore focus and caret position when their DOM nodes are
 
 ## Ranking moderation (version 1.10.0)
 
-The authenticated navigation order is Practice / Statistics / Rankings / Guide / Edit / Administration. Settings uses the existing `ADMIN_PASSWORD` and session cookie to reveal both administrator tabs. Anonymous direct `#/admin` links return to Practice. Every `/api/admin/` operation is checked by the server before any participant or notice data is returned. Session expiry or locking hides both administrator tabs and clears loaded moderation rows.
+The authenticated navigation order is Practice / Statistics / Rankings / Guide / Edit / Administration. Settings uses the existing `ADMIN_PASSWORD` and session cookie to reveal both administrator tabs. Anonymous direct `#/admin` links return to Practice. Every `/api/admin/` operation is checked by the server before any participant or notice data is returned. Session expiry or exiting administrator mode hides both administrator tabs and clears loaded moderation rows.
 
 Administration supports learner-name search and All learners / Listed / Not publicly listed / Removed filters, with 50 learners per page. All learners is the default and includes profiles with zero study activity. Listed includes enabled profiles even if they have not yet accumulated a qualifying ranking record. Removing a participant opens a confirmation form naming the target. Enter a Japanese message, an English message, or both, with at least one nonempty notice and a maximum of 500 Unicode code points per message. If only one is present, the participant sees that text in either interface language. Notices are rendered as plain text, including line breaks. They are visible only to the participant's browser identity and authenticated administrators.
 
@@ -338,3 +338,7 @@ Every file selection is parsed into an isolated local batch. Only the latest sel
 Import previews show the selected filename, including the member path inside ZIP files. Expand a set to inspect all words, meanings, and explanations before importing. Word details render only when expanded. Same-title sets trigger a warning because imports create separate copies, preserving the existing create-only policy. JSON spelling and Unicode are preserved except for existing leading/trailing whitespace validation.
 
 The submitted batch is captured before posting. The server response is compared with the validated selection before success is displayed. Mismatched responses report a content error and prevent repeated submissions until the dialog is closed; the message explains that saving may already have completed and asks the administrator to reload before retrying. API requests explicitly bypass the browser cache. Regression tests cover asynchronous file selection, delete/reimport/reload, and JSON/ZIP/export round trips against real local D1.
+
+## Administrator terminology (version 1.13.2)
+
+Settings, session status, authentication messages, and the Guide use Administrator mode in English and its Japanese equivalent. Enabling the mode reveals both Edit and Administration; exiting it ends the shared administrator session. Authentication and permissions are unchanged.
