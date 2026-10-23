@@ -502,3 +502,7 @@ Prepared Web Audio effects now begin 150 ms after the answer or perfect-score re
 ## Balanced distractor pronunciation rows (version 1.22.6)
 
 Revealed multiple-choice distractors use matching 12 px English and IPA text with a shared line height. Their pronunciation controls use a 24 px circle and an explicitly sized 14 px icon, keeping the supplementary row compact and proportionate. The registered IPA typeface and saved italic spans remain intact. Question, typing-answer, and flashcard pronunciation controls retain their existing sizes.
+
+## Clearer typing-quiz answers (version 1.22.7)
+
+JP → EN feedback places the correct-answer label above the accepted answers. English answers use prominent 26 px text, paired with 20 px IPA and a 32 px pronunciation button containing a 17 px icon. Rows align vertically and wrap within narrow screens; multiple accepted answers retain separate rows. Other quiz and flashcard pronunciation sizes are unchanged.
