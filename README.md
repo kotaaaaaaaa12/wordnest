@@ -450,3 +450,7 @@ Additional automated tests cover repeated italic palette insertion, visible fiel
 ## Palette-only italic controls (version 1.20.1)
 
 The separate selection-based **Italic** button and its Ctrl/Command+I shortcut have been removed. The palette's **Italic input** toggle is now the only italic control; it styles new input until turned off. English and Japanese instructions reflect this change. Native rich-text formatting commands are blocked in the IPA field. Existing saved italic ranges still display and survive editing, saving, and JSON/ZIP transfers. Selection for replacing text, caret restoration, and undo/redo remain available.
+
+## Inline IPA display (version 1.20.2)
+
+The separate IPA preview has been removed from the word editor. The editable field already displays regular and italic characters directly. The palette, undo/redo, saved formatting, flashcards, and import previews remain available. English and Japanese editing instructions now refer to the inline field and cards.

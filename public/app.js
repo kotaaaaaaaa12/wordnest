@@ -559,18 +559,14 @@ function rememberIpaEdit(input,before){
   const after=ipaSnapshot(input);if(before.ipa===after.ipa && JSON.stringify(before.ipaItalic)===JSON.stringify(after.ipaItalic))return;
   const history=ipaHistories.get(input)||{past:[],future:[]};history.past.push(before);if(history.past.length>100)history.past.shift();history.future=[];ipaHistories.set(input,history);
 }
-function updateIpaPreview(input){
-  const word=ipaWord(input),preview=input.closest('.ipa-editor').querySelector('.ipa-preview-value');
-  preview.innerHTML=normalizeIpa(word.ipa||'')?`[${ipaMarkup(word)}]`:'—';
-}
 function undoIpaEdit(input,redo=false){
   const history=ipaHistories.get(input),from=redo?history?.future:history?.past;if(!from?.length)return false;
   const current=ipaSnapshot(input),saved=from.pop();(redo?history.past:history.future).push(current);
-  const word=ipaWord(input);word.ipa=saved.ipa;setIpaStyle(word,structuredClone(saved.ipaItalic));paintIpaInput(input,saved.selection);ipaEdits.delete(input);markDirty();updateIpaPreview(input);return true;
+  const word=ipaWord(input);word.ipa=saved.ipa;setIpaStyle(word,structuredClone(saved.ipaItalic));paintIpaInput(input,saved.selection);ipaEdits.delete(input);markDirty();return true;
 }
 function updateIpaInput(input){
   const before=ipaSnapshot(input),word=ipaWord(input),hint=ipaEdits.get(input),selection=ipaSelection(input),value=limitIpaText(input.textContent.replace(/[\r\n\t]/g,' ')),ranges=remapIpaItalic(before.ipa,value,before.ipaItalic,hint);if(hint)before.selection=[hint.start,hint.end];ipaEdits.delete(input);
-  word.ipa=value;setIpaStyle(word,ranges);paintIpaInput(input,selection);rememberIpaEdit(input,before);markDirty();updateIpaPreview(input);
+  word.ipa=value;setIpaStyle(word,ranges);paintIpaInput(input,selection);rememberIpaEdit(input,before);markDirty();
 }
 function replaceIpaSelection(input,text){
   const [start,end]=ipaSelection(input),value=input.textContent;
@@ -678,7 +674,7 @@ function finishIpaPress(event,cancelled=false){
   // Releasing over the original key leaves the alternatives open for a separate tap.
 }
 function ipaEditor(word,index){
-  return `<div class="wide ipa-editor"><div class="ipa-label" id="word-${index}-ipa-label">${t('ipa')} · ${t('optional')}</div><div class="ipa-input-wrap"><span aria-hidden="true">[</span><div id="word-${index}-ipa" class="ipa-input ${word.ipa?'':'is-empty'}" role="textbox" contenteditable="true" tabindex="0" aria-multiline="false" aria-labelledby="word-${index}-ipa-label" aria-describedby="word-${index}-ipa-help" data-word="${index}" data-field="ipa" data-placeholder="əˈtʃiːv" lang="en-fonipa" dir="ltr" inputmode="text" enterkeyhint="done" autocorrect="off" autocapitalize="none" spellcheck="false">${ipaRawMarkup(word)}</div><span aria-hidden="true">]</span></div><small class="ipa-input-help" id="word-${index}-ipa-help">${t('ipaFormatHelp')}</small><div class="ipa-preview"><small>${t('ipaPreview')}</small><span class="ipa-preview-value" lang="en-fonipa" dir="ltr">${normalizeIpa(word.ipa||'')?`[${ipaMarkup(word)}]`:'—'}</span></div></div>`;
+  return `<div class="wide ipa-editor"><div class="ipa-label" id="word-${index}-ipa-label">${t('ipa')} · ${t('optional')}</div><div class="ipa-input-wrap"><span aria-hidden="true">[</span><div id="word-${index}-ipa" class="ipa-input ${word.ipa?'':'is-empty'}" role="textbox" contenteditable="true" tabindex="0" aria-multiline="false" aria-labelledby="word-${index}-ipa-label" aria-describedby="word-${index}-ipa-help" data-word="${index}" data-field="ipa" data-placeholder="əˈtʃiːv" lang="en-fonipa" dir="ltr" inputmode="text" enterkeyhint="done" autocorrect="off" autocapitalize="none" spellcheck="false">${ipaRawMarkup(word)}</div><span aria-hidden="true">]</span></div><small class="ipa-input-help" id="word-${index}-ipa-help">${t('ipaFormatHelp')}</small></div>`;
 }
 function editor() {
   if(!state.authenticated)return '';

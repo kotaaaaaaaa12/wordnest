@@ -3,7 +3,6 @@ export const messages = {
     ipa:"Pronunciation (IPA)",
     ipaSymbols:"IPA symbols",
     ipaTypingItalic:"Italic input",
-    ipaPreview:"Preview",
     ipaFormatHelp:"Toggle Italic input in the palette to type in italics until turned off.",
     invalidIpaStyle:"The IPA formatting ranges are invalid.",
     ipaCategories:"Symbol categories",
@@ -44,7 +43,7 @@ export const messages = {
     insertIpaSymbol:"Insert {symbol}",
     invalidIpa:"Use up to 200 characters for IPA, without line breaks or control characters.",
     guideCardIpa:"When supplied, IPA appears in square brackets below the English word. In JP → EN, it appears only on the English side. Pronunciation notation and the device’s spoken voice are managed separately. The back of the card has a subtle tint of the theme accent color.",
-    guideEditIpa:"IPA is optional. Focus the IPA input to show the symbol palette; it closes when focus leaves that input. Choose Vowels, Consonants, Combinations, Detailed notation, or Marks. UK/US dictionary forms, regional sounds, and narrow transcription symbols are available. Tap a symbol to insert it at the caret or replace the selected text. Hold a marked vowel for accented forms such as ǽ. Slide to a choice and release, or release first and tap a choice. Ordinary typing and paste work too. The normal face is used by default. Combining accents stay with their letter. The input shows regular and italic characters directly, matching Preview and the cards. Turn on Italic input in the palette to enter new characters in italics, including long-press variants. It stays on until you turn it off and is remembered separately for each field while the editor remains open. Ctrl/Command+Z and Shift+Ctrl/Command+Z undo/redo edits in the current input. Square brackets are added on cards. IPA is saved with word sets and included in JSON/ZIP transfers. Updating IPA alone preserves quiz clears, difficult-word streaks, favorites, and flashcard bookmarks.",
+    guideEditIpa:"IPA is optional. Focus the IPA input to show the symbol palette; it closes when focus leaves that input. Choose Vowels, Consonants, Combinations, Detailed notation, or Marks. UK/US dictionary forms, regional sounds, and narrow transcription symbols are available. Tap a symbol to insert it at the caret or replace the selected text. Hold a marked vowel for accented forms such as ǽ. Slide to a choice and release, or release first and tap a choice. Ordinary typing and paste work too. The normal face is used by default. Combining accents stay with their letter. The input shows regular and italic characters directly, matching the cards. Turn on Italic input in the palette to enter new characters in italics, including long-press variants. It stays on until you turn it off and is remembered separately for each field while the editor remains open. Ctrl/Command+Z and Shift+Ctrl/Command+Z undo/redo edits in the current input. Square brackets are added on cards. IPA is saved with word sets and included in JSON/ZIP transfers. Updating IPA alone preserves quiz clears, difficult-word streaks, favorites, and flashcard bookmarks.",
 
     hearPronunciation:"Hear the pronunciation of {word}",
     speechError:"Pronunciation could not be played. Check that an English voice is available on this device and try again.",
@@ -277,7 +276,6 @@ export const messages = {
     ipa:"発音記号（IPA）",
     ipaSymbols:"発音記号パレット",
     ipaTypingItalic:"斜体入力",
-    ipaPreview:"プレビュー",
     ipaFormatHelp:"パレットの「斜体入力」をオンにすると、オフにするまで斜体で入力します。",
     invalidIpaStyle:"発音記号の書式指定が正しくありません。",
     ipaCategories:"記号の種類",
@@ -318,7 +316,7 @@ export const messages = {
     insertIpaSymbol:"{symbol}を挿入",
     invalidIpa:"発音記号は、改行・制御文字を含めず200文字以内で入力してください。",
     guideCardIpa:"登録された発音記号を、英単語の下に角括弧付きで表示します。JP → ENでは英単語のある裏面だけに表示します。発音記号と端末の読み上げ音声は別に管理します。カードの裏面にはテーマのアクセントカラーを薄く重ねます。",
-    guideEditIpa:"発音記号は任意です。入力欄にフォーカスがある間だけ記号パレットを表示します。母音・子音・組み合わせ・詳細表記・補助記号から種類を選択できます。英米の辞書で使う表記に加え、地域差や細かな発音を表す記号も入力できます。記号をタップするとカーソル位置に挿入し、文字を選択している場合は置き換えます。印のある母音を長押しすると、ǽなどのアクセント付き候補を表示します。指を滑らせて離すか、指を離してから候補をタップして選択できます。通常の入力や貼り付けも利用できます。通常の書体が基本です。文字に付いたアクセント記号もまとめて扱います。書体は入力欄の中にも直接反映し、プレビューやカードと同じ表示になります。パレットの「斜体入力」をオンにすると、オフにするまで新しく入力する文字や長押しの候補を斜体にします。編集中は入力欄ごとに状態を保持します。現在の入力欄ではCtrl／Command＋Zで元に戻し、Shiftを加えるとやり直せます。カードでは角括弧を自動で付けます。発音記号は単語セットと一緒に保存し、JSON・ZIPのインポートとエクスポートにも含めます。発音記号だけの変更では、クリア状況・苦手判定・お気に入り・単語カードの再開位置は変わりません。",
+    guideEditIpa:"発音記号は任意です。入力欄にフォーカスがある間だけ記号パレットを表示します。母音・子音・組み合わせ・詳細表記・補助記号から種類を選択できます。英米の辞書で使う表記に加え、地域差や細かな発音を表す記号も入力できます。記号をタップするとカーソル位置に挿入し、文字を選択している場合は置き換えます。印のある母音を長押しすると、ǽなどのアクセント付き候補を表示します。指を滑らせて離すか、指を離してから候補をタップして選択できます。通常の入力や貼り付けも利用できます。通常の書体が基本です。文字に付いたアクセント記号もまとめて扱います。書体は入力欄の中にも直接反映し、カードと同じ表示になります。パレットの「斜体入力」をオンにすると、オフにするまで新しく入力する文字や長押しの候補を斜体にします。編集中は入力欄ごとに状態を保持します。現在の入力欄ではCtrl／Command＋Zで元に戻し、Shiftを加えるとやり直せます。カードでは角括弧を自動で付けます。発音記号は単語セットと一緒に保存し、JSON・ZIPのインポートとエクスポートにも含めます。発音記号だけの変更では、クリア状況・苦手判定・お気に入り・単語カードの再開位置は変わりません。",
 
     hearPronunciation:"「{word}」の発音を聞く",
     speechError:"発音を再生できませんでした。端末で英語の音声を利用できるか確認し、もう一度お試しください。",
