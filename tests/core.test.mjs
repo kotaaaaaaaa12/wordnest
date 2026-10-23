@@ -53,7 +53,7 @@ test('flashcards preserve every registered word in both directions and all three
   assert.throws(()=>createFlashcards(seed,'en-ja','other'),/invalidOrder/);
 });
 
-test('clear status follows quiz content and preserves independent direction flags',()=>{
+test('clear status survives edits by set ID and preserves independent first-pass direction flags',()=>{
   const set={...structuredClone(seed),id:'progress-set'},key=studyKey(set);
   assert.equal(studyStatus(set,{}),'none');
   assert.equal(studyStatus(set,{[set.id]:{key,'en-ja':true,'ja-en':true}}),'none');
@@ -68,7 +68,10 @@ test('clear status follows quiz content and preserves independent direction flag
   assert.equal(studyKey(reordered),key);
   assert.equal(studyStatus(reordered,progress),'ja-en');
   const edited=structuredClone(set);edited.words[0].meaning='A different meaning';
-  assert.equal(studyStatus(edited,progress),'none');
+  assert.equal(studyStatus(edited,progress),'ja-en');
+  edited.words[0].english='edited-word';edited.words.push({english:'added',meaning:'追加',explanation:''});
+  assert.equal(studyStatus(edited,progress),'ja-en');
+  assert.equal(studyStatus({...edited,words:edited.words.slice(1),published:false},progress),'ja-en');
   assert.notEqual(studyKey({...set,words:set.words.slice(1)}),key);
   assert.equal(studyStatus({...set,id:'imported-copy'},progress),'none');
   assert.equal(studyStatus(set,{[set.id]:{key,scope:'all-first-pass','en-ja':'true'}}),'none');

@@ -46,16 +46,22 @@ const btn = (key, action, type='ghost', extra='') => `<button class="btn ${type}
 let toastTimer;
 function toast(message) { $('#toast').textContent=message; $('#toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),4000); }
 function message(error) { return t(messages.en[error.message] ? error.message : 'networkError'); }
+function restrictSetsToPublic(){
+  const hadPrivate=state.sets.some(set=>set.published===false);
+  state.sets=state.sets.filter(set=>set.published!==false);
+  const ids=new Set(state.sets.map(set=>set.id));state.selected=new Set([...state.selected].filter(id=>ids.has(id)));
+  if(hadPrivate){state.screen='home';state.quiz=null;state.cards=null;state.collection=null;state.setId=null;}
+}
 async function api(path, options={}) {
   let response;
   try { response=await fetch(path,{cache:'no-store',credentials:'same-origin',...options,headers:{...(options.body?{'Content-Type':'application/json'}:{}),...options.headers}}); } catch { throw new Error('networkError'); }
   let data; try { data=await response.json(); } catch { throw new Error('serverError'); }
-  if (!response.ok) { if (response.status===401) { state.authenticated=false;state.adminData=null;state.adminStats=null;state.adminStatsId=null;state.sessionKnown=true;render(); } throw new Error(data.error || 'serverError'); }
+  if (!response.ok) { if (response.status===401) { state.authenticated=false;state.adminData=null;state.adminStats=null;state.adminStatsId=null;state.sessionKnown=true;restrictSetsToPublic();render(); } throw new Error(data.error || 'serverError'); }
   return data;
 }
 async function load() {
   state.loadError=''; render();
-  try { const [data, session]=await Promise.all([api('/api/sets'),api('/api/session')]); state.sets=data.sets; state.orderRevision=data.orderRevision; state.authenticated=session.authenticated; state.sessionKnown=true; state.configured=session.configured; state.loaded=true; }
+  try { const [data, session]=await Promise.all([api('/api/sets'),api('/api/session')]); state.sets=data.sets; state.orderRevision=data.orderRevision; state.authenticated=session.authenticated; state.sessionKnown=true; state.configured=session.configured; if(!state.authenticated)restrictSetsToPublic();state.loaded=true; }
   catch(error) { state.sessionKnown=true;state.loadError=message(error); }
   render();
   if(state.route==='rankings')refreshRankings();else ranking.sync(true).catch(()=>{});
@@ -71,7 +77,7 @@ function isTextEntry(element) {
   return element?.matches('[contenteditable="true"]') || element?.tagName==='TEXTAREA' || (element?.tagName==='INPUT' && ['text','search','email','password','tel','url','number'].includes(element.type));
 }
 function render() {
-  stopCardSpeech();hideIpaPalette();
+  stopSpeech();hideIpaPalette();
   learning.tick();
   if(state.sessionKnown && ['edit','admin'].includes(state.route) && !state.authenticated){state.route='home';state.screen='home';state.quiz=null;state.cards=null;state.collection=null;history.replaceState(null,'',routeHref('home'));}
   if($('#weak-picker'))state.weakPickerOpen=$('#weak-picker').open;
@@ -289,7 +295,7 @@ function calendarView(data,scope,today){
 }
 function guideView() {
   const section=(id,symbol,title,items)=>`<section class="guide-section" aria-labelledby="${id}"><h2 id="${id}">${icon(symbol)}${t(title)}</h2><ul>${items.map(key=>`<li>${e(t(key))}</li>`).join('')}</ul></section>`;
-  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls','guideCardsSpeech','guideCardIpa','guideCardsResume'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-personal','star','personalTools',['guideWeak','guideChoiceOptions','guideWeakRecovery','guideFavorites','guideSearch','guidePersonalStorage'])}${section('guide-records','stats','stats',['guideStats','guideCalendar','statsTimeRule','statsCountRule','statsStreakRule'])}${section('guide-rankings','trophy','rankings',['guideRankings','rankingAccuracyRule','guideRankingPrivacy'])}${section('guide-settings','settings','settings',['guideSettings','guideDeleteData','guideSounds'])}${state.authenticated?section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideEditIpa','guideTransfers','guideEditShared'])+section('guide-admin','settings','admin',['guideAdministration']):''}</article>`;
+  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizSpeech','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls','guideCardsSpeech','guideCardIpa','guideCardsResume'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-personal','star','personalTools',['guideWeak','guideChoiceOptions','guideWeakRecovery','guideFavorites','guideSearch','guidePersonalStorage'])}${section('guide-records','stats','stats',['guideStats','guideCalendar','statsTimeRule','statsCountRule','statsStreakRule'])}${section('guide-rankings','trophy','rankings',['guideRankings','rankingAccuracyRule','guideRankingPrivacy'])}${section('guide-settings','settings','settings',['guideSettings','guideDeleteData','guideSounds'])}${state.authenticated?section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideEditIpa','guideTransfers','guideEditShared'])+section('guide-admin','settings','admin',['guideAdministration']):''}</article>`;
 }
 function readStudyProgress() {
   try { const value=JSON.parse(storage.get('wordnest-progress','{}'));return value && typeof value==='object' && !Array.isArray(value)?value:{}; } catch { return {}; }
@@ -299,13 +305,13 @@ function recordQuizClear(quiz) {
   const set=state.sets.find(set=>set.id===quiz.setId);
   if(!set || studyKey(set)!==quiz.setKey)return;
   const progress=readStudyProgress(),previous=progress[set.id];
-  const sameContent=previous?.scope==='all-first-pass' && previous.key===quiz.setKey;
-  progress[set.id]={key:quiz.setKey,scope:'all-first-pass','en-ja':sameContent && previous['en-ja']===true,'ja-en':sameContent && previous['ja-en']===true,[quiz.mode]:true};
+  const previousClear=previous?.scope==='all-first-pass';
+  progress[set.id]={key:quiz.setKey,scope:'all-first-pass','en-ja':previousClear && previous['en-ja']===true,'ja-en':previousClear && previous['ja-en']===true,[quiz.mode]:true};
   storage.set('wordnest-progress',JSON.stringify(progress));
 }
 function setCard(set,progress) {
   const status=studyStatus(set,progress),label=status==='none'?t('notCleared'):status==='both'?t('bothCleared'):t('directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'});
-  return `<article class="set-card study-${status}" data-study-status="${status}" data-set-id="${e(set.id)}"><div class="card-head"><span class="set-symbol">${icon('book')}</span><span class="study-status">${status==='none'?'':icon(status==='both'?'trophy':'check')}${e(label)}</span></div><button class="card-open" data-action="open" data-id="${e(set.id)}"><h3>${e(set.title)}</h3><span class="visually-hidden">${t('openSet')}</span></button><div class="card-bottom"><span>${t('wordsCount',{n:set.words.length})}</span><button class="icon-btn" data-action="open" data-id="${e(set.id)}" aria-label="${t('openSet')}">${icon('arrow')}</button></div></article>`;
+  return `<article class="set-card study-${status}" data-study-status="${status}" data-set-id="${e(set.id)}"><div class="card-head"><span class="set-symbol">${icon('book')}</span><span class="study-status">${status==='none'?'':icon(status==='both'?'trophy':'check')}${e(label)}</span></div><button class="card-open" data-action="open" data-id="${e(set.id)}"><h3>${e(set.title)}</h3>${set.published===false?`<span class="private-set-label">${t('setPrivate')}</span>`:''}<span class="visually-hidden">${t('openSet')}</span></button><div class="card-bottom"><span>${t('wordsCount',{n:set.words.length})}</span><button class="icon-btn" data-action="open" data-id="${e(set.id)}" aria-label="${t('openSet')}">${icon('arrow')}</button></div></article>`;
 }
 function libraryTabs() {
   return `<nav class="library-tabs" aria-label="${t('studyTools')}">${[['sets','setsTab'],['weak','weakWords'],['favorites','favorites'],['words','wordSearch']].map(([tab,label])=>`<button data-action="library-tab" data-tab="${tab}" aria-pressed="${state.libraryTab===tab}">${t(label)}</button>`).join('')}</nav>`;
@@ -404,12 +410,12 @@ function modes() {
 function orders() {
   return `<section class="flow"><button class="back" data-action="back-mode">${icon('back')}${t('back')}</button>${flowTitle('chooseOrder')}${resumeCardsPanel(state.mode)}<span class="pill">${state.mode==='en-ja'?'EN → JP':'JP → EN'}</span><div class="order-grid">${['original','reverse','random'].map(order=>`<button class="mode-card ${state.order===order?'active':''}" data-action="order" data-order="${order}" aria-pressed="${state.order===order}"><h3>${t(order+'Order')}</h3><p>${t(order+'OrderHelp')}</p></button>`).join('')}</div><div class="flow-bottom"><span class="count">${t('wordsCount',{n:activeCards().length})}</span><button class="btn primary" data-action="start-cards">${t('startCards')}${icon('arrow')}</button></div></section>`;
 }
-let cardUtterance=null;
-function cardSpeechAvailable(){return typeof window.speechSynthesis?.speak==='function' && typeof window.SpeechSynthesisUtterance==='function';}
-function stopCardSpeech(){
-  const utterance=cardUtterance;cardUtterance=null;
+let speechUtterance=null;
+function speechAvailable(){return typeof window.speechSynthesis?.speak==='function' && typeof window.SpeechSynthesisUtterance==='function';}
+function stopSpeech(){
+  const utterance=speechUtterance;speechUtterance=null;
   if(utterance){utterance.onstart=null;utterance.onend=null;utterance.onerror=null;try{window.speechSynthesis.cancel();}catch{}}
-  $$('.card-pronounce').forEach(button=>{button.classList.remove('is-speaking');button.setAttribute('aria-busy','false');});
+  $$('.card-pronounce,.quiz-pronounce').forEach(button=>{button.classList.remove('is-speaking');button.setAttribute('aria-busy','false');});
 }
 function ipaMarkup(word){
   return ipaRuns(word.ipa||'',word.ipaItalic).map(run=>run.italic?`<i class="ipa-italic">${e(run.text)}</i>`:e(run.text)).join('');
@@ -423,30 +429,33 @@ function cardIpa(card){
 function cardWord(text,language,hidden,card){
   const word=`<span class="flashcard-text" lang="${language}">${e(text)}</span>`;
   if(language!=='en')return word;
-  const speaker=cardSpeechAvailable()?`<button type="button" class="card-pronounce" data-action="speak-card" aria-label="${e(t('hearPronunciation',{word:text}))}" title="${e(t('hearPronunciation',{word:text}))}" aria-busy="false" ${hidden?'disabled tabindex="-1"':''}>${icon('sound')}</button>`:'';
+  const speaker=speechAvailable()?`<button type="button" class="card-pronounce" data-action="speak-card" aria-label="${e(t('hearPronunciation',{word:text}))}" title="${e(t('hearPronunciation',{word:text}))}" aria-busy="false" ${hidden?'disabled tabindex="-1"':''}>${icon('sound')}</button>`:'';
   return `<span class="flashcard-english"><span class="flashcard-word">${word}${speaker}</span>${cardIpa(card)}</span>`;
 }
 function speakCard(button){
   const deck=state.cards;
-  if(state.route!=='home' || state.screen!=='cards' || !deck || modal.open || !cardSpeechAvailable() || button.closest('.flashcard-face')?.getAttribute('aria-hidden')!=='false')return;
+  if(state.route!=='home' || state.screen!=='cards' || !deck || modal.open || !speechAvailable() || button.closest('.flashcard-face')?.getAttribute('aria-hidden')!=='false')return;
   if((deck.mode==='en-ja' && deck.flipped) || (deck.mode==='ja-en' && !deck.flipped))return;
-  stopCardSpeech();
+  const card=deck.items[deck.index],text=deck.mode==='ja-en' && card.accepted?.length?card.accepted.join(', '):card.english;
+  speakText(button,text);
+}
+function speakText(button,text){
+  if(!text)return;
+  stopSpeech();
   try{
-    const card=deck.items[deck.index],text=deck.mode==='ja-en' && card.accepted?.length?card.accepted.join(', '):card.english;
-    if(!text)return;
     const utterance=new window.SpeechSynthesisUtterance(text),synth=window.speechSynthesis;
     let voices=[];try{voices=synth.getVoices() || [];}catch{}
     const english=voices.filter(voice=>/^en(?:[-_]|$)/i.test(voice.lang)),american=english.filter(voice=>/^en[-_]US$/i.test(voice.lang));
     const voice=american.find(voice=>voice.default) || american.find(voice=>voice.localService) || american[0] || english.find(voice=>voice.default) || english[0];
     if(voice)utterance.voice=voice;
     utterance.lang=voice?.lang || 'en-US';utterance.rate=1;utterance.pitch=1;utterance.volume=1;
-    cardUtterance=utterance;button.classList.add('is-speaking');button.setAttribute('aria-busy','true');
-    const finish=()=>{if(cardUtterance!==utterance)return;cardUtterance=null;button.classList.remove('is-speaking');button.setAttribute('aria-busy','false');};
+    speechUtterance=utterance;button.classList.add('is-speaking');button.setAttribute('aria-busy','true');
+    const finish=()=>{if(speechUtterance!==utterance)return;speechUtterance=null;button.classList.remove('is-speaking');button.setAttribute('aria-busy','false');};
     utterance.onend=finish;
-    utterance.onerror=event=>{if(cardUtterance!==utterance)return;finish();if(!['canceled','interrupted'].includes(event.error))toast(t('speechError'));};
+    utterance.onerror=event=>{if(speechUtterance!==utterance)return;finish();if(!['canceled','interrupted'].includes(event.error))toast(t('speechError'));};
     // Keep the request inside the user gesture and retain it until speech finishes.
     synth.speak(utterance);
-  }catch{stopCardSpeech();toast(t('speechError'));}
+  }catch{stopSpeech();toast(t('speechError'));}
 }
 function cardsView() {
   const deck=state.cards,card=deck.items[deck.index],frontLang=deck.mode==='en-ja'?'en':'ja',backLang=deck.mode==='en-ja'?'ja':'en';
@@ -455,12 +464,12 @@ function cardsView() {
 function moveCard(direction) {
   const deck=state.cards;if(state.screen!=='cards' || !deck)return;
   const next=deck.index+direction;if(next<0 || next>=deck.items.length)return;
-  stopCardSpeech();deck.index=next;deck.flipped=false;bookmarks.save(deck);render();
+  stopSpeech();deck.index=next;deck.flipped=false;bookmarks.save(deck);render();
   if(!matchMedia('(prefers-reduced-motion: reduce)').matches) $('.flashcard')?.animate?.([{transform:`translateX(${direction*45}px)`,opacity:.3},{transform:'translateX(0)',opacity:1}],{duration:180,easing:'ease-out'});
 }
 function flipCard() {
   if(state.screen!=='cards' || !state.cards)return;
-  stopCardSpeech();state.cards.flipped=!state.cards.flipped;bookmarks.save(state.cards);learning.flip();
+  stopSpeech();state.cards.flipped=!state.cards.flipped;bookmarks.save(state.cards);learning.flip();
   if(!bookmarks.persistent && !$('.cards-storage-warning'))$('.flashcards-view').insertAdjacentHTML('afterbegin',`<p class="error cards-storage-warning" role="status">${t('cardsStorageError')}</p>`);
   if(bookmarks.persistent)$('.cards-storage-warning')?.remove();
   const card=$('.flashcard'),item=state.cards.items[state.cards.index];
@@ -473,19 +482,19 @@ function flipCard() {
 
 function counts() {
   const max=activePool().length;
-  return `<section class="flow"><button class="back" data-action="back-mode">${icon('back')}${t('back')}</button>${flowTitle('chooseCount')}<span class="pill">${state.mode==='en-ja'?'EN → JP':'JP → EN'}</span><div class="count-grid">${[5,10,15,'all','custom'].map(n=>`<button class="count-btn ${n==='custom'?state.custom?'active':'':!state.custom && state.countChoice===n?'active':''}" data-action="count" data-count="${n}" ${typeof n==='number'&&n>max?'disabled':''}>${typeof n==='number'?n:t(n)}</button>`).join('')}</div>${state.custom?`<label class="custom-count" for="custom-count">${t('countLabel')}<input id="custom-count" type="number" inputmode="numeric" min="1" max="${max}" step="1" value="${e(state.customValue)}"></label>`:''}${state.error?`<p class="error" role="alert">${e(state.error)}</p>`:''}<p class="notice">${t(state.collection?'collectionClearExcluded':'clearAllOnly')}</p><div class="flow-bottom"><span class="count">${t('available',{n:max})} · ${t('timePerQuestion')}</span><button class="btn primary" data-action="start">${t('start')}${icon('arrow')}</button></div></section>`;
+  return `<section class="flow"><button class="back" data-action="back-mode">${icon('back')}${t('back')}</button>${flowTitle('chooseCount')}<span class="pill">${state.mode==='en-ja'?'EN → JP':'JP → EN'}</span><div class="count-grid">${[5,10,15,'all','custom'].map(n=>`<button class="count-btn ${n==='custom'?state.custom?'active':'':!state.custom && state.countChoice===n?'active':''}" data-action="count" data-count="${n}" ${typeof n==='number'&&n>max?'disabled':''}>${typeof n==='number'?n:t(n)}</button>`).join('')}</div>${state.custom?`<label class="custom-count" for="custom-count">${t('countLabel')}<input id="custom-count" type="number" inputmode="numeric" min="1" max="${max}" step="1" value="${e(state.customValue)}"></label>`:''}${state.error?`<p class="error" role="alert">${e(state.error)}</p>`:''}<p class="notice">${t(state.collection?'collectionClearExcluded':'clearAllOnly')}</p><div class="flow-bottom"><span class="count">${t('available',{n:max})} · ${t('timePerQuestion',{n:questionTimeMs(state.mode)/1000})}</span><button class="btn primary" data-action="start">${t('start')}${icon('arrow')}</button></div></section>`;
 }
-const QUESTION_TIME_MS=15000;
+function questionTimeMs(mode){return mode==='ja-en'?20000:15000;}
 let quizClock=null;
 function stopQuizClock(){if(quizClock!==null){clearInterval(quizClock);quizClock=null;}}
 function startQuestionClock(){
-  stopQuizClock();state.quiz.deadline=Date.now()+QUESTION_TIME_MS;state.quiz.remainingMs=QUESTION_TIME_MS;
+  stopQuizClock();const duration=questionTimeMs(state.quiz.mode);state.quiz.deadline=Date.now()+duration;state.quiz.remainingMs=duration;
   quizClock=setInterval(updateQuizClock,50);
 }
-function timeLeft(quiz){return Math.max(0,Math.min(QUESTION_TIME_MS,quiz.deadline-Date.now()));}
+function timeLeft(quiz){return Math.max(0,Math.min(questionTimeMs(quiz.mode),quiz.deadline-Date.now()));}
 function timerMarkup(quiz,result){
-  const remaining=result?quiz.remainingMs:timeLeft(quiz),seconds=Math.ceil(remaining/1000),ratio=remaining/QUESTION_TIME_MS;
-  return `<div class="question-timer ${result?'is-stopped':''} ${result?.timedOut?'is-expired':''}" style="--timer-hue:${Math.round(ratio*120)}"><div class="timer-meta"><span>${icon('timer')}${t(result?.timedOut?'timedOut':'timeRemaining')}</span><span class="timer-seconds" role="timer" aria-live="off">${t('secondsShort',{n:seconds})}</span></div><div class="timer-track" role="progressbar" aria-label="${t('timeRemaining')}" aria-valuemin="0" aria-valuemax="15" aria-valuenow="${seconds}" aria-valuetext="${t('secondsRemaining',{n:seconds})}"><span class="timer-fill" style="transform:scaleX(${ratio})"></span></div></div>`;
+  const remaining=result?quiz.remainingMs:timeLeft(quiz),seconds=Math.ceil(remaining/1000),ratio=remaining/questionTimeMs(quiz.mode);
+  return `<div class="question-timer ${result?'is-stopped':''} ${result?.timedOut?'is-expired':''}" style="--timer-hue:${Math.round(ratio*120)}"><div class="timer-meta"><span>${icon('timer')}${t(result?.timedOut?'timedOut':'timeRemaining')}</span><span class="timer-seconds" role="timer" aria-live="off">${t('secondsShort',{n:seconds})}</span></div><div class="timer-track" role="progressbar" aria-label="${t('timeRemaining')}" aria-valuemin="0" aria-valuemax="${questionTimeMs(quiz.mode)/1000}" aria-valuenow="${seconds}" aria-valuetext="${t('secondsRemaining',{n:seconds})}"><span class="timer-fill" style="transform:scaleX(${ratio})"></span></div></div>`;
 }
 function updateQuizClock(){
   const quiz=state.quiz;
@@ -493,16 +502,43 @@ function updateQuizClock(){
   quiz.remainingMs=timeLeft(quiz);
   if(quiz.remainingMs<=0){submitAnswer(quiz.typed||'',false,true);return;}
   const timer=$('.question-timer');if(!timer)return;
-  const ratio=quiz.remainingMs/QUESTION_TIME_MS,seconds=Math.ceil(quiz.remainingMs/1000);
+  const ratio=quiz.remainingMs/questionTimeMs(quiz.mode),seconds=Math.ceil(quiz.remainingMs/1000);
   timer.style.setProperty('--timer-hue',String(Math.round(ratio*120)));
   $('.timer-fill',timer).style.transform=`scaleX(${ratio})`;
   $('.timer-seconds',timer).textContent=t('secondsShort',{n:seconds});
   const track=$('.timer-track',timer);track.setAttribute('aria-valuenow',String(seconds));track.setAttribute('aria-valuetext',t('secondsRemaining',{n:seconds}));
 }
 
+function quizPronunciations(question,mode){
+  const names=mode==='en-ja'?[question.prompt]:question.accepted,entries=new Map();
+  for(const name of names){
+    const words=(question.wordRefs || []).filter(word=>normalize(word.english)===normalize(name));
+    for(const word of words.length?words:[{english:name}]){
+      const data=normalizeIpaData(word.ipa || '',word.ipaItalic),entry={english:name,...data};
+      entries.set(JSON.stringify([normalize(name),data.ipa,data.ipaItalic || []]),entry);
+    }
+  }
+  return [...entries.values()];
+}
+function quizSpeaker(index,word){
+  return speechAvailable()?`<button type="button" class="card-pronounce quiz-pronounce" data-action="speak-quiz" data-quiz-word="${index}" aria-label="${e(t('hearPronunciation',{word}))}" title="${e(t('hearPronunciation',{word}))}" aria-busy="false">${icon('sound')}</button>`:'';
+}
+function speakQuiz(button){
+  const quiz=state.quiz;
+  if(state.route!=='home' || state.screen!=='quiz' || !quiz || modal.open || !speechAvailable())return;
+  const result=quiz.answers[quiz.index];
+  if(quiz.mode==='ja-en' && !result)return;
+  if(!result && timeLeft(quiz)<=0){updateQuizClock();return;}
+  const word=quizPronunciations(quiz.questions[quiz.index],quiz.mode)[Number(button.dataset.quizWord)];
+  if(word)speakText(button,word.english);
+}
+function quizCorrectAnswer(question,mode){
+  if(mode==='en-ja')return `<p>${t('correctAnswer')}: <strong>${e(question.answer)}</strong></p>`;
+  return `<div class="quiz-correct-answer"><span>${t('correctAnswer')}:</span><div class="quiz-answer-words">${quizPronunciations(question,mode).map((word,index)=>`<span class="quiz-answer-word"><strong lang="en">${e(word.english)}</strong>${word.ipa?`<span class="card-ipa" lang="en-fonipa" dir="ltr">[${ipaMarkup(word)}]</span>`:''}${quizSpeaker(index,word.english)}</span>`).join('')}</div></div>`;
+}
 function quizView() {
   const qz=state.quiz,q=qz.questions[qz.index],result=qz.answers[qz.index];
-  return `<section class="quiz"><div class="quiz-meta"><span>${e(qz.origin==='set'?qz.title:t(qz.origin==='weak'?'weakWords':'favorites'))} · ${qz.mode==='en-ja'?'EN → JP':'JP → EN'}${qz.isRetry?' · '+t('retryRound'):''}</span><button class="text-btn" data-action="quit">${t('quit')}</button></div>${timerMarkup(qz,result)}<div class="progress" role="progressbar" aria-label="${t('questions')}" aria-valuenow="${qz.index+Number(!!result)}" aria-valuemin="0" aria-valuemax="${qz.questions.length}"><span style="width:${(qz.index+Number(!!result))/qz.questions.length*100}%"></span></div><div class="quiz-meta" style="margin-bottom:16px"><span>${t('questionOf',{n:qz.index+1,total:qz.questions.length})}</span><span>${t('correctCount',{n:qz.answers.filter(a=>a.correct).length})}</span></div><div class="question-card"><div class="eyebrow">${t(qz.mode==='en-ja'?'meaningPrompt':'englishPrompt')}</div>${qz.origin!=='set'?`<small class="question-source">${e(sourceNames(q))}</small>`:''}<div class="question-word" ${qz.mode==='en-ja'?'lang="en"':'lang="ja"'}>${e(q.prompt)}</div></div>${qz.mode==='en-ja'?`<div class="options">${q.options.map((option,i)=>`<button class="option ${result?(normalize(option)===normalize(q.answer)?'correct':option===result.answer?'wrong':''):''}" data-action="answer" data-option="${i}" ${result?'disabled':''}><span class="letter">${'ABCD'[i]}</span><span lang="ja">${e(option)}</span></button>`).join('')}</div>`:`<form id="answer-form" class="typing-form"><label class="visually-hidden" for="typed-answer">${t('englishPrompt')}</label><input id="typed-answer" lang="en" name="answer" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="done" placeholder="${t('answerPlaceholder')}" value="${e(qz.typed||'')}" ${result?'disabled':''}><button class="btn primary" type="submit" ${result?'disabled':''}>${t('check')}</button></form>`}${result?`<div class="feedback ${result.correct?'':'wrong'}" role="status"><h3>${t(result.timedOut?'timedOut':result.correct?'correct':'incorrect')}</h3><p>${t('correctAnswer')}: <strong>${e(qz.mode==='ja-en'?q.accepted.join(' / '):q.answer)}</strong></p>${!result.correct?`<p>${t('yourAnswer')}: ${e(result.answer||t('skipped'))}</p>`:''}${q.explanation?`<small>${t('explanation')}</small><p>${e(q.explanation)}</p>`:''}${favoriteActions(q.wordRefs)}</div>`:''}<div class="quiz-actions">${!result?btn('skip','skip','ghost'):btn(qz.index===qz.questions.length-1?'results':'next','next','green')}</div></section>`;
+  return `<section class="quiz"><div class="quiz-meta"><span>${e(qz.origin==='set'?qz.title:t(qz.origin==='weak'?'weakWords':'favorites'))} · ${qz.mode==='en-ja'?'EN → JP':'JP → EN'}${qz.isRetry?' · '+t('retryRound'):''}</span><button class="text-btn" data-action="quit">${t('quit')}</button></div>${timerMarkup(qz,result)}<div class="progress" role="progressbar" aria-label="${t('questions')}" aria-valuenow="${qz.index+Number(!!result)}" aria-valuemin="0" aria-valuemax="${qz.questions.length}"><span style="width:${(qz.index+Number(!!result))/qz.questions.length*100}%"></span></div><div class="quiz-meta" style="margin-bottom:16px"><span>${t('questionOf',{n:qz.index+1,total:qz.questions.length})}</span><span>${t('correctCount',{n:qz.answers.filter(a=>a.correct).length})}</span></div><div class="question-card"><div class="eyebrow">${t(qz.mode==='en-ja'?'meaningPrompt':'englishPrompt')}</div>${qz.origin!=='set'?`<small class="question-source">${e(sourceNames(q))}</small>`:''}${qz.mode==='en-ja'?`<div class="quiz-question-english"><div class="quiz-question-word"><div class="question-word" lang="en">${e(q.prompt)}</div>${quizSpeaker(0,q.prompt)}</div>${cardIpa(q)}</div>`:`<div class="question-word" lang="ja">${e(q.prompt)}</div>`}</div>${qz.mode==='en-ja'?`<div class="options">${q.options.map((option,i)=>`<button class="option ${result?(normalize(option)===normalize(q.answer)?'correct':option===result.answer?'wrong':''):''}" data-action="answer" data-option="${i}" ${result?'disabled':''}><span class="letter">${'ABCD'[i]}</span><span class="option-text"><span lang="ja">${e(option)}</span>${result && normalize(option)!==normalize(q.answer) && q.optionWords?.[i]?.length?`<small class="option-english" lang="en">${e(q.optionWords[i].join(' / '))}</small>`:''}</span></button>`).join('')}</div>`:`<form id="answer-form" class="typing-form"><label class="visually-hidden" for="typed-answer">${t('englishPrompt')}</label><input id="typed-answer" lang="en" name="answer" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="done" placeholder="${t('answerPlaceholder')}" value="${e(qz.typed||'')}" ${result?'disabled':''}><button class="btn primary" type="submit" ${result?'disabled':''}>${t('check')}</button></form>`}${result?`<div class="feedback ${result.correct?'':'wrong'}" role="status"><h3>${t(result.timedOut?'timedOut':result.correct?'correct':'incorrect')}</h3>${quizCorrectAnswer(q,qz.mode)}${!result.correct?`<p>${t('yourAnswer')}: ${e(result.answer||t('skipped'))}</p>`:''}${q.explanation?`<small>${t('explanation')}</small><p>${e(q.explanation)}</p>`:''}${favoriteActions(q.wordRefs)}</div>`:''}<div class="quiz-actions">${!result?btn('skip','skip','ghost'):btn(qz.index===qz.questions.length-1?'results':'next','next','green')}</div></section>`;
 }
 function resultView() {
   const qz=state.quiz,correct=qz.answers.filter(a=>a.correct).length,missed=qz.questions.length-correct,perfect=missed===0;
@@ -679,11 +715,11 @@ function ipaEditor(word,index){
 function editor() {
   if(!state.authenticated)return '';
   const draft=state.draft;
-  return `<section><div class="edit-heading"><h1>${t('editTitle')}</h1>${!draft?`<p class="stats-note editor-note">${t('editorEmpty')}</p>`:''}</div><div class="toolbar editor-toolbar"><div class="actions"><button class="btn primary small" data-action="new">${icon('plus')}${t('newSet')}</button><button class="btn ghost small" data-action="import">${icon('upload')}${t('import')}</button><button class="btn ghost small" data-action="export" ${!state.sets.length?'disabled':''}>${icon('download')}${t('export')}</button><button class="btn ghost small" data-action="manage-sets">${icon('sort')}${t('manageSets')}</button></div></div><div class="editor-layout ${!draft?'is-selecting':''}"><aside class="set-list" aria-label="${t('library')}">${state.sets.map(s=>`<button class="${draft?.id===s.id?'active':''}" data-action="edit-set" data-id="${e(s.id)}">${e(s.title)}<small>${t('wordsCount',{n:s.words.length})}</small></button>`).join('')}</aside><div class="editor-panel ${state.saving?'busy':''}">${draft?`<label for="set-title">${t('title')}<input id="set-title" maxlength="150" value="${e(draft.title)}" placeholder="${t('setTitlePlaceholder')}"></label><div class="row"><span class="count">${t('wordsCount',{n:draft.words.length})}</span></div><div class="editor-words">${draft.words.map((w,i)=>`<article class="word-row"><div class="word-row-head"><span>${t('wordNumber',{n:i+1})}</span><button class="icon-btn" data-action="remove-word" data-index="${i}" aria-label="${t('removeWord')}">${icon('trash')}</button></div><div class="word-fields"><label for="word-${i}-english">${t('word')}<input id="word-${i}-english" data-word="${i}" data-field="english" lang="en" value="${e(w.english)}" maxlength="150" placeholder="${t('englishPlaceholder')}" autocapitalize="none" spellcheck="false"></label><label for="word-${i}-meaning">${t('meaning')}<input id="word-${i}-meaning" data-word="${i}" data-field="meaning" value="${e(w.meaning)}" maxlength="300" placeholder="${t('meaningPlaceholder')}"></label>${ipaEditor(w,i)}<label class="wide" for="word-${i}-explanation">${t('explanation')} · ${t('optional')}<textarea id="word-${i}-explanation" data-word="${i}" data-field="explanation" maxlength="2000" placeholder="${t('explanationPlaceholder')}">${e(w.explanation)}</textarea></label></div></article>`).join('')}</div><button class="btn ghost" data-action="add-word" ${draft.words.length>=1000?'disabled':''}>${icon('plus')}${t('addWord')}</button>${state.error?`<p class="error" role="alert">${e(state.error)}</p>`:''}<div class="editor-actions"><span class="muted" id="dirty-label">${state.dirty?t('unsaved'):''}</span><button class="btn ghost" data-action="export-draft">${icon('download')}${t('draftExport')}</button><button class="btn primary" data-action="save" ${state.saving?'disabled':''}>${icon('check')}${t(state.saving?'saving':'save')}</button></div>`:''}</div></div></section>`;
+  return `<section><div class="edit-heading"><h1>${t('editTitle')}</h1>${!draft?`<p class="stats-note editor-note">${t('editorEmpty')}</p>`:''}</div><div class="toolbar editor-toolbar"><div class="actions"><button class="btn primary small" data-action="new">${icon('plus')}${t('newSet')}</button><button class="btn ghost small" data-action="import">${icon('upload')}${t('import')}</button><button class="btn ghost small" data-action="export" ${!state.sets.length?'disabled':''}>${icon('download')}${t('export')}</button><button class="btn ghost small" data-action="manage-sets">${icon('sort')}${t('manageSets')}</button></div></div><div class="editor-layout ${!draft?'is-selecting':''}"><aside class="set-list" aria-label="${t('library')}">${state.sets.map(s=>`<button class="${draft?.id===s.id?'active':''}" data-action="edit-set" data-id="${e(s.id)}">${e(s.title)}<small>${t('wordsCount',{n:s.words.length})}${s.published===false?` · ${t('setPrivate')}`:''}</small></button>`).join('')}</aside><div class="editor-panel ${state.saving?'busy':''}">${draft?`<label for="set-title">${t('title')}<input id="set-title" maxlength="150" value="${e(draft.title)}" placeholder="${t('setTitlePlaceholder')}"></label><div class="set-publication"><div><strong id="set-published-label">${t('setPublication')}</strong><small id="set-published-help">${t(draft.published===false?'setPrivateHelp':'setPublicHelp')}</small></div><button type="button" class="publication-switch" role="switch" aria-checked="${draft.published!==false}" aria-labelledby="set-published-label" aria-describedby="set-published-help" data-action="toggle-publication" ${state.saving?'disabled':''}><span aria-hidden="true"></span></button><span class="publication-status">${t(draft.published===false?'setPrivate':'setPublic')}</span></div><div class="row"><span class="count">${t('wordsCount',{n:draft.words.length})}</span></div><div class="editor-words">${draft.words.map((w,i)=>`<article class="word-row"><div class="word-row-head"><span>${t('wordNumber',{n:i+1})}</span><button class="icon-btn" data-action="remove-word" data-index="${i}" aria-label="${t('removeWord')}">${icon('trash')}</button></div><div class="word-fields"><label for="word-${i}-english">${t('word')}<input id="word-${i}-english" data-word="${i}" data-field="english" lang="en" value="${e(w.english)}" maxlength="150" placeholder="${t('englishPlaceholder')}" autocapitalize="none" spellcheck="false"></label><label for="word-${i}-meaning">${t('meaning')}<input id="word-${i}-meaning" data-word="${i}" data-field="meaning" value="${e(w.meaning)}" maxlength="300" placeholder="${t('meaningPlaceholder')}"></label>${ipaEditor(w,i)}<label class="wide" for="word-${i}-explanation">${t('explanation')} · ${t('optional')}<textarea id="word-${i}-explanation" data-word="${i}" data-field="explanation" maxlength="2000" placeholder="${t('explanationPlaceholder')}">${e(w.explanation)}</textarea></label></div></article>`).join('')}</div><button class="btn ghost" data-action="add-word" ${draft.words.length>=1000?'disabled':''}>${icon('plus')}${t('addWord')}</button>${state.error?`<p class="error" role="alert">${e(state.error)}</p>`:''}<div class="editor-actions"><span class="muted" id="dirty-label">${state.dirty?t('unsaved'):''}</span><button class="btn ghost" data-action="export-draft">${icon('download')}${t('draftExport')}</button><button class="btn primary" data-action="save" ${state.saving?'disabled':''}>${icon('check')}${t(state.saving?'saving':'save')}</button></div>`:''}</div></div></section>`;
 }
 const modal=$('#modal');
 function dialog(content, setup) {
-  stopCardSpeech();hideIpaPalette();
+  stopSpeech();hideIpaPalette();
   return new Promise(resolve=>{
     const previous=document.activeElement,previousIpaSelection=previous?.matches('[data-field="ipa"]')?ipaSelection(previous):null,previousIpaWord=previousIpaSelection?ipaWord(previous):null;
     modal.innerHTML=content;
@@ -790,7 +826,7 @@ async function submitAdmin(form) {
   if(state.adminBusy || state.authenticated || !state.configured)return;
   const password=new FormData(form).get('password');
   form.reset();state.adminBusy=true;state.adminError='';refreshAdminSettings();
-  try { await api('/api/login',{method:'POST',body:JSON.stringify({password})});state.authenticated=true;state.sessionKnown=true; }
+  try { await api('/api/login',{method:'POST',body:JSON.stringify({password})});const data=await api('/api/sets');state.sets=data.sets;state.orderRevision=data.orderRevision;state.authenticated=true;state.sessionKnown=true; }
   catch(error) { state.adminError=messages.en[error.message]?error.message:'networkError'; }
   finally { state.adminBusy=false;render(); }
 }
@@ -982,13 +1018,14 @@ const actions={
   'ipa-group':changeIpaGroup,
   'ipa-shift':toggleIpaShift,
   'speak-card':speakCard,
+  'speak-quiz':speakQuiz,
   'flip-card':flipCard,
   'next-card'(){moveCard(1);},
   'previous-card'(){moveCard(-1);},
   'back-mode'(){if(state.collection?.kind==='weak'){actions['back-home']();return;}state.screen='mode';state.error='';render();},
   mode(button){state.mode=button.dataset.mode;if(state.activity==='cards'){state.screen='order';render();return;}state.screen='count';prepareCount();render();},
   count(button){const value=button.dataset.count;state.custom=value==='custom';if(!state.custom){state.countChoice=value==='all'?'all':Number(value);state.count=value==='all'?activePool().length:Number(value);}state.error='';render();},
-  start(){const max=activePool().length,count=state.custom?Number(state.customValue):state.count;if(!Number.isInteger(count)||count<1||count>max){state.error=t('invalidCount',{n:max});render();return;}try{const set=currentSet(),origin=state.collection?.kind || 'set';state.quiz={origin,setId:origin==='set'?set.id:null,setKey:origin==='set'?studyKey(set):null,allSelected:origin==='set' && !state.custom && state.countChoice==='all' && count===max,title:activeTitle(),mode:state.mode,questions:quizFromPool(activePool(),state.mode,count,activeMeanings(),state.collection?globalWordBank():[]),index:0,answers:[],typed:''};state.screen='quiz';state.error='';startQuestionClock();render();window.scrollTo(0,0);}catch(err){state.error=message(err);render();}},
+  start(){const max=activePool().length,count=state.custom?Number(state.customValue):state.count;if(!Number.isInteger(count)||count<1||count>max){state.error=t('invalidCount',{n:max});render();return;}try{const set=currentSet(),origin=state.collection?.kind || 'set';state.quiz={origin,setId:origin==='set'?set.id:null,setKey:origin==='set'?studyKey(set):null,allSelected:origin==='set' && !state.custom && state.countChoice==='all' && count===max,title:activeTitle(),mode:state.mode,questions:quizFromPool(activePool(),state.mode,count,activeMeanings(),state.collection?globalWordBank():set.words.map(word=>({...word,setId:set.id}))),index:0,answers:[],typed:''};state.screen='quiz';state.error='';startQuestionClock();render();window.scrollTo(0,0);}catch(err){state.error=message(err);render();}},
   answer(button){submitAnswer(state.quiz.questions[state.quiz.index].options[Number(button.dataset.option)]);},
   skip(){submitAnswer('',true);},
   next(){const qz=state.quiz;if(!qz.answers[qz.index])return;if(qz.index===qz.questions.length-1){state.screen='result';ranking.sync(true).catch(()=>{});const perfect=qz.answers.length===qz.questions.length && qz.answers.every(a=>a.correct);if(perfect)recordQuizClear(qz);render();if(perfect){play('confetti');confetti();}window.scrollTo(0,0);}else{qz.index++;qz.typed='';startQuestionClock();render();window.scrollTo(0,0);}},
@@ -1006,13 +1043,14 @@ const actions={
   'select-all'(){state.selected=state.selected.size===state.sets.length?new Set():new Set(state.sets.map(s=>s.id));render();},
   'export-selected'(){exportSets(state.sets.filter(s=>state.selected.has(s.id)));},
   'export-draft'(){exportSets([state.draft]);},
-  async new(){if(!await discardGuard())return;state.draft={title:t('newTitle'),words:[{english:'',meaning:'',explanation:''}]};state.dirty=true;state.error='';render();},
+  'toggle-publication'(){if(state.saving)return;state.draft.published=state.draft.published===false;markDirty();render();},
+  async new(){if(!await discardGuard())return;state.draft={title:t('newTitle'),published:false,words:[{english:'',meaning:'',explanation:''}]};state.dirty=true;state.error='';render();},
   async 'edit-set'(button){if(state.draft?.id===button.dataset.id)return;if(!await discardGuard())return;state.draft=structuredClone(state.sets.find(s=>s.id===button.dataset.id));state.dirty=false;state.error='';render();},
   'add-word'(){state.draft.words.push({english:'',meaning:'',explanation:''});markDirty();render();const index=state.draft.words.length-1;$(`#word-${index}-english`)?.focus({preventScroll:true});$(`#word-${index}-english`)?.scrollIntoView({block:'center',behavior:'auto'});},
   async 'remove-word'(button){if(!await confirmDialog('removeTitle',t('removeHelp'),'remove',true))return;state.draft.words.splice(Number(button.dataset.index),1);markDirty();render();},
-  async save(){if(state.saving)return;try{const data=validateSet(state.draft),typingModes=state.draft.words.map(word=>ipaTypingModes.get(word)||false);state.saving=true;state.error='';render();let saved;if(state.draft.id){saved=(await api(`/api/sets/${state.draft.id}`,{method:'PUT',body:JSON.stringify({...data,revision:state.draft.revision})})).set;state.sets=state.sets.map(s=>s.id===saved.id?saved:s);}else{const response=await api('/api/sets',{method:'POST',body:JSON.stringify(data)});saved=response.sets[0];state.sets.unshift(saved);synchronizeSetOrder(response);}state.draft=structuredClone(saved);state.draft.words.forEach((word,index)=>ipaTypingModes.set(word,typingModes[index]));state.dirty=false;toast(t('saved'));}catch(err){state.error=message(err);}finally{state.saving=false;render();}},
+  async save(){if(state.saving)return;try{const data={...validateSet(state.draft),published:state.draft.published!==false},typingModes=state.draft.words.map(word=>ipaTypingModes.get(word)||false);state.saving=true;state.error='';render();let saved;if(state.draft.id){saved=(await api(`/api/sets/${state.draft.id}`,{method:'PUT',body:JSON.stringify({...data,revision:state.draft.revision})})).set;state.sets=state.sets.map(s=>s.id===saved.id?saved:s);}else{const response=await api('/api/sets',{method:'POST',body:JSON.stringify(data)});saved=response.sets[0];state.sets.unshift(saved);synchronizeSetOrder(response);}state.draft=structuredClone(saved);state.draft.words.forEach((word,index)=>ipaTypingModes.set(word,typingModes[index]));state.dirty=false;toast(t('saved'));}catch(err){state.error=message(err);}finally{state.saving=false;render();}},
   async delete(){const draft=state.draft;if(!await confirmDialog('deleteTitle',t('deleteHelp',{title:draft.title}),'delete',true))return;state.saving=true;render();try{await deleteSavedSet(draft);}catch(err){state.error=message(err);}finally{state.saving=false;render();}},
-  async logout(){if(!await discardGuard())return;try{await api('/api/logout',{method:'POST'});state.authenticated=false;state.adminData=null;state.adminStats=null;state.adminStatsId=null;state.draft=null;state.dirty=false;state.error='';render();}catch(err){toast(message(err));}},
+  async logout(){if(!await discardGuard())return;try{await api('/api/logout',{method:'POST'});state.authenticated=false;state.adminData=null;state.adminStats=null;state.adminStatsId=null;restrictSetsToPublic();state.draft=null;state.dirty=false;state.error='';render();}catch(err){toast(message(err));}},
   import:importDialog,
   export:exportDialog,
 };
@@ -1113,7 +1151,7 @@ document.addEventListener('click',async event=>{
   const nav=event.target.closest('[data-nav]');if(nav){event.preventDefault();await navigate(nav.dataset.nav);return;}
   const button=event.target.closest('[data-action]');
   if(!button && event.target.closest('.flashcard') && state.route==='home' && state.screen==='cards' && !modal.open){if(Date.now()>=suppressFlipUntil)flipCard();return;}
-  if(button && !button.disabled){if(['new','import','export','export-draft','export-selected','manage-sets','save','delete','add-word','remove-word','insert-ipa','ipa-group','ipa-shift'].includes(button.dataset.action) && (state.route!=='edit' || !state.authenticated))return;if(button.dataset.action==='flip-card' && Date.now()<suppressFlipUntil)return;try{await actions[button.dataset.action]?.(button);}catch(err){toast(message(err));}}
+  if(button && !button.disabled){if(['new','import','export','export-draft','export-selected','manage-sets','toggle-publication','save','delete','add-word','remove-word','insert-ipa','ipa-group','ipa-shift'].includes(button.dataset.action) && (state.route!=='edit' || !state.authenticated))return;if(button.dataset.action==='flip-card' && Date.now()<suppressFlipUntil)return;try{await actions[button.dataset.action]?.(button);}catch(err){toast(message(err));}}
   if(event.detail>0 && event.target.closest('button'))document.activeElement?.closest('button')?.blur();
 });
 document.addEventListener('input',event=>{const el=event.target;if(el.id==='admin-search'){state.adminSearch=el.value;refreshAdministration();}else if(el.id==='word-search'){state.wordSearch=el.value;state.listLimit=100;render();}else if(el.id==='search'){state.search=el.value;render();}else if(el.id==='custom-count')state.customValue=el.value;else if(el.id==='typed-answer')state.quiz.typed=el.value;else if(el.id==='set-title'){state.draft.title=el.value;markDirty();}else if(el.dataset.word!==undefined){if(el.dataset.field==='ipa')updateIpaInput(el);else{state.draft.words[Number(el.dataset.word)][el.dataset.field]=el.value;markDirty();}}});
@@ -1129,10 +1167,10 @@ document.addEventListener('submit',async event=>{
   if(event.target.id==='answer-form'){event.preventDefault();if(!state.quiz.typed.trim())return;submitAnswer(state.quiz.typed);}
   if(event.target.id==='admin-login-form'){event.preventDefault();await submitAdmin(event.target);}
 });
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'){stopCardSpeech();closeIpaVariants();}syncLearning();updateQuizClock();});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'){stopSpeech();closeIpaVariants();}syncLearning();updateQuizClock();});
 window.addEventListener('pageshow',()=>{syncLearning();updateQuizClock();});
-window.addEventListener('pagehide',()=>{stopCardSpeech();closeIpaVariants();learning.setActive(false);ranking.flushOnExit();});
-window.addEventListener('blur',()=>{stopCardSpeech();closeIpaVariants();learning.setActive(false);});
+window.addEventListener('pagehide',()=>{stopSpeech();closeIpaVariants();learning.setActive(false);ranking.flushOnExit();});
+window.addEventListener('blur',()=>{stopSpeech();closeIpaVariants();learning.setActive(false);});
 window.addEventListener('focus',syncLearning);
 for(const type of ['pointerdown','click','keydown','input','scroll'])document.addEventListener(type,()=>{if(learning.active)learning.touch();},{capture:true,passive:true});
 let rankingHeartbeatAt=0;

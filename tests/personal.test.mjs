@@ -1,9 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PersonalWords, sourceQuestions, collectionQuestions, quizFromPool, collectionCards, canMultipleChoice, wordIdentity, catalogWord, questionIdentity } from '../public/personal.js';
-import { isCorrect, normalize } from '../public/core.js';
+import { balanceAnswerPositions, isCorrect, normalize } from '../public/core.js';
 function storage(){const values=new Map();return {getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)};}
 const set={id:'one',title:'First',words:[{english:'start',meaning:'始める',explanation:'Start here.'},{english:'begin',meaning:'始める'},{english:'finish',meaning:'終える'},{english:'run',meaning:'走る'},{english:'read',meaning:'読む'}]};
+test('choice English labels follow shuffled meanings and prefer the source set over unrelated synonyms',()=>{
+  const other={id:'other',title:'Other',words:[{english:'commence',meaning:'始める'},{english:'external',meaning:'外部'}]},bank=[set,other].flatMap(set=>set.words.map(word=>({...word,setId:set.id})));
+  for(let round=0;round<16;round++){
+    const question=quizFromPool([sourceQuestions([set],'en-ja').find(question=>question.english==='finish')],'en-ja',1,bank.map(word=>word.meaning),bank)[0];
+    assert.equal(question.optionWords.length,4);
+    question.options.forEach((option,index)=>{
+      const expected=set.words.filter(word=>normalize(word.meaning)===normalize(option)).map(word=>word.english);
+      assert.deepEqual(question.optionWords[index],expected);
+    });
+    assert.deepEqual(question.optionWords[question.options.indexOf('始める')],['start','begin']);
+  }
+});
+test('small-source fallback labels use the actual external words and preserve their mapping in retry snapshots',()=>{
+  const small={id:'small',title:'Small',words:[{english:'target',meaning:'対象'}]},bank=[...small.words.map(word=>({...word,setId:small.id})),{english:'one',meaning:'一つ',setId:'else'},{english:'first',meaning:'一つ',setId:'else'},{english:'two',meaning:'二つ',setId:'else'},{english:'three',meaning:'三つ',setId:'else'}];
+  const question=quizFromPool(sourceQuestions([small],'en-ja'),'en-ja',1,bank.map(word=>word.meaning),bank)[0];
+  for(const [index,meaning] of question.options.entries())assert.deepEqual(question.optionWords[index],bank.filter(word=>word.meaning===meaning).map(word=>word.english));
+  const copy=structuredClone(question);bank[1].english='changed later';assert.deepEqual(copy.optionWords,question.optionWords);
+  for(let retry=0;retry<12;retry++){const reordered=balanceAnswerPositions([copy])[0];for(const [index,meaning] of reordered.options.entries())assert.deepEqual(reordered.optionWords[index],copy.optionWords[copy.options.indexOf(meaning)]);}
+});
 test('two consecutive misses register a question and three correct answers anywhere recover it, separately by direction',()=>{
   const saved=storage(),personal=new PersonalWords(saved),en=sourceQuestions([set],'en-ja')[0],ja=sourceQuestions([set],'ja-en')[0],other=sourceQuestions([set],'en-ja')[2];
   personal.answer(en.sources,false);assert.equal(personal.record(en.sources[0].key).weak,false);

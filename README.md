@@ -89,15 +89,15 @@ The application requests them as `/assets/audio/correct.mp3`, etc. Missing audio
 2. Choose **Flashcards** or **Quiz**.
 3. Choose **EN → JP** or **JP → EN**. For a quiz, EN → JP uses four choices and JP → EN uses a typed English answer.
 4. For a quiz, choose **5**, **10**, **15**, **All**, or **Custom**. Counts greater than the available unique questions are disabled.
-5. Answer within **15 seconds per question**, review the correct answer and optional explanation, then continue. “I don't know” counts as incorrect.
+5. Answer within **15 seconds per EN → JP question or 20 seconds per JP → EN question**, review the correct answer and optional explanation, then continue. “I don't know” counts as incorrect.
 6. Review the score and every question. A perfect score triggers the celebration.
-7. If at least one answer was incorrect, choose **Retry missed questions** to practice only those questions, including skipped and timed-out answers. Every retry question gets a fresh 15 seconds. The question order and multiple-choice option positions are shuffled; the original distractors and explanations are preserved, even if only one question needs review.
+7. If at least one answer was incorrect, choose **Retry missed questions** to practice only those questions, including skipped and timed-out answers. Every retry question gets a fresh mode-specific limit: 15 seconds for EN → JP or 20 seconds for JP → EN. The question order and multiple-choice option positions are shuffled; the original distractors and explanations are preserved, even if only one question needs review.
 
 A retry has its own score and is labeled as a mistake retry. If you still miss questions, retry again to narrow the next round to only the remaining mistakes. A perfect retry triggers the celebration and hides the retry button. **Practice again** returns to the full set's question-count picker.
 
 Questions are shuffled without replacement. EN → JP uses three distinct meanings from other entries in the same set. It requires at least four distinct meanings; smaller sets still support JP → EN. An English word may appear only once within a set. In JP → EN, identical Japanese meanings form one question, and every English word mapped to that meaning is accepted. Therefore, the unique question count can differ between modes.
 
-The timer appears above each question with a shrinking green-to-yellow-to-red bar and a small remaining-seconds display. Answering stops the clock; explanations have no time limit. Timing continues while Settings or a confirmation dialog is open and while the page is in the background. If time runs out, the question is marked incorrect, the answer is revealed, and Next becomes available. A late click or typed submission cannot count as correct after the deadline. Every new question starts with a fresh 15 seconds. Flashcards have no time limit.
+The timer appears above each question with a shrinking green-to-yellow-to-red bar and a small remaining-seconds display. Answering stops the clock; explanations have no time limit. Timing continues while Settings or a confirmation dialog is open and while the page is in the background. If time runs out, the question is marked incorrect, the answer is revealed, and Next becomes available. A late click or typed submission cannot count as correct after the deadline. Every new question starts with a fresh 15 seconds in EN → JP or 20 seconds in JP → EN. Flashcards have no time limit.
 
 Typed answers ignore capitalization, surrounding/repeated spaces, full-width Latin characters, and curly-versus-straight apostrophes. Spelling otherwise needs to match. Enter one accepted English word or phrase, not a slash-separated list.
 
@@ -119,7 +119,7 @@ After choosing **Flashcards** and a direction, choose **Original order**, **Reve
 
 - Enable administrator mode with the administrator password at the bottom of Settings. Authentication reveals Edit, Administration, and their guides; ending administrator mode or an expired-session response hides them. Unsaved drafts remain in memory after session expiry and can be resumed after authenticating again.
 - Word sets are shared across browsers and stored in D1, not in local storage.
-- The editor supports a title, English word, meaning, optional pronunciation (IPA), and optional explanation.
+- The editor supports a title, English word, meaning, optional pronunciation (IPA), optional explanation, and a set-level Publication switch.
 - Save changes explicitly. Saving keeps the editor open.
 - Switching sets or pages with unsaved edits opens a confirmation dialog. Closing/reloading the page uses the browser's native unsaved-changes warning when supported.
 - A signed, HttpOnly cookie remembers editor authentication for up to 30 days in the authenticated browser profile. Other browsers/profiles need the password separately. This is browser authentication, not hardware-device attestation.
@@ -128,7 +128,7 @@ After choosing **Flashcards** and a direction, choose **Original order**, **Reve
 - Concurrent edits are checked using revision numbers. A stale save/delete is rejected. Export your draft before refreshing to preserve your work.
 - Up to 200 sets and 1,000 words per set are supported. Titles: 150 characters. English: 150. Meaning: 300. IPA: 200. Explanation: 2,000.
 
-The quiz content is public to visitors who can access the Worker URL. The editing password protects modifications; it does not hide the vocabulary data.
+Public sets are available to visitors who can access the Worker URL. Private sets require administrator authentication to read or study; their titles and words are excluded from anonymous API responses. Existing sets remain public, and new editor drafts start private. Save applies publication changes.
 
 ## Delete and reorder word sets
 
@@ -236,7 +236,7 @@ The main content starts at the top of the page, with horizontal centering only. 
 
 ### Quiz clear progress
 
-Clear progress is saved in this browser for each word set and quiz direction. Only rounds started with All selected can earn a clear. Only completing the original All round perfectly, without any mistakes or retries, earns the direction clear. Missed-question retries never earn clears, including retries from an All round. Fixed counts and Custom never qualify, even when their count equals the full pool size. Incomplete or incorrect rounds and flashcards do not qualify. Legacy clear records without first-pass All provenance are ignored because earlier records cannot distinguish clears earned through retries. Clears remain earned after later mistakes. Progress survives reloads and is separate from the shared word sets in D1; it is not included in set exports. Editing English words or meanings invalidates the clear state. Renaming, changing explanations, and reordering preserve it. Previous sessions cannot be recovered because earlier versions did not store results.
+Clear progress is saved in this browser for each word set and quiz direction. Only rounds started with All selected can earn a clear. Only completing the original All round perfectly, without any mistakes or retries, earns the direction clear. Missed-question retries never earn clears, including retries from an All round. Fixed counts and Custom never qualify, even when their count equals the full pool size. Incomplete or incorrect rounds and flashcards do not qualify. Legacy clear records without first-pass All provenance are ignored because earlier records cannot distinguish clears earned through retries. Clears remain earned after later mistakes. Progress survives reloads and is separate from the shared word sets in D1; it is not included in set exports. Clear state follows the saved set ID and remains after editing words or meanings, adding or removing words, renaming, changing explanations, reordering, or changing publication. Imported copies have separate clear state. Previous sessions cannot be recovered because earlier versions did not store results.
 
 Japanese UI instructions, confirmations, and errors use a consistent polite tone.
 
@@ -454,3 +454,19 @@ The separate selection-based **Italic** button and its Ctrl/Command+I shortcut h
 ## Inline IPA display (version 1.20.2)
 
 The separate IPA preview has been removed from the word editor. The editable field already displays regular and italic characters directly. The palette, undo/redo, saved formatting, flashcards, and import previews remain available. English and Japanese editing instructions now refer to the inline field and cards.
+
+## Persistent clears and publication (version 1.21.0)
+
+ALL first-pass clears now belong to the saved set ID and survive edits to its words, meanings, title, explanations, IPA, order, and publication status, including adding or deleting words. Existing qualifying clear records are retained without conversion. A different imported set still has a different ID and starts uncleared. Only an ALL first-pass perfect quiz can earn a new direction clear; retries and partial quizzes do not qualify. The content snapshot still prevents an in-progress round from granting a new clear against different content.
+
+The editor includes a Publication switch. Save applies its value together with the draft. Existing sets stay public; newly created editor drafts start private. Public sets are available to everyone. Private sets, including their titles and words, are returned by the set API only to authenticated administrators and can be practiced in administrator mode. Signing out or receiving an authentication failure removes private sets from the active client catalog and closes cached practice screens. Signing in reloads the full administrator catalog. Previously downloaded content cannot be recalled from another device.
+
+D1 adds the publication column automatically on the first API request; no manual SQL is required. Publication changes use the existing revision conflict protection. JSON and ZIP exports retain `published: false` for private sets; an absent flag means public for compatibility with older files. Import creates independent copies. Both interface languages include the switch labels, visibility descriptions, and updated clear rules.
+
+## Quiz pronunciation and answer review (version 1.22.0)
+
+EN → JP questions show the English word with a manual pronunciation button and the saved IPA below it. JP → EN keeps English and IPA hidden until feedback, then displays each correct English word, its IPA in square brackets, and a pronunciation button in one wrapping row. Alternative accepted answers each have their own row. Unregistered IPA is omitted; saved per-character italics are preserved. The existing English speech engine is shared with flashcards. Speech begins only on a button tap, repeated taps restart instead of queueing, and changing questions, answering, opening dialogs, or leaving stops playback. Unsupported browsers omit the buttons while retaining text and IPA.
+
+After a four-choice answer, skip, or timeout, the three distractor choices show their matching English words in small text. The quiz snapshots this mapping after choices are shuffled. Matching entries from the question's source sets take priority; global fallback distractors use their actual catalog entries. Multiple words for one meaning are shown together. These labels never appear before feedback and are not new answer buttons.
+
+EN → JP keeps its 15-second question limit. JP → EN uses 20 seconds, including retries and collection quizzes. Deadlines, bar ratio, colors, seconds, accessibility values, and the count-screen note all use the mode-specific limit. Speech does not pause or reset the countdown. Both interface languages and the Guide explain the new behavior.

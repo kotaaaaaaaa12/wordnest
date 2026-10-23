@@ -9,11 +9,19 @@ async function initialize(db) {
   if (!initialized.has(db)) initialized.set(db, (async () => {
     await db.batch([
       ...rankingSchema.map(sql=>db.prepare(sql)),
-      db.prepare('CREATE TABLE IF NOT EXISTS sets (id TEXT PRIMARY KEY, title TEXT NOT NULL, words TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)'),
+      db.prepare('CREATE TABLE IF NOT EXISTS sets (id TEXT PRIMARY KEY, title TEXT NOT NULL, words TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL, published INTEGER NOT NULL DEFAULT 1 CHECK(published IN (0,1)))'),
       db.prepare('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY)'),
       db.prepare('CREATE TABLE IF NOT EXISTS set_order (id INTEGER PRIMARY KEY CHECK(id=1), ids TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0)'),
       db.prepare('CREATE TABLE IF NOT EXISTS login_limits (key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires INTEGER NOT NULL)')
     ]);
+    const columns=await db.prepare('PRAGMA table_info(sets)').all();
+    if(!columns.results.some(column=>column.name==='published')){
+      try{await db.prepare('ALTER TABLE sets ADD COLUMN published INTEGER NOT NULL DEFAULT 1 CHECK(published IN (0,1))').run();}
+      catch(error){
+        const current=await db.prepare('PRAGMA table_info(sets)').all();
+        if(!current.results.some(column=>column.name==='published'))throw error;
+      }
+    }
     const migrated = await db.prepare("SELECT key FROM metadata WHERE key='remove-default-example-v2'").first();
     if (!migrated) {
       const example = await db.prepare("SELECT * FROM sets WHERE id='starter-essentials' AND revision=1").first();
@@ -94,10 +102,11 @@ async function api(request, env) {
   }
   if (path === '/api/logout' && method === 'POST') return reply({ ok: true }, 200, { 'Set-Cookie': cookie(request, '', 0) });
   if (path === '/api/sets' && method === 'GET') {
-    const [rows, ordering] = await env.DB.batch([env.DB.prepare('SELECT * FROM sets ORDER BY updated_at DESC,id'), env.DB.prepare('SELECT ids,revision FROM set_order WHERE id=1')]);
+    const admin=await authenticated(request,env);
+    const [rows, ordering] = await env.DB.batch([env.DB.prepare(admin?'SELECT * FROM sets ORDER BY updated_at DESC,id':'SELECT * FROM sets WHERE published=1 ORDER BY updated_at DESC,id'), env.DB.prepare('SELECT ids,revision FROM set_order WHERE id=1')]);
     const order=ordering.results[0], positions=new Map(JSON.parse(order.ids).map((id,index)=>[id,index]));
     rows.results.sort((a,b)=>(positions.get(a.id)??Number.MAX_SAFE_INTEGER)-(positions.get(b.id)??Number.MAX_SAFE_INTEGER));
-    return reply({ sets: rows.results.map(s => ({ id: s.id, title: s.title, words: JSON.parse(s.words), revision: s.revision, updatedAt: s.updated_at })), orderRevision: order.revision });
+    return reply({ sets: rows.results.map(s => ({ id: s.id, title: s.title, words: JSON.parse(s.words), published: s.published===1, revision: s.revision, updatedAt: s.updated_at })), orderRevision: order.revision });
   }
   if(path==='/api/rankings' || path.startsWith('/api/ranking/'))return rankingApi(request,env.DB,body);
   if (!await authenticated(request, env)) return reply({ error: 'unauthorized' }, 401);
@@ -117,9 +126,9 @@ async function api(request, env) {
     const { total } = await env.DB.prepare('SELECT COUNT(*) AS total FROM sets').first();
     if (total + sets.length > 200) return reply({ error: 'setLimit' }, 400);
     const now = new Date().toISOString();
-    const created = sets.map(s => ({ ...s, id: crypto.randomUUID(), revision: 1, updatedAt: now }));
+    const created = sets.map(s => ({ ...s, published:s.published!==false, id: crypto.randomUUID(), revision: 1, updatedAt: now }));
     const results=await env.DB.batch([
-      ...created.map(s => env.DB.prepare('INSERT INTO sets (id,title,words,updated_at) VALUES (?,?,?,?)').bind(s.id, s.title, JSON.stringify(s.words), now)),
+      ...created.map(s => env.DB.prepare('INSERT INTO sets (id,title,words,updated_at,published) VALUES (?,?,?,?,?)').bind(s.id, s.title, JSON.stringify(s.words), now, s.published?1:0)),
       env.DB.prepare('UPDATE set_order SET ids=(SELECT json_group_array(value) FROM (SELECT value FROM json_each(?) UNION ALL SELECT value FROM json_each(set_order.ids))),revision=revision+1 WHERE id=1 RETURNING ids,revision').bind(JSON.stringify(created.map(s=>s.id)))
     ]);
     return reply({ sets: created, orderRevision:results.at(-1).results[0].revision, orderedIds:JSON.parse(results.at(-1).results[0].ids) }, 201);
@@ -128,9 +137,9 @@ async function api(request, env) {
   if (match && method === 'PUT') {
     const data = await body(request), set = validateSet(data);
     if (!Number.isInteger(data.revision) || data.revision < 1) throw new Error('invalidImport');
-    const result = await env.DB.prepare('UPDATE sets SET title=?,words=?,revision=revision+1,updated_at=? WHERE id=? AND revision=? RETURNING *').bind(set.title, JSON.stringify(set.words), new Date().toISOString(), match[1], data.revision).first();
+    const result = await env.DB.prepare('UPDATE sets SET title=?,words=?,published=COALESCE(?,published),revision=revision+1,updated_at=? WHERE id=? AND revision=? RETURNING *').bind(set.title, JSON.stringify(set.words), data.published===undefined?null:data.published?1:0, new Date().toISOString(), match[1], data.revision).first();
     if (!result) return reply({ error: 'conflict' }, 409);
-    return reply({ set: { id: result.id, title: result.title, words: JSON.parse(result.words), revision: result.revision, updatedAt: result.updated_at } });
+    return reply({ set: { id: result.id, title: result.title, words: JSON.parse(result.words), published: result.published===1, revision: result.revision, updatedAt: result.updated_at } });
   }
   if (match && method === 'DELETE') {
     const revision = Number(url.searchParams.get('revision'));
@@ -148,7 +157,7 @@ export default {
     if (!new URL(request.url).pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     try { return await api(request, env); }
     catch (error) {
-      const known = ['invalidTitle', 'invalidWords', 'invalidIpa', 'invalidIpaStyle', 'duplicateWord', 'invalidImport', 'jsonRequired', 'tooLarge'];
+      const known = ['invalidTitle', 'invalidWords', 'invalidIpa', 'invalidIpaStyle', 'invalidVisibility', 'duplicateWord', 'invalidImport', 'jsonRequired', 'tooLarge'];
       if((error.status && error.message.startsWith('ranking')) || ['invalidRankingData','invalidRankingName','invalidRankingMessage'].includes(error.message))return reply({error:error.message},error.status || 400);
       if (known.includes(error.message)) return reply({ error: error.message }, error.status || 400);
       console.error('API request failed', error.message);
