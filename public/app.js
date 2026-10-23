@@ -2,7 +2,7 @@ import { RankingClient, rankingMetrics } from './rankings.js';
 import { FlashcardBookmarks, PersonalWords, wordIdentity, catalogWord, findCatalogWord, sourceQuestions, collectionQuestions, canMultipleChoice, quizFromPool, collectionCards } from './personal.js';
 import { LearningTracker, localDay, studyCalendar, recentStudyDays } from './stats.js';
 import { icon } from './icons.js';
-import { normalizeIpa, normalizeIpaData, ipaRuns, toggleIpaItalic, remapIpaItalic, normalize, studyKey, studyStatus, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, balanceAnswerPositions, isCorrect, portable, parseImport } from './core.js';
+import { normalizeIpa, normalizeIpaData, ipaRuns, ipaRawRuns, limitIpaText, toggleIpaItalic, remapIpaItalic, normalize, studyKey, studyStatus, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, balanceAnswerPositions, isCorrect, portable, parseImport } from './core.js';
 import { messages, translator } from './i18n.js';
 import { zipSync, unzipSync, strToU8, strFromU8 } from './vendor/fflate.js';
 const $ = (s, root = document) => root.querySelector(s);
@@ -68,7 +68,7 @@ function shell(content) {
   return `<div class="app-shell"><aside class="sidebar"><a href="#/" data-nav="home" class="brand"><span class="brand-mark">${icon('book')}</span>wordnest<span style="color:var(--accent)">.</span></a><nav class="nav ${state.authenticated?'nav-admin':''}" style="--nav-count:${state.authenticated?6:4}" aria-label="${t('home')}"><a href="#/" data-nav="home" class="${state.route==='home'?'active':''}">${icon('book')}${t('home')}</a><a href="#/stats" data-nav="stats" class="${state.route==='stats'?'active':''}">${icon('stats')}${t('stats')}</a><a href="#/rankings" data-nav="rankings" class="${state.route==='rankings'?'active':''}">${icon('trophy')}${t('rankings')}</a><a href="#/guide" data-nav="guide" class="${state.route==='guide'?'active':''}">${icon('guide')}${t('guide')}</a>${state.authenticated?`<a href="#/edit" data-nav="edit" class="${state.route==='edit'?'active':''}">${icon('edit')}${t('edit')}</a><a href="#/admin" data-nav="admin" class="${state.route==='admin'?'active':''}">${icon('settings')}${t('admin')}</a>`:''}</nav><div class="sidebar-bottom"><button class="settings-trigger" data-action="settings">${icon('settings')}${t('settings')}</button></div></aside><main class="main">${content}</main></div>`;
 }
 function isTextEntry(element) {
-  return element?.tagName==='TEXTAREA' || (element?.tagName==='INPUT' && ['text','search','email','password','tel','url','number'].includes(element.type));
+  return element?.matches('[contenteditable="true"]') || element?.tagName==='TEXTAREA' || (element?.tagName==='INPUT' && ['text','search','email','password','tel','url','number'].includes(element.type));
 }
 function render() {
   stopCardSpeech();hideIpaPalette();
@@ -78,7 +78,7 @@ function render() {
   document.title=`Wordnest — ${t(state.route==='home'?'home':state.route)}`;
   const active = document.activeElement;
   const focusId = isTextEntry(active) ? active.id : null;
-  const selection = active && typeof active.selectionStart==='number' ? [active.selectionStart,active.selectionEnd] : null;
+  const selection = active?.matches('[data-field="ipa"]')?ipaSelection(active):active && typeof active.selectionStart==='number' ? [active.selectionStart,active.selectionEnd] : null;
   let content;
   if (state.route==='stats') content=statsView();
   else if (state.route==='rankings') content=rankingsView();
@@ -100,7 +100,7 @@ function render() {
   refreshAdminSettings();
   refreshRankingSettings();
   if(state.screen!=='quiz' || state.route!=='home')stopQuizClock();
-  if (focusId) { const el=document.getElementById(focusId); if(el && document.activeElement!==el){el.focus({preventScroll:true});if(selection && el.setSelectionRange)el.setSelectionRange(...selection);} }
+  if (focusId) { const el=document.getElementById(focusId); if(el && document.activeElement!==el){el.focus({preventScroll:true});if(selection){if(el.matches('[data-field="ipa"]'))selectIpa(el,...selection);else el.setSelectionRange?.(...selection);}} }
 }
 function learningScreen() { return state.route==='home' && ['quiz','cards'].includes(state.screen); }
 function syncLearning() { learning.setActive(learningScreen() && document.visibilityState==='visible' && document.hasFocus() && !$('#modal')?.open); }
@@ -524,9 +524,37 @@ const IPA_SYMBOLS=[...new Set([...Object.values(IPA_GROUPS).flat(),...IPA_QUICK]
 const IPA_VARIANTS=Object.fromEntries(IPA_VOWELS.map(symbol=>[symbol,['','\u0301','\u0300','\u0302','\u0304','\u0306','\u0303','\u0308'].map(mark=>symbol+mark)]));
 const IPA_ALLOWED=new Set([...IPA_SYMBOLS,...Object.values(IPA_VARIANTS).flat()]);
 let activeIpaInput=null,ipaPalette=null,ipaVariants=null,ipaPress=null,ipaSuppressedClick=null,ipaGroup='vowels';
-const ipaEdits=new WeakMap(),ipaHistories=new WeakMap();
+const ipaEdits=new WeakMap(),ipaHistories=new WeakMap(),ipaSelections=new WeakMap(),ipaTypingModes=new WeakMap(),ipaComposing=new WeakSet();
 function ipaWord(input){return state.draft?.words[Number(input.dataset.word)];}
-function ipaSnapshot(input){const word=ipaWord(input);return {ipa:word.ipa||'',ipaItalic:structuredClone(word.ipaItalic||[]),selection:[input.selectionStart,input.selectionEnd]};}
+function ipaTypingItalic(input){return ipaTypingModes.get(ipaWord(input))||false;}
+function ipaSelection(input){
+  const selection=window.getSelection();
+  if(selection?.rangeCount){
+    const range=selection.getRangeAt(0);
+    if(input.contains(range.startContainer) && input.contains(range.endContainer)){
+      const prefix=range.cloneRange();prefix.selectNodeContents(input);prefix.setEnd(range.startContainer,range.startOffset);
+      const start=prefix.toString().length;prefix.setEnd(range.endContainer,range.endOffset);
+      const result=[start,prefix.toString().length];ipaSelections.set(input,result);return result;
+    }
+  }
+  return ipaSelections.get(input)||[0,0];
+}
+function ipaPoint(input,offset){
+  const walker=document.createTreeWalker(input,NodeFilter.SHOW_TEXT);let node;
+  while((node=walker.nextNode())){if(offset<=node.textContent.length)return [node,offset];offset-=node.textContent.length;}
+  return [input,input.childNodes.length];
+}
+function selectIpa(input,start,end=start){
+  const length=input.textContent.length;start=Math.max(0,Math.min(length,start));end=Math.max(start,Math.min(length,end));ipaSelections.set(input,[start,end]);
+  if(document.activeElement===input){const range=document.createRange();range.setStart(...ipaPoint(input,start));range.setEnd(...ipaPoint(input,end));const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);}
+  updateIpaFormat(input);
+}
+function ipaRawMarkup(word){return ipaRawRuns(word.ipa||'',word.ipaItalic).map(run=>run.italic?`<i class="ipa-italic">${e(run.text)}</i>`:e(run.text)).join('');}
+function paintIpaInput(input,selection=ipaSelection(input)){
+  if(ipaComposing.has(input))return;
+  input.innerHTML=ipaRawMarkup(ipaWord(input));input.classList.toggle('is-empty',!input.textContent);selectIpa(input,...selection);
+}
+function ipaSnapshot(input){const word=ipaWord(input);return {ipa:word.ipa||'',ipaItalic:structuredClone(word.ipaItalic||[]),selection:ipaSelection(input)};}
 function setIpaStyle(word,ranges){if(ranges.length)word.ipaItalic=ranges;else delete word.ipaItalic;}
 function rememberIpaEdit(input,before){
   const after=ipaSnapshot(input);if(before.ipa===after.ipa && JSON.stringify(before.ipaItalic)===JSON.stringify(after.ipaItalic))return;
@@ -538,28 +566,37 @@ function updateIpaPreview(input){
 }
 function updateIpaFormat(input){
   if(!input?.isConnected || !state.draft)return;
+  if((ipaWord(input)?.ipa||'')!==input.textContent)return;
   const button=input.closest('.ipa-editor')?.querySelector('[data-action="ipa-italic"]');if(!button)return;
-  const start=input.selectionStart,end=input.selectionEnd;button.disabled=start===end;
-  const current=ipaWord(input).ipaItalic||[],result=toggleIpaItalic(input.value,current,start,end),size=ranges=>ranges.reduce((n,[a,b])=>n+b-a,0);
-  // Toggling removes formatting only when the entire selection is already italic.
-  const enabled=start!==end && size(result.ipaItalic)<size(current);
-  button.setAttribute('aria-pressed',String(enabled));
+  const [start,end]=ipaSelection(input);button.disabled=start===end;
+  const current=ipaWord(input).ipaItalic||[],result=toggleIpaItalic(input.textContent,current,start,end),size=ranges=>ranges.reduce((n,[a,b])=>n+b-a,0);
+  button.setAttribute('aria-pressed',String(start!==end && size(result.ipaItalic)<size(current)));
 }
 function toggleIpaFormat(button){
-  const input=button.closest('.ipa-editor').querySelector('input'),before=ipaSnapshot(input),start=input.selectionStart,end=input.selectionEnd;
+  const input=button.closest('.ipa-editor').querySelector('[data-field="ipa"]'),before=ipaSnapshot(input),[start,end]=ipaSelection(input);
   if(start===end){toast(t('ipaSelectText'));return;}
-  const result=toggleIpaItalic(input.value,ipaWord(input).ipaItalic,start,end);
-  input.focus({preventScroll:true});setIpaStyle(ipaWord(input),result.ipaItalic);input.setSelectionRange(...result.selection);
+  const result=toggleIpaItalic(input.textContent,ipaWord(input).ipaItalic,start,end);
+  input.focus({preventScroll:true});setIpaStyle(ipaWord(input),result.ipaItalic);paintIpaInput(input,result.selection);
   rememberIpaEdit(input,before);markDirty();updateIpaPreview(input);
 }
 function undoIpaEdit(input,redo=false){
   const history=ipaHistories.get(input),from=redo?history?.future:history?.past;if(!from?.length)return false;
   const current=ipaSnapshot(input),saved=from.pop();(redo?history.past:history.future).push(current);
-  const word=ipaWord(input);word.ipa=saved.ipa;setIpaStyle(word,structuredClone(saved.ipaItalic));input.value=saved.ipa;input.setSelectionRange(...saved.selection);ipaEdits.delete(input);markDirty();updateIpaPreview(input);return true;
+  const word=ipaWord(input);word.ipa=saved.ipa;setIpaStyle(word,structuredClone(saved.ipaItalic));paintIpaInput(input,saved.selection);ipaEdits.delete(input);markDirty();updateIpaPreview(input);return true;
 }
 function updateIpaInput(input){
-  const before=ipaSnapshot(input),word=ipaWord(input),hint=ipaEdits.get(input),ranges=remapIpaItalic(before.ipa,input.value,before.ipaItalic,hint);if(hint)before.selection=[hint.start,hint.end];ipaEdits.delete(input);
-  word.ipa=input.value;setIpaStyle(word,ranges);rememberIpaEdit(input,before);markDirty();updateIpaPreview(input);
+  const before=ipaSnapshot(input),word=ipaWord(input),hint=ipaEdits.get(input),selection=ipaSelection(input),value=limitIpaText(input.textContent.replace(/[\r\n\t]/g,' ')),ranges=remapIpaItalic(before.ipa,value,before.ipaItalic,hint);if(hint)before.selection=[hint.start,hint.end];ipaEdits.delete(input);
+  word.ipa=value;setIpaStyle(word,ranges);paintIpaInput(input,selection);rememberIpaEdit(input,before);markDirty();updateIpaPreview(input);
+}
+function replaceIpaSelection(input,text){
+  const [start,end]=ipaSelection(input),value=input.textContent;
+  if(value.length-(end-start)+text.length>200){toast(t('invalidIpa'));return;}
+  ipaEdits.set(input,{start,end,italic:ipaTypingItalic(input)});input.textContent=value.slice(0,start)+text+value.slice(end);selectIpa(input,start+text.length);
+  input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:text}));
+}
+function toggleIpaShift(){
+  const input=activeIpaInput;if(!input || document.activeElement!==input)return;
+  const enabled=!ipaTypingItalic(input);ipaTypingModes.set(ipaWord(input),enabled);closeIpaVariants();renderIpaPalette();
 }
 function cancelIpaPress(){
   const press=ipaPress;if(!press)return;
@@ -586,7 +623,8 @@ function ipaKey(symbol){
   return `<button type="button" tabindex="-1" data-action="insert-ipa" data-ipa-symbol="${e(symbol)}" ${IPA_VARIANTS[symbol]?'data-ipa-variants aria-expanded="false"':''} aria-label="${e(label)}" title="${e(label)}"><span class="ipa-symbol" lang="en-fonipa">${e(display)}</span></button>`;
 }
 function renderIpaPalette(){
-  ipaPalette.innerHTML=`<small>${t('ipaPaletteHelp')}</small><div class="ipa-groups" role="group" aria-label="${t('ipaCategories')}">${Object.keys(IPA_GROUPS).map(group=>`<button type="button" tabindex="-1" data-action="ipa-group" data-ipa-group="${group}" aria-pressed="${ipaGroup===group}">${t('ipaGroup_'+group)}</button>`).join('')}</div><div class="ipa-keys" role="group" aria-label="${t('ipaGroup_'+ipaGroup)}">${IPA_GROUPS[ipaGroup].map(ipaKey).join('')}</div>${ipaGroup!=='marks'?`<div class="ipa-quick" role="group" aria-label="${t('ipaGroup_marks')}">${IPA_QUICK.map(ipaKey).join('')}</div>`:`<small class="ipa-mark-help">${t('ipaMarksHelp')}</small>`}`;
+  const italic=ipaTypingItalic(activeIpaInput);ipaPalette.classList.toggle('is-italic',italic);
+  ipaPalette.innerHTML=`<div class="ipa-palette-heading"><small>${t('ipaPaletteHelp')}</small><button type="button" tabindex="-1" class="ipa-shift" data-action="ipa-shift" aria-pressed="${italic}" aria-label="${t('ipaTypingItalic')}"><span class="ipa-italic-indicator" aria-hidden="true">I</span>${t('ipaTypingItalic')}</button></div><div class="ipa-groups" role="group" aria-label="${t('ipaCategories')}">${Object.keys(IPA_GROUPS).map(group=>`<button type="button" tabindex="-1" data-action="ipa-group" data-ipa-group="${group}" aria-pressed="${ipaGroup===group}">${t('ipaGroup_'+group)}</button>`).join('')}</div><div class="ipa-keys" role="group" aria-label="${t('ipaGroup_'+ipaGroup)}">${IPA_GROUPS[ipaGroup].map(ipaKey).join('')}</div>${ipaGroup!=='marks'?`<div class="ipa-quick" role="group" aria-label="${t('ipaGroup_marks')}">${IPA_QUICK.map(ipaKey).join('')}</div>`:`<small class="ipa-mark-help">${t('ipaMarksHelp')}</small>`}`;
 }
 function changeIpaGroup(button){
   const group=button.dataset.ipaGroup;
@@ -597,16 +635,13 @@ function insertIpa(button){
   const input=activeIpaInput;if(!input || document.activeElement!==input || !input.isConnected || !state.authenticated || state.route!=='edit')return;
   const symbol=button.dataset.ipaSymbol;if(!IPA_ALLOWED.has(symbol))return;
   closeIpaVariants();
-  const start=input.selectionStart ?? input.value.length,end=input.selectionEnd ?? start;
-  if(input.value.length-(end-start)+symbol.length>input.maxLength){toast(t('invalidIpa'));return;}
-  ipaEdits.set(input,{start,end});
-  input.setRangeText(symbol,start,end,'end');input.dispatchEvent(new Event('input',{bubbles:true}));
+  replaceIpaSelection(input,symbol);
 }
 function openIpaVariants(button){
   if(!activeIpaInput || document.activeElement!==activeIpaInput || !button.isConnected || modal.open || !state.authenticated || state.route!=='edit')return false;
   const variants=IPA_VARIANTS[button.dataset.ipaSymbol];if(!variants)return false;
   ipaVariants?.remove();ipaPalette.querySelector('[aria-expanded="true"]')?.setAttribute('aria-expanded','false');
-  ipaVariants=document.createElement('div');ipaVariants.className='ipa-variants';ipaVariants.setAttribute('role','group');ipaVariants.setAttribute('aria-label',t('ipaVariants',{symbol:button.dataset.ipaSymbol}));
+  ipaVariants=document.createElement('div');ipaVariants.className='ipa-variants';ipaVariants.classList.toggle('is-italic',ipaTypingItalic(activeIpaInput));ipaVariants.setAttribute('role','group');ipaVariants.setAttribute('aria-label',t('ipaVariants',{symbol:button.dataset.ipaSymbol}));
   ipaVariants.innerHTML=variants.map(symbol=>`<button type="button" tabindex="-1" data-action="insert-ipa" data-ipa-variant data-ipa-symbol="${e(symbol)}" aria-label="${e(t('insertIpaSymbol',{symbol}))}">${e(symbol)}</button>`).join('');
   document.body.append(ipaVariants);button.setAttribute('aria-expanded','true');
   // Fixed positioning avoids clipping inside the editor. Account for the on-screen keyboard.
@@ -629,7 +664,7 @@ function beginIpaPress(event){
   const button=event.target.closest('[data-ipa-symbol]');
   if(event.isPrimary===false){if(ipaPress)suppressIpaClick(ipaPress.button);closeIpaVariants();return;}
   if(event.button>0){if(event.button===2 && button?.hasAttribute('data-ipa-variants') && activeIpaInput===document.activeElement)event.preventDefault();return;}
-  if(!button){if((event.target.closest('[data-ipa-group]') || event.target.closest('[data-action="ipa-italic"]')) && activeIpaInput===document.activeElement)event.preventDefault();if(!event.target.closest('.ipa-variants'))closeIpaVariants();return;}
+  if(!button){if(event.target.closest('[data-ipa-group],[data-action="ipa-italic"],[data-action="ipa-shift"]') && activeIpaInput===document.activeElement)event.preventDefault();if(!event.target.closest('.ipa-variants'))closeIpaVariants();return;}
   if(document.activeElement!==activeIpaInput || !activeIpaInput)return;
   event.preventDefault();
   if(button.hasAttribute('data-ipa-variant'))return;
@@ -659,7 +694,7 @@ function finishIpaPress(event,cancelled=false){
   // Releasing over the original key leaves the alternatives open for a separate tap.
 }
 function ipaEditor(word,index){
-  return `<div class="wide ipa-editor"><label for="word-${index}-ipa">${t('ipa')} · ${t('optional')}<span class="ipa-input-wrap"><span aria-hidden="true">[</span><input id="word-${index}-ipa" class="ipa-input" data-word="${index}" data-field="ipa" value="${e(word.ipa || '')}" aria-describedby="word-${index}-ipa-help" maxlength="200" lang="en-fonipa" dir="ltr" placeholder="əˈtʃiːv" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"><span aria-hidden="true">]</span></span></label><div class="ipa-format"><button type="button" class="btn ghost small" data-action="ipa-italic" aria-pressed="false" disabled><span class="ipa-italic-indicator" aria-hidden="true">I</span>${t('ipaItalic')}</button><small id="word-${index}-ipa-help">${t('ipaFormatHelp')}</small></div><div class="ipa-preview"><small>${t('ipaPreview')}</small><span class="ipa-preview-value" lang="en-fonipa" dir="ltr">${normalizeIpa(word.ipa||'')?`[${ipaMarkup(word)}]`:'—'}</span></div></div>`;
+  return `<div class="wide ipa-editor"><div class="ipa-label" id="word-${index}-ipa-label">${t('ipa')} · ${t('optional')}</div><div class="ipa-input-wrap"><span aria-hidden="true">[</span><div id="word-${index}-ipa" class="ipa-input ${word.ipa?'':'is-empty'}" role="textbox" contenteditable="true" tabindex="0" aria-multiline="false" aria-labelledby="word-${index}-ipa-label" aria-describedby="word-${index}-ipa-help" data-word="${index}" data-field="ipa" data-placeholder="əˈtʃiːv" lang="en-fonipa" dir="ltr" inputmode="text" enterkeyhint="done" autocorrect="off" autocapitalize="none" spellcheck="false">${ipaRawMarkup(word)}</div><span aria-hidden="true">]</span></div><div class="ipa-format"><button type="button" class="btn ghost small" data-action="ipa-italic" aria-pressed="false" disabled><span class="ipa-italic-indicator" aria-hidden="true">I</span>${t('ipaItalic')}</button><small id="word-${index}-ipa-help">${t('ipaFormatHelp')}</small></div><div class="ipa-preview"><small>${t('ipaPreview')}</small><span class="ipa-preview-value" lang="en-fonipa" dir="ltr">${normalizeIpa(word.ipa||'')?`[${ipaMarkup(word)}]`:'—'}</span></div></div>`;
 }
 function editor() {
   if(!state.authenticated)return '';
@@ -670,11 +705,16 @@ const modal=$('#modal');
 function dialog(content, setup) {
   stopCardSpeech();hideIpaPalette();
   return new Promise(resolve=>{
-    const previous=document.activeElement;
+    const previous=document.activeElement,previousIpaSelection=previous?.matches('[data-field="ipa"]')?ipaSelection(previous):null,previousIpaWord=previousIpaSelection?ipaWord(previous):null;
     modal.innerHTML=content;
     modal.setAttribute('aria-labelledby','modal-title');
     let settled=false;
-    const finish=value=>{ if(settled)return; settled=true; modal.close();syncLearning(); modal.oncancel=null; modal.onclick=null; modal.onchange=null; modal.onsubmit=null; if(previous?.isConnected){if(isTextEntry(previous))previous.focus({preventScroll:true});else if(document.activeElement===previous)previous.blur();} resolve(value); };
+    const finish=value=>{
+      if(settled)return;settled=true;modal.close();syncLearning();modal.oncancel=null;modal.onclick=null;modal.onchange=null;modal.onsubmit=null;
+      const replacement=previousIpaSelection?document.getElementById(previous.id):null,target=previous?.isConnected?previous:replacement && ipaWord(replacement)===previousIpaWord?replacement:null;
+      if(target){if(isTextEntry(target)){target.focus({preventScroll:true});if(previousIpaSelection)selectIpa(target,...previousIpaSelection);}else if(document.activeElement===target)target.blur();}
+      resolve(value);
+    };
     modal.oncancel=event=>{event.preventDefault();finish(false);};
     modal.onclick=event=>{const button=event.target.closest('[data-dialog]');if(button)finish(button.dataset.dialog==='confirm');};
     learning.setActive(false);modal.showModal(); $('#modal-title',modal)?.focus({preventScroll:true});
@@ -961,6 +1001,7 @@ const actions={
   'insert-ipa':insertIpa,
   'ipa-group':changeIpaGroup,
   'ipa-italic':toggleIpaFormat,
+  'ipa-shift':toggleIpaShift,
   'speak-card':speakCard,
   'flip-card':flipCard,
   'next-card'(){moveCard(1);},
@@ -990,7 +1031,7 @@ const actions={
   async 'edit-set'(button){if(state.draft?.id===button.dataset.id)return;if(!await discardGuard())return;state.draft=structuredClone(state.sets.find(s=>s.id===button.dataset.id));state.dirty=false;state.error='';render();},
   'add-word'(){state.draft.words.push({english:'',meaning:'',explanation:''});markDirty();render();const index=state.draft.words.length-1;$(`#word-${index}-english`)?.focus({preventScroll:true});$(`#word-${index}-english`)?.scrollIntoView({block:'center',behavior:'auto'});},
   async 'remove-word'(button){if(!await confirmDialog('removeTitle',t('removeHelp'),'remove',true))return;state.draft.words.splice(Number(button.dataset.index),1);markDirty();render();},
-  async save(){if(state.saving)return;try{const data=validateSet(state.draft);state.saving=true;state.error='';render();let saved;if(state.draft.id){saved=(await api(`/api/sets/${state.draft.id}`,{method:'PUT',body:JSON.stringify({...data,revision:state.draft.revision})})).set;state.sets=state.sets.map(s=>s.id===saved.id?saved:s);}else{const response=await api('/api/sets',{method:'POST',body:JSON.stringify(data)});saved=response.sets[0];state.sets.unshift(saved);synchronizeSetOrder(response);}state.draft=structuredClone(saved);state.dirty=false;toast(t('saved'));}catch(err){state.error=message(err);}finally{state.saving=false;render();}},
+  async save(){if(state.saving)return;try{const data=validateSet(state.draft),typingModes=state.draft.words.map(word=>ipaTypingModes.get(word)||false);state.saving=true;state.error='';render();let saved;if(state.draft.id){saved=(await api(`/api/sets/${state.draft.id}`,{method:'PUT',body:JSON.stringify({...data,revision:state.draft.revision})})).set;state.sets=state.sets.map(s=>s.id===saved.id?saved:s);}else{const response=await api('/api/sets',{method:'POST',body:JSON.stringify(data)});saved=response.sets[0];state.sets.unshift(saved);synchronizeSetOrder(response);}state.draft=structuredClone(saved);state.draft.words.forEach((word,index)=>ipaTypingModes.set(word,typingModes[index]));state.dirty=false;toast(t('saved'));}catch(err){state.error=message(err);}finally{state.saving=false;render();}},
   async delete(){const draft=state.draft;if(!await confirmDialog('deleteTitle',t('deleteHelp',{title:draft.title}),'delete',true))return;state.saving=true;render();try{await deleteSavedSet(draft);}catch(err){state.error=message(err);}finally{state.saving=false;render();}},
   async logout(){if(!await discardGuard())return;try{await api('/api/logout',{method:'POST'});state.authenticated=false;state.adminData=null;state.adminStats=null;state.adminStatsId=null;state.draft=null;state.dirty=false;state.error='';render();}catch(err){toast(message(err));}},
   import:importDialog,
@@ -1028,17 +1069,41 @@ document.addEventListener('keydown',event=>{
   if(event.key==='ArrowLeft' || event.key==='ArrowRight'){event.preventDefault();moveCard(event.key==='ArrowRight'?1:-1);}
   else if((event.key===' ' || event.key==='Enter') && (event.target===document.body || event.target.closest('.flashcard'))){event.preventDefault();if(!event.repeat)flipCard();}
 });
-document.addEventListener('focusin',event=>{if(event.target.matches('input[data-field="ipa"]'))showIpaPalette(event.target);});
-document.addEventListener('focusout',event=>{if(event.target===activeIpaInput)hideIpaPalette();});
-document.addEventListener('selectionchange',()=>{if(document.activeElement?.matches('input[data-field="ipa"]'))updateIpaFormat(document.activeElement);});
-document.addEventListener('select',event=>{if(event.target.matches('input[data-field="ipa"]'))updateIpaFormat(event.target);},true);
+document.addEventListener('focusin',event=>{if(event.target.matches('[data-field="ipa"]'))showIpaPalette(event.target);});
+document.addEventListener('focusout',event=>{if(event.target===activeIpaInput){ipaSelection(event.target);hideIpaPalette();}});
+document.addEventListener('selectionchange',()=>{if(document.activeElement?.matches('[data-field="ipa"]'))updateIpaFormat(document.activeElement);});
+document.addEventListener('select',event=>{if(event.target.matches('[data-field="ipa"]'))updateIpaFormat(event.target);},true);
 document.addEventListener('beforeinput',event=>{
-  const input=event.target;if(!input.matches('input[data-field="ipa"]') || !state.draft)return;
+  const input=event.target.closest('[data-field="ipa"]');if(!input || !state.draft)return;
+  if(['insertParagraph','insertLineBreak'].includes(event.inputType)){event.preventDefault();return;}
+  if(event.inputType?.startsWith('format')){event.preventDefault();if(event.inputType==='formatItalic')toggleIpaFormat(input.closest('.ipa-editor').querySelector('[data-action="ipa-italic"]'));return;}
   if(['historyUndo','historyRedo'].includes(event.inputType) && event.cancelable && undoIpaEdit(input,event.inputType==='historyRedo')){event.preventDefault();return;}
-  ipaEdits.set(input,{start:input.selectionStart,end:input.selectionEnd,inputType:event.inputType});
+  let [start,end]=ipaSelection(input);const target=event.getTargetRanges?.()[0];
+  if(target && input.contains(target.startContainer) && input.contains(target.endContainer)){
+    const prefix=document.createRange();prefix.selectNodeContents(input);prefix.setEnd(target.startContainer,target.startOffset);start=prefix.toString().length;prefix.setEnd(target.endContainer,target.endOffset);end=prefix.toString().length;
+  }
+  if(!event.isComposing && event.cancelable && typeof event.data==='string' && event.inputType?.startsWith('insert') && input.textContent.length-(end-start)+event.data.length>200){event.preventDefault();toast(t('invalidIpa'));return;}
+  ipaEdits.set(input,{start,end,inputType:event.inputType,italic:ipaTypingItalic(input)});
+});
+document.addEventListener('compositionstart',event=>{const input=event.target.closest('[data-field="ipa"]');if(input)ipaComposing.add(input);});
+document.addEventListener('compositionend',event=>{const input=event.target.closest('[data-field="ipa"]');if(input){ipaComposing.delete(input);setTimeout(()=>{if(input.isConnected && !ipaComposing.has(input))updateIpaInput(input);},0);}});
+function pasteIpaText(input,text){
+  if(!text)return;
+  const [start,end]=ipaSelection(input),available=200-input.textContent.length+end-start;
+  const value=limitIpaText(text.replace(/[\r\n\t]+/g,' ').replace(/[\u0000-\u001f\u007f]/g,''),available);if(value)replaceIpaSelection(input,value);
+}
+document.addEventListener('paste',event=>{const input=event.target.closest('[data-field="ipa"]');if(!input)return;event.preventDefault();pasteIpaText(input,event.clipboardData?.getData('text/plain')||'');});
+document.addEventListener('drop',event=>{
+  const input=event.target.closest('[data-field="ipa"]');if(!input)return;event.preventDefault();
+  const point=document.caretPositionFromPoint?.(event.clientX,event.clientY),range=point?null:document.caretRangeFromPoint?.(event.clientX,event.clientY);input.focus({preventScroll:true});
+  if(point && input.contains(point.offsetNode)){const r=document.createRange();r.setStart(point.offsetNode,point.offset);r.collapse(true);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(r);}
+  else if(range && input.contains(range.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);}
+  pasteIpaText(input,event.dataTransfer?.getData('text/plain')||'');
 });
 document.addEventListener('keydown',event=>{
-  const input=event.target;if(!input.matches('input[data-field="ipa"]') || !(event.ctrlKey || event.metaKey) || event.altKey || !state.authenticated || state.route!=='edit')return;
+  const input=event.target.closest('[data-field="ipa"]');if(!input || event.isComposing || ipaComposing.has(input))return;
+  if(event.key==='Enter'){event.preventDefault();return;}
+  if(!(event.ctrlKey || event.metaKey) || event.altKey || !state.authenticated || state.route!=='edit')return;
   if(event.key.toLowerCase()==='i'){event.preventDefault();if(!event.repeat)toggleIpaFormat(input.closest('.ipa-editor').querySelector('[data-action="ipa-italic"]'));}
   else if(event.key.toLowerCase()==='z' && undoIpaEdit(input,event.shiftKey))event.preventDefault();
 });
@@ -1064,11 +1129,12 @@ window.visualViewport?.addEventListener('resize',closeIpaVariants);
 window.visualViewport?.addEventListener('scroll',closeIpaVariants);
 document.addEventListener('mousedown',event=>{if(event.button===0 && event.target.closest('button,a'))event.preventDefault();},true);
 document.addEventListener('click',async event=>{
+  const ipaLabel=event.target.closest('.ipa-label');if(ipaLabel){const input=ipaLabel.closest('.ipa-editor').querySelector('[data-field="ipa"]'),selection=ipaSelections.get(input)||[input.textContent.length,input.textContent.length];input.focus({preventScroll:true});selectIpa(input,...selection);return;}
   const pressed=event.target.closest('button,a');if(pressed && document.activeElement===pressed)pressed.blur();
   const nav=event.target.closest('[data-nav]');if(nav){event.preventDefault();await navigate(nav.dataset.nav);return;}
   const button=event.target.closest('[data-action]');
   if(!button && event.target.closest('.flashcard') && state.route==='home' && state.screen==='cards' && !modal.open){if(Date.now()>=suppressFlipUntil)flipCard();return;}
-  if(button && !button.disabled){if(['new','import','export','export-draft','export-selected','manage-sets','save','delete','add-word','remove-word','insert-ipa','ipa-group','ipa-italic'].includes(button.dataset.action) && (state.route!=='edit' || !state.authenticated))return;if(button.dataset.action==='flip-card' && Date.now()<suppressFlipUntil)return;try{await actions[button.dataset.action]?.(button);}catch(err){toast(message(err));}}
+  if(button && !button.disabled){if(['new','import','export','export-draft','export-selected','manage-sets','save','delete','add-word','remove-word','insert-ipa','ipa-group','ipa-italic','ipa-shift'].includes(button.dataset.action) && (state.route!=='edit' || !state.authenticated))return;if(button.dataset.action==='flip-card' && Date.now()<suppressFlipUntil)return;try{await actions[button.dataset.action]?.(button);}catch(err){toast(message(err));}}
   if(event.detail>0 && event.target.closest('button'))document.activeElement?.closest('button')?.blur();
 });
 document.addEventListener('input',event=>{const el=event.target;if(el.id==='admin-search'){state.adminSearch=el.value;refreshAdministration();}else if(el.id==='word-search'){state.wordSearch=el.value;state.listLimit=100;render();}else if(el.id==='search'){state.search=el.value;render();}else if(el.id==='custom-count')state.customValue=el.value;else if(el.id==='typed-answer')state.quiz.typed=el.value;else if(el.id==='set-title'){state.draft.title=el.value;markDirty();}else if(el.dataset.word!==undefined){if(el.dataset.field==='ipa')updateIpaInput(el);else{state.draft.words[Number(el.dataset.word)][el.dataset.field]=el.value;markDirty();}}});

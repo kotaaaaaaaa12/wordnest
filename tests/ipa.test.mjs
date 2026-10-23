@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateSet,normalizeIpa,normalizeIpaData,ipaItalicRanges,ipaRuns,toggleIpaItalic,remapIpaItalic,portable,parseImport,studyKey,studyStatus,createFlashcards} from '../public/core.js';
+import {validateSet,normalizeIpa,normalizeIpaData,ipaItalicRanges,ipaRuns,ipaRawRuns,limitIpaText,toggleIpaItalic,remapIpaItalic,portable,parseImport,studyKey,studyStatus,createFlashcards} from '../public/core.js';
 import {PersonalWords,sourceQuestions,wordIdentity,FlashcardBookmarks} from '../public/personal.js';
 import {zipSync,unzipSync,strToU8,strFromU8} from 'fflate';
 const legacy={title:'Words',words:[{english:'achieve',meaning:'達成する',explanation:'A note.'}]};
@@ -48,4 +48,12 @@ test('optional IPA formatting survives JSON and ZIP while legacy sets have no ad
   assert.deepEqual(validateSet({...legacy,words:[{...legacy.words[0],ipaItalic:[]}]}),legacy);
   assert.throws(()=>validateSet({...legacy,words:[{...legacy.words[0],ipaItalic:[[0,1]]}]}),/invalidIpaStyle/);
   const {ipaItalic,...unstyled}=input.words[0];assert.deepEqual(validateSet({...input,words:[{...input.words[0],ipaItalic:[]}]}).words[0],unstyled);
+});
+test('explicit typing modes override inherited formatting and preserve whole combining characters',()=>{
+  assert.deepEqual(remapIpaItalic('ab','aǽb',[],{start:1,end:1,italic:true}),[[1,3]]);
+  assert.deepEqual(remapIpaItalic('abc','axbc',[[0,3]],{start:1,end:1,italic:false}),[[0,1],[2,4]]);
+  assert.deepEqual(remapIpaItalic('abc','aXc',[[0,3]],{start:1,end:2,italic:false}),[[0,1],[2,3]]);
+  assert.deepEqual(remapIpaItalic('kæt','kǽt',[[1,2]],{start:2,end:2,italic:false}),[[1,3]]);
+  assert.deepEqual(ipaRawRuns(' [kǽt] ',[[3,5]]),[{text:' [k',italic:false},{text:'ǽ',italic:true},{text:'t] ',italic:false}]);
+  assert.equal(limitIpaText('x'.repeat(199)+'ǽ'),'x'.repeat(199));assert.equal(limitIpaText('a😀b',2),'a');assert.equal(limitIpaText('a😀b',3),'a😀');
 });

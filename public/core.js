@@ -52,11 +52,13 @@ export function normalizeIpaData(value,ranges){
   const normalized=ipaBounds(value),italic=ipaItalicRanges(value,ranges).map(([start,end])=>[Math.max(start,normalized.start)-normalized.start,Math.min(end,normalized.end)-normalized.start]).filter(([start,end])=>end>start);
   return {ipa:normalized.text,...(italic.length?{ipaItalic:ipaItalicRanges(normalized.text,italic)}:{})};
 }
-export function ipaRuns(value,ranges){
-  const data=normalizeIpaData(value,ranges),flags=ipaFlags(data.ipa,data.ipaItalic||[]),runs=[];
-  for(let start=0;start<data.ipa.length;){let end=start+1;while(end<data.ipa.length && flags[end]===flags[start])end++;runs.push({text:data.ipa.slice(start,end),italic:flags[start]});start=end;}
+export function ipaRawRuns(value,ranges){
+  const flags=ipaFlags(value,ipaItalicRanges(value,ranges)),runs=[];
+  for(let start=0;start<value.length;){let end=start+1;while(end<value.length && flags[end]===flags[start])end++;runs.push({text:value.slice(start,end),italic:flags[start]});start=end;}
   return runs;
 }
+export function ipaRuns(value,ranges){const data=normalizeIpaData(value,ranges);return ipaRawRuns(data.ipa,data.ipaItalic);}
+export function limitIpaText(value,length=200){const chars=ipaCharacters(value).filter(([,end])=>end<=length);return chars.length?value.slice(0,chars.at(-1)[1]):'';}
 export function toggleIpaItalic(text,ranges,start,end){
   const normalized=ipaItalicRanges(text,ranges);
   if(!Number.isInteger(start) || !Number.isInteger(end) || start<0 || end>text.length || start>=end)return {ipaItalic:normalized,selection:[start,end]};
@@ -76,7 +78,7 @@ export function remapIpaItalic(before,after,ranges,hint){
     end=before.length;let suffix=after.length;while(end>start && suffix>start && before[end-1]===after[suffix-1]){end--;suffix--;}
     added=suffix-start;
   }
-  const flags=ipaFlags(before,normalized),inherit=end>start?flags.slice(start,end).every(Boolean):start>0 && !!flags[start-1] && !!flags[start];
+  const flags=ipaFlags(before,normalized),inherit=typeof hint?.italic==='boolean'?hint.italic:end>start?flags.slice(start,end).every(Boolean):start>0 && !!flags[start-1] && !!flags[start];
   return ipaItalicRanges(after,ipaFlagRanges([...flags.slice(0,start),...Array(added).fill(inherit),...flags.slice(end)]));
 }
 export function validateSet(input) {
