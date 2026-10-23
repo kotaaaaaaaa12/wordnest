@@ -395,3 +395,23 @@ Vowel keys with a small corner mark support an iOS-style long press. Hold for ab
 The input keeps its focus, cursor/selection, and mobile keyboard during selection. Variants use Unicode combining marks and survive D1 saves, JSON/ZIP transfers, and bracketed flashcard display without replacing them with standalone apostrophes. The 200-character limit counts the entire sequence. Candidate placement respects the visual viewport so it can stay above the on-screen keyboard. Escape, pointer cancellation, scrolling, focus loss, dialogs, navigation, and viewport changes dismiss pending selection; a completed hold never also types the original key. Regular page scrolling remains available outside the keys.
 
 Automated tests use simulated pointer capture and hit testing to cover both selection styles, short taps, cursor replacement, duplicate-click suppression, interruption cleanup, viewport boundaries, and persistence of combining accents. Physical iOS/iPadOS device testing has not been performed.
+
+## Subtle card tint and expanded pronunciation palette (version 1.18.0)
+
+Flashcard backs now mix 10% of the current accent into the normal card surface, with a softly accented border and the theme's normal text color. This replaces the solid accent fill. The tint follows all six palettes, including changes made while a modal is open; text and flip hints retain readable contrast.
+
+Pronunciation text uses the bundled **Charis 7.000 italic** serif face on cards, in the editor, on symbol keys and long-press candidates, and in import previews. The font supports IPA and combining accents; both regular and italic WOFF2 faces are shipped with their SIL Open Font License. Files are served locally, including on iOS/iPadOS, with no external font service or installation required. See `public/assets/fonts/README.txt` for provenance.
+
+The focus-only palette now has five localized categories, with 144 distinct keys and 354 directly selectable forms when long-press alternatives are counted:
+
+- **Vowels:** all base vowels needed for the checked UK/US dictionary tables, rhotic `ɚ / ɝ`, the visually similar `ə / ɘ / ɜ / ɐ`, central vowels, and additional regional/loanword notation.
+- **Consonants:** the full basic English consonant inventory, including ordinary letters, `θ / ð / ʃ / ʒ / ŋ`, `tʃ / dʒ`, and both `r / ɹ` conventions.
+- **Combinations:** long vowels, UK/US diphthongs such as `əʊ / oʊ`, centering diphthongs, and common r-combinations.
+- **Detailed notation:** `ɾ / ʔ / ɫ / ʍ / x / ç`, other regional realizations, syllabic consonants, tied and legacy affricates, and superscript forms.
+- **Marks:** primary/secondary stress, length, syllable/word linking, optional-sound parentheses, and combining marks for accents, nasalization, syllabicity, voicing, place, and release. A dotted circle only previews the attachment point; it is never inserted into saved IPA.
+
+Category changes retain the active field and its selection. Common stress/length keys remain available below the first four categories. Long-press alternatives are supported for every vowel. There is no automatic conversion between dictionary conventions: existing IPA strings remain intact, and ordinary Unicode typing/paste still accepts notation beyond the palette.
+
+The base inventory and phonetic-detail coverage were checked against [Oxford's English pronunciation guide](https://www.oxfordlearnersdictionaries.com/about/english/pronunciation_english) and [Charles University's English transcription reference](https://fonetika.ff.cuni.cz/o-fonetice/foneticka-transkripce/ipa-transcription-english/). The two sources distinguish dictionary-level symbols from narrower phonetic details; the palette offers both. English accents and dictionary conventions vary, so the key count includes alternative spellings and combinations rather than counting English phonemes.
+
+Verification includes category/caret interaction, the checked dictionary inventory, correct insertion of combining marks without dotted circles, D1 persistence, existing long-press and card behavior, and contrast of the softened back in every palette. Both bundled font faces match the official release, and their corresponding character maps cover every code point used by the palette and its variants. No database migration is needed.

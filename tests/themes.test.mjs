@@ -124,10 +124,16 @@ test('modal backgrounds stay neutral and the active palette persists through mod
     }finally{w.close();}
   }
 });
-test('flashcard backs use the active accent with readable word, IPA, and hint colors in all six palettes',()=>{
+test('flashcard backs have a subtle accent overlay with readable ink in all six palettes; only IPA candidates use solid accents',()=>{
   for(const [mode,palettes] of Object.entries({light:['default','ocean','lavender'],dark:['default','midnight','graphite']}))for(const palette of palettes){
     const {w}=create({prefs:{'wordnest-theme':mode,[`wordnest-${mode}-palette`]:palette}});
-    try{w.eval(boot);const root=w.document.documentElement,accent=resolveToken(w,root,'--accent'),ink=resolveToken(w,root,'--card-back-ink');assert.equal(declaration(w,'.flashcard-back','background'),'var(--accent)');assert.equal(declaration(w,'.flashcard-back','color'),'var(--card-back-ink)');assert.ok(contrast(accent,ink)>=4.5,mode+'/'+palette+' small IPA and hint contrast');}
+    try{
+      w.eval(boot);const root=w.document.documentElement,accent=resolveToken(w,root,'--accent'),surface=resolveToken(w,root,'--surface'),ink=resolveToken(w,root,'--ink');
+      assert.equal(declaration(w,'.flashcard-back','background'),'var(--card-back-bg)');assert.equal(resolveToken(w,root,'--card-back-bg'),'color-mix(in srgb,var(--accent) 10%,var(--surface))');assert.equal(declaration(w,'.flashcard-back','color'),'var(--ink)');assert.equal(declaration(w,'.flashcard.is-flipped .flashcard-flip','color'),'var(--ink)');
+      const channels=hex=>hex.slice(1).match(/../g).map(value=>parseInt(value,16)),a=channels(accent),b=channels(surface),mixed=a.map((value,i)=>Math.round(value*.1+b[i]*.9)),background='#'+mixed.map(value=>value.toString(16).padStart(2,'0')).join('');
+      assert.ok(mixed.every((value,i)=>Math.abs(value-b[i])<=24),'background stays close to the original surface');assert.ok(contrast(background,ink)>=4.5,mode+'/'+palette+' word, IPA and hint contrast');
+      assert.ok(contrast(accent,resolveToken(w,root,'--ipa-selection-ink'))>=4.5,mode+'/'+palette+' IPA selection contrast');
+    }
     finally{w.close();}
   }
 });

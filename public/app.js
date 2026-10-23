@@ -505,11 +505,22 @@ function resultView() {
   const qz=state.quiz,correct=qz.answers.filter(a=>a.correct).length,missed=qz.questions.length-correct,perfect=missed===0;
   return `<section class="flow"><div class="result-hero">${qz.isRetry?`<span class="pill">${t('retryRound')}</span>`:''}<div class="result-medal">${icon(perfect?'trophy':'leaf')}</div><h1>${t(perfect?'perfect':'completed')}</h1><div class="score-number">${correct}<small> / ${qz.questions.length}</small></div><span class="pill">${Math.round(correct/qz.questions.length*100)}%</span></div><div class="center-actions">${missed?`<button class="btn primary" data-action="retry-mistakes">${icon('refresh')}${t('retryMistakes',{n:missed})}</button>`:''}${btn('again','again',missed?'ghost':'primary')}${btn('returnHome','back-home')}</div><div class="review"><h2>${t('review')}</h2>${qz.questions.map((q,i)=>{const a=qz.answers[i];return `<div class="review-item"><span class="verdict ${a.correct?'':'bad'}" aria-label="${t(a.correct?'correctLabel':'incorrectLabel')}">${icon(a.correct?'check':'close')}</span><div><strong>${e(q.english)} — ${e(q.meaning)}</strong>${!a.correct?`<p>${a.timedOut?t('timedOut')+' · ':''}${t('yourAnswer')}: ${e(a.answer||t('skipped'))}</p>`:''}${qz.mode==='ja-en' && q.accepted.length>1?`<p>${t('correctAnswer')}: ${e(q.accepted.join(' / '))}</p>`:''}${q.explanation?`<p>${e(q.explanation)}</p>`:''}</div></div>`}).join('')}</div></section>`;
 }
-const IPA_VOWELS=['ə','æ','ʌ','ɑ','ɒ','ɔ','ɛ','ɜ','ɚ','ɝ','ɪ','ʊ','a','e','i','o','u'];
-const IPA_SYMBOLS=[...IPA_VOWELS,'ʃ','ʒ','θ','ð','ŋ','ɡ','ɹ','ˈ','ˌ','ː'];
+// English dictionary conventions (UK/US), plus regional and narrow transcriptions.
+// Sources and the distinction between phonemes and notation are documented in README.
+const IPA_VOWELS=['ə','ɚ','ɝ','ɜ','ɘ','ɐ','æ','ɛ','ʌ','ɑ','ɒ','ɔ','ɪ','ʊ','a','e','i','o','u','ɨ','ʉ','ɵ','ɞ','y','ʏ','ø','œ','ɯ','ɤ','ɶ'];
+const IPA_MARK_NAMES={'\u0301':'ipaAcute','\u0300':'ipaGrave','\u0302':'ipaCircumflex','\u0304':'ipaMacron','\u0306':'ipaBreve','\u0303':'ipaNasal','\u0308':'ipaCentralized','\u0329':'ipaSyllabic','\u032f':'ipaNonSyllabic','\u0325':'ipaVoiceless','\u032c':'ipaVoiced','\u032a':'ipaDental','\u031a':'ipaUnreleased','\u031d':'ipaRaised','\u031e':'ipaLowered','\u031f':'ipaAdvanced','\u0320':'ipaRetracted','\u0339':'ipaMoreRounded','\u031c':'ipaLessRounded','\u0330':'ipaCreaky','\u0324':'ipaBreathy','\u0334':'ipaVelarized','\u0361':'ipaTieAbove','\u035c':'ipaTieBelow'};
+const IPA_GROUPS={
+  vowels:IPA_VOWELS,
+  consonants:['p','b','t','d','k','ɡ','f','v','θ','ð','s','z','ʃ','ʒ','h','tʃ','dʒ','m','n','ŋ','l','r','ɹ','j','w'],
+  combinations:['iː','ɑː','ɔː','uː','ɜː','ɝː','ɛː','eː','eɪ','aɪ','ɔɪ','əʊ','oʊ','aʊ','ɪə','eə','ɛə','ʊə','ɪr','ɛr','ʊr','ɑr','ɔr','ər'],
+  details:['ɾ','ʔ','ɫ','ʍ','x','ç','ɣ','ɱ','ʋ','ɻ','ɬ','ɥ','ʧ','ʤ','t͡ʃ','d͡ʒ','n̩','l̩','m̩','ɹ̩','ʰ','ʷ','ʲ','ⁿ','ˡ','ᵊ','ᵻ','ᵿ'],
+  marks:['ˈ','ˌ','ː','ˑ','.','‿','|','‖','↗','↘','(',')',' ',...Object.keys(IPA_MARK_NAMES)],
+};
+const IPA_QUICK=['ˈ','ˌ','ː','.'];
+const IPA_SYMBOLS=[...new Set([...Object.values(IPA_GROUPS).flat(),...IPA_QUICK])];
 const IPA_VARIANTS=Object.fromEntries(IPA_VOWELS.map(symbol=>[symbol,['','\u0301','\u0300','\u0302','\u0304','\u0306','\u0303','\u0308'].map(mark=>symbol+mark)]));
 const IPA_ALLOWED=new Set([...IPA_SYMBOLS,...Object.values(IPA_VARIANTS).flat()]);
-let activeIpaInput=null,ipaPalette=null,ipaVariants=null,ipaPress=null,ipaSuppressedClick=null;
+let activeIpaInput=null,ipaPalette=null,ipaVariants=null,ipaPress=null,ipaSuppressedClick=null,ipaGroup='vowels';
 function cancelIpaPress(){
   const press=ipaPress;if(!press)return;
   ipaPress=null;clearTimeout(press.timer);
@@ -527,8 +538,20 @@ function hideIpaPalette(){
 function showIpaPalette(input){
   if(state.route!=='edit' || !state.authenticated || !state.draft)return;
   hideIpaPalette();activeIpaInput=input;ipaPalette=document.createElement('div');ipaPalette.id='ipa-palette';ipaPalette.className='ipa-palette';ipaPalette.setAttribute('role','group');ipaPalette.setAttribute('aria-label',t('ipaSymbols'));
-  ipaPalette.innerHTML=`<small>${t('ipaPaletteHelp')}</small><div>${IPA_SYMBOLS.map(symbol=>`<button type="button" tabindex="-1" data-action="insert-ipa" data-ipa-symbol="${e(symbol)}" ${IPA_VARIANTS[symbol]?'data-ipa-variants aria-expanded="false"':''} aria-label="${e(t(IPA_VARIANTS[symbol]?'ipaVariantKey':'insertIpaSymbol',{symbol}))}">${e(symbol)}</button>`).join('')}</div>`;
+  renderIpaPalette();
   input.closest('.ipa-editor').append(ipaPalette);input.setAttribute('aria-controls',ipaPalette.id);
+}
+function ipaKey(symbol){
+  const mark=IPA_MARK_NAMES[symbol],display=mark?'◌'+symbol:symbol===' '?'␣':symbol,label=mark?t(mark):symbol===' '?t('ipaSpace'):t(IPA_VARIANTS[symbol]?'ipaVariantKey':'insertIpaSymbol',{symbol});
+  return `<button type="button" tabindex="-1" data-action="insert-ipa" data-ipa-symbol="${e(symbol)}" ${IPA_VARIANTS[symbol]?'data-ipa-variants aria-expanded="false"':''} aria-label="${e(label)}" title="${e(label)}"><span class="ipa-symbol" lang="en-fonipa">${e(display)}</span></button>`;
+}
+function renderIpaPalette(){
+  ipaPalette.innerHTML=`<small>${t('ipaPaletteHelp')}</small><div class="ipa-groups" role="group" aria-label="${t('ipaCategories')}">${Object.keys(IPA_GROUPS).map(group=>`<button type="button" tabindex="-1" data-action="ipa-group" data-ipa-group="${group}" aria-pressed="${ipaGroup===group}">${t('ipaGroup_'+group)}</button>`).join('')}</div><div class="ipa-keys" role="group" aria-label="${t('ipaGroup_'+ipaGroup)}">${IPA_GROUPS[ipaGroup].map(ipaKey).join('')}</div>${ipaGroup!=='marks'?`<div class="ipa-quick" role="group" aria-label="${t('ipaGroup_marks')}">${IPA_QUICK.map(ipaKey).join('')}</div>`:`<small class="ipa-mark-help">${t('ipaMarksHelp')}</small>`}`;
+}
+function changeIpaGroup(button){
+  const group=button.dataset.ipaGroup;
+  if(!Object.hasOwn(IPA_GROUPS,group) || !ipaPalette || document.activeElement!==activeIpaInput)return;
+  closeIpaVariants();ipaGroup=group;renderIpaPalette();
 }
 function insertIpa(button){
   const input=activeIpaInput;if(!input || document.activeElement!==input || !input.isConnected || !state.authenticated || state.route!=='edit')return;
@@ -565,7 +588,7 @@ function beginIpaPress(event){
   const button=event.target.closest('[data-ipa-symbol]');
   if(event.isPrimary===false){if(ipaPress)suppressIpaClick(ipaPress.button);closeIpaVariants();return;}
   if(event.button>0){if(event.button===2 && button?.hasAttribute('data-ipa-variants') && activeIpaInput===document.activeElement)event.preventDefault();return;}
-  if(!button){if(!event.target.closest('.ipa-variants'))closeIpaVariants();return;}
+  if(!button){if(event.target.closest('[data-ipa-group]') && activeIpaInput===document.activeElement)event.preventDefault();if(!event.target.closest('.ipa-variants'))closeIpaVariants();return;}
   if(document.activeElement!==activeIpaInput || !activeIpaInput)return;
   event.preventDefault();
   if(button.hasAttribute('data-ipa-variant'))return;
@@ -827,7 +850,7 @@ async function importDialog() {
     preview.addEventListener('toggle',event=>{
       const details=event.target;if(!details.matches('details[data-import-inspect]') || !details.open || details.dataset.loaded)return;
       const set=imported[Number(details.dataset.importInspect)];if(!set)return;
-      $('ol',details).innerHTML=set.words.map(word=>`<li><strong>${e(word.english)}</strong><span>${e(word.meaning)}</span>${word.ipa?`<small lang="en-fonipa">${e('['+word.ipa+']')}</small>`:''}${word.explanation?`<small>${e(word.explanation)}</small>`:''}</li>`).join('');details.dataset.loaded='true';
+      $('ol',details).innerHTML=set.words.map(word=>`<li><strong>${e(word.english)}</strong><span>${e(word.meaning)}</span>${word.ipa?`<small class="import-ipa" lang="en-fonipa">${e('['+word.ipa+']')}</small>`:''}${word.explanation?`<small>${e(word.explanation)}</small>`:''}</li>`).join('');details.dataset.loaded='true';
     },true);
     preview.onclick=event=>{if(busy)return;if(event.target.id==='import-all'){selected=selected.size===imported.length?new Set():new Set(imported.map((_,index)=>index));updatePreview();}};
     preview.onchange=event=>{if(busy)return;if(event.target.dataset.import!==undefined){const index=Number(event.target.dataset.import);if(event.target.checked)selected.add(index);else selected.delete(index);submit.disabled=!selected.size;submit.textContent=t('importConfirm',{n:selected.size});}};
@@ -895,6 +918,7 @@ const actions={
   'resume-cards'(){const deck=savedCardDeck();if(!deck){render();return;}state.mode=deck.mode;state.order=deck.order;state.cards={...deck,title:activeTitle()};bookmarks.save(state.cards);state.screen='cards';render();window.scrollTo(0,0);},
   'back-order'(){state.screen='order';state.cards=null;render();},
   'insert-ipa':insertIpa,
+  'ipa-group':changeIpaGroup,
   'speak-card':speakCard,
   'flip-card':flipCard,
   'next-card'(){moveCard(1);},
@@ -990,7 +1014,7 @@ document.addEventListener('click',async event=>{
   const nav=event.target.closest('[data-nav]');if(nav){event.preventDefault();await navigate(nav.dataset.nav);return;}
   const button=event.target.closest('[data-action]');
   if(!button && event.target.closest('.flashcard') && state.route==='home' && state.screen==='cards' && !modal.open){if(Date.now()>=suppressFlipUntil)flipCard();return;}
-  if(button && !button.disabled){if(['new','import','export','export-draft','export-selected','manage-sets','save','delete','add-word','remove-word','insert-ipa'].includes(button.dataset.action) && (state.route!=='edit' || !state.authenticated))return;if(button.dataset.action==='flip-card' && Date.now()<suppressFlipUntil)return;try{await actions[button.dataset.action]?.(button);}catch(err){toast(message(err));}}
+  if(button && !button.disabled){if(['new','import','export','export-draft','export-selected','manage-sets','save','delete','add-word','remove-word','insert-ipa','ipa-group'].includes(button.dataset.action) && (state.route!=='edit' || !state.authenticated))return;if(button.dataset.action==='flip-card' && Date.now()<suppressFlipUntil)return;try{await actions[button.dataset.action]?.(button);}catch(err){toast(message(err));}}
   if(event.detail>0 && event.target.closest('button'))document.activeElement?.closest('button')?.blur();
 });
 document.addEventListener('input',event=>{const el=event.target;if(el.id==='admin-search'){state.adminSearch=el.value;refreshAdministration();}else if(el.id==='word-search'){state.wordSearch=el.value;state.listLimit=100;render();}else if(el.id==='search'){state.search=el.value;render();}else if(el.id==='custom-count')state.customValue=el.value;else if(el.id==='typed-answer')state.quiz.typed=el.value;else if(el.id==='set-title'){state.draft.title=el.value;markDirty();}else if(el.dataset.word!==undefined){state.draft.words[Number(el.dataset.word)][el.dataset.field]=el.value;markDirty();}});

@@ -19,7 +19,9 @@ function pointer(h,target,type,x=120,y=220,extra={}){
   Object.defineProperties(event,Object.fromEntries(Object.entries({pointerId:1,isPrimary:true,pointerType:'touch',...extra}).map(([key,value])=>[key,{value}])));target.dispatchEvent(event);return event;
 }
 function keyFor(h,symbol){
-  const key=[...h.w.document.querySelectorAll('.ipa-palette [data-ipa-symbol]')].find(button=>button.dataset.ipaSymbol===symbol);
+  const find=()=>[...h.w.document.querySelectorAll('.ipa-palette [data-ipa-symbol]')].find(button=>button.dataset.ipaSymbol===symbol);
+  let key=find();if(!key)for(const group of [...h.w.document.querySelectorAll('[data-ipa-group]')].map(tab=>tab.dataset.ipaGroup)){h.find('[data-ipa-group="'+group+'"]').click();key=find();if(key)break;}
+  assert.ok(key,'palette key '+symbol);
   key.getBoundingClientRect=()=>({left:100,top:200,right:140,bottom:240,width:40,height:40});return key;
 }
 async function hold(h,key){pointer(h,key,'pointerdown');await waitFor(()=>h.find('.ipa-variants'),'long-press alternatives');}
@@ -49,6 +51,28 @@ test('IPA palette exists only for the focused input and inserts at the caret wit
     input.setSelectionRange(0,0);await h.click('[data-ipa-symbol="ˈ"]');assert.equal(input.value,'ˈtəː');assert.equal(input.selectionStart,1);
     h.find('#word-0-meaning').focus();assert.equal(h.find('.ipa-palette'),null);assert.equal(input.hasAttribute('aria-controls'),false);h.find('#word-1-ipa').focus();assert.equal(h.w.document.querySelectorAll('.ipa-palette').length,1);assert.equal(h.find('.ipa-palette').closest('.ipa-editor').querySelector('input').id,'word-1-ipa');
     await h.click('[data-action="settings"]');assert.equal(h.find('.ipa-palette'),null);await h.click('[data-dialog="cancel"]');if(h.find('.ipa-palette'))assert.equal(h.w.document.activeElement.id,'word-1-ipa');h.w.document.activeElement.blur();assert.equal(h.find('.ipa-palette'),null);
+  }finally{await h.close();}
+});
+test('categorized palette covers English dictionary symbols, variants and combining marks without losing the input caret',async()=>{
+  const h=await harness('ja');
+  try{
+    const input=h.find('#word-0-ipa');input.focus();h.input('#word-0-ipa','ab');input.setSelectionRange(1,1);const original=input;
+    const expected={
+      vowels:['i','ɪ','e','ɛ','æ','ɑ','ɒ','ɔ','ʊ','u','ʌ','ə','ɜ','ɚ','ɝ','ɘ','ɐ','ɨ','ʉ','ɵ','ɞ'],
+      consonants:['p','b','t','d','k','ɡ','tʃ','dʒ','f','v','θ','ð','s','z','ʃ','ʒ','h','m','n','ŋ','l','r','ɹ','j','w'],
+      combinations:['iː','ɑː','ɔː','uː','ɜː','eɪ','əʊ','oʊ','aɪ','ɔɪ','aʊ','ɪə','eə','ʊə','ɛə'],
+      details:['ɾ','ʔ','ɫ','ʍ','x','ç','n̩','l̩','m̩','ʰ','ᵊ','ʧ','ʤ','t͡ʃ','d͡ʒ'],
+      marks:['ˈ','ˌ','ː','ˑ','.','\u0301','\u0329','\u032f','\u0325','\u032c','\u031a','\u0303'],
+    };
+    const all=new Set();
+    for(const [group,symbols] of Object.entries(expected)){
+      const selector='[data-ipa-group="'+group+'"]',tab=h.find(selector);assert.equal(pointer(h,tab,'pointerdown').defaultPrevented,true);await h.click(selector);
+      assert.equal(h.w.document.activeElement,original);assert.equal(input.selectionStart,1);assert.equal(input.value,'ab');assert.equal(h.find(selector).getAttribute('aria-pressed'),'true');assert.equal(h.find('.ipa-groups').textContent.includes('undefined'),false);
+      const keys=[...h.w.document.querySelectorAll('.ipa-keys [data-ipa-symbol]')].map(button=>button.dataset.ipaSymbol);for(const symbol of symbols)assert.ok(keys.includes(symbol),group+' includes '+symbol);keys.forEach(symbol=>all.add(symbol));
+    }
+    assert.ok(all.size>=130);const accent=keyFor(h,'\u0301');assert.equal(accent.textContent,'◌́');accent.click();assert.equal(input.value,'áb');assert.equal(input.selectionStart,2);assert.equal(input.value.includes('◌'),false);
+    keyFor(h,'oʊ').click();assert.equal(input.value,'áoʊb');assert.equal(input.selectionStart,4);
+    await h.click('[data-action="save"]');await waitFor(()=>!h.find('#dirty-label').textContent,'palette symbols saved');const saved=(await(await h.request('/api/sets')).json()).sets[0];assert.equal(saved.words[0].ipa,'áoʊb');
   }finally{await h.close();}
 });
 test('IPA persists through real D1, reload, JSON/ZIP transfers, and English-side bracketed cards in both directions',async()=>{
