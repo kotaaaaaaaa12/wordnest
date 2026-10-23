@@ -23,6 +23,7 @@ async function harness({webAudio=true,muted=false,decodeFailure=false,missing=fa
   w.Audio=class{constructor(url){this.url=url;this.loads=0;this.plays=[];media.push(this);}load(){this.loads++;}pause(){this.paused=true;}play(){this.paused=false;this.plays.push(screen());return missing?Promise.reject(new Error('Missing audio file')):Promise.resolve();}};
   if(webAudio)w.AudioContext=class{
     constructor(options){this.options=options;this.state='suspended';contexts.push(this);}
+    get currentTime(){return now/1000;}
     async decodeAudioData(bytes){
       const name=new TextDecoder().decode(bytes);decodes.push(name);if(decodeFailure)throw new Error('Invalid file');
       const samples=new Float32Array(1000);samples[50]=0.5;
@@ -44,13 +45,13 @@ async function harness({webAudio=true,muted=false,decodeFailure=false,missing=fa
   w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));if(muted)w.localStorage.setItem('wordnest-sound','off');w.eval(source);await tick();await tick();
   return {w,find,click,start,correct,advance,media,contexts,requests,decodes,starts,close:()=>w.close()};
 }
-test('decoded effects preload once, skip leading silence, and start synchronously after answer feedback without a new request',async()=>{
+test('decoded effects preload once and schedule playback 150 ms after feedback without a new request',async()=>{
   const h=await harness();
   try{
     assert.equal(h.contexts.length,1);assert.equal(h.contexts[0].options.latencyHint,'interactive');assert.deepEqual([...h.decodes].sort(),['confetti','correct','incorrect']);assert.equal(h.starts.length,0);assert.ok(h.media.every(audio=>audio.preload==='auto' && audio.loads===1),'media fallback must be ready even after successful decoding');
     await h.start();assert.equal(h.contexts[0].state,'running');const requests=h.requests.length,button=h.correct();button.click();
-    assert.equal(h.starts.length,1);assert.equal(h.starts[0].name,'correct');assert.equal(h.starts[0].feedback,messages.en.correct);assert.equal(h.starts[0].when,0);assert.ok(Math.abs(h.starts[0].offset-0.045)<1e-9);assert.equal(h.requests.length,requests);assert.equal(h.media.reduce((sum,audio)=>sum+audio.plays.length,0),0);
-    button.click();assert.equal(h.starts.length,1);await h.click('[data-action="next"]');assert.equal(h.starts[0].node.stopped,true);h.advance(15000);assert.equal(h.starts[1].name,'incorrect');assert.equal(h.starts[1].feedback,messages.en.timedOut);assert.equal(h.requests.length,requests);assert.equal(h.decodes.length,3);
+    assert.equal(h.starts.length,1);assert.equal(h.starts[0].name,'correct');assert.equal(h.starts[0].feedback,messages.en.correct);assert.equal(h.starts[0].when,h.contexts[0].currentTime+0.15);assert.ok(Math.abs(h.starts[0].offset-0.045)<1e-9);assert.equal(h.requests.length,requests);assert.equal(h.media.reduce((sum,audio)=>sum+audio.plays.length,0),0);
+    button.click();assert.equal(h.starts.length,1);await h.click('[data-action="next"]');assert.equal(h.starts[0].node.stopped,true,'changing questions cancels even a sound whose scheduled start has not arrived');h.advance(15000);assert.equal(h.starts[1].name,'incorrect');assert.equal(h.starts[1].feedback,messages.en.timedOut);assert.equal(h.starts[1].when,h.contexts[0].currentTime+0.15);assert.equal(h.requests.length,requests);assert.equal(h.decodes.length,3);
   }finally{h.close();}
 });
 test('perfect-result audio uses its prepared buffer and muting stops active effects without affecting quiz controls',async()=>{

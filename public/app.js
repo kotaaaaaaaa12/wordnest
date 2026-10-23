@@ -45,6 +45,7 @@ const sounds=Object.fromEntries(['correct','incorrect','confetti'].map(name=>{
   return [name,{audio,buffer:null,offset:0,loading:null}];
 }));
 let effectContext=null,effectContextAttempted=false;
+const effectStartDelay=0.15;
 const effectSources=new Set();
 function stopEffects(){
   for(const source of effectSources){try{source.stop();source.disconnect();}catch{}}
@@ -96,7 +97,8 @@ function play(name){
     try{
       source=effectContext.createBufferSource();source.buffer=effect.buffer;source.connect(effectContext.destination);effectSources.add(source);
       source.onended=()=>{effectSources.delete(source);try{source.disconnect();}catch{}};
-      source.start(0,effect.offset);return;
+      // Schedule on the audio clock so playback stays authorized by this gesture.
+      source.start(effectContext.currentTime+effectStartDelay,effect.offset);return;
     }catch{effectSources.delete(source);try{source?.disconnect();}catch{}}
   }
   // Do not await resume or schedule this sound for later. Start the preloaded

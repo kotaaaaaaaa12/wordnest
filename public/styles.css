@@ -97,4 +97,4 @@ select:focus,select:focus-visible,select:active{border-color:var(--line);outline
 
 .options .option:disabled{opacity:1;cursor:default}
 
-.option-english{display:flex;flex-direction:column;gap:5px}.option-pronunciation{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;max-width:100%}.option-english-word{font-size:11px;line-height:1.5;overflow-wrap:anywhere;min-width:0}.option-pronunciation .card-ipa{font-size:14px;line-height:1.6}.option-pronunciation .quiz-pronounce{width:30px;height:30px;padding:6px}.options div.option{cursor:default}
+.option-english{display:flex;flex-direction:column;gap:5px}.option-pronunciation{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;max-width:100%}.option-english-word{font-size:12px;line-height:1.6;overflow-wrap:anywhere;min-width:0}.option-pronunciation .card-ipa{font-size:12px;line-height:1.6}.option-pronunciation .quiz-pronounce{width:24px;height:24px;padding:4px}.option-pronunciation .quiz-pronounce .ui-icon{width:14px;height:14px}.options div.option{cursor:default}

@@ -494,3 +494,11 @@ Automated tests exercise prepared playback ordering, leading-silence offsets, ca
 The media elements now preload alongside the decoded buffers. A prepared buffer is used only while the audio context is already running and its source starts successfully. Suspended, interrupted, or closed contexts and source-creation, connection, or start failures fall back to the prepared media element in the same answer handler. Playback no longer waits for a resume or discards a sound after a 150 ms cutoff. Later gestures can retry resuming even if a previous attempt is still pending; completing that resume never replays the current or an obsolete answer.
 
 Regression tests cover immediate fallback while resume is pending or rejected, timeout and perfect-score sounds, source failures, and prevention of duplicate or stale playback. The EN → JP question's pronunciation button is now 32 px with a 17 px icon; flashcard and other pronunciation buttons retain their existing sizes. Physical iPad playback still requires checking with the site's supplied MP3 files.
+
+## Gentler sound timing (version 1.22.5)
+
+Prepared Web Audio effects now begin 150 ms after the answer or perfect-score result appears. Sources are scheduled synchronously on the audio clock, preserving the playback path and allowing navigation, mute, and page hiding to cancel a pending sound. Playback rate is unchanged. The media fallback retains its immediate gesture-based playback to preserve compatibility when Web Audio is unavailable.
+
+## Balanced distractor pronunciation rows (version 1.22.6)
+
+Revealed multiple-choice distractors use matching 12 px English and IPA text with a shared line height. Their pronunciation controls use a 24 px circle and an explicitly sized 14 px icon, keeping the supplementary row compact and proportionate. The registered IPA typeface and saved italic spans remain intact. Question, typing-answer, and flashcard pronunciation controls retain their existing sizes.
