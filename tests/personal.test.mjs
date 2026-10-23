@@ -23,6 +23,17 @@ test('small-source fallback labels use the actual external words and preserve th
   const copy=structuredClone(question);bank[1].english='changed later';assert.deepEqual(copy.optionWords,question.optionWords);
   for(let retry=0;retry<12;retry++){const reordered=balanceAnswerPositions([copy])[0];for(const [index,meaning] of reordered.options.entries())assert.deepEqual(reordered.optionWords[index],copy.optionWords[copy.options.indexOf(meaning)]);}
 });
+test('distractor pronunciations preserve source IPA, italic ranges, and the matching word after retry shuffles',()=>{
+  const local={id:'local',title:'Local',words:[{english:'target',meaning:'対象'},{english:'version',meaning:'版',ipa:'və́ːrʒən',ipaItalic:[[4,5]]},{english:'parallel',meaning:'平行',ipa:'pǽrəlèl'},{english:'apple',meaning:'りんご',ipa:'ǽpəl'}]},bank=local.words.map(word=>({...word,setId:local.id}));
+  bank.push({english:'version',meaning:'版',ipa:'different',setId:'other'});
+  const question=quizFromPool([sourceQuestions([local],'en-ja')[0]],'en-ja',1,bank.map(word=>word.meaning),bank)[0];
+  const version=question.optionWordRefs[question.options.indexOf('版')];assert.deepEqual(version,[{english:'version',ipa:'və́ːrʒən',ipaItalic:[[4,5]]}]);
+  for(let round=0;round<12;round++){
+    const retry=balanceAnswerPositions([structuredClone(question)])[0];
+    retry.options.forEach((meaning,index)=>assert.deepEqual(retry.optionWordRefs[index],question.optionWordRefs[question.options.indexOf(meaning)]));
+  }
+  bank[1].ipa='changed';bank[1].ipaItalic[0][0]=0;assert.equal(version[0].ipa,'və́ːrʒən');assert.deepEqual(version[0].ipaItalic,[[4,5]]);
+});
 test('two consecutive misses register a question and three correct answers anywhere recover it, separately by direction',()=>{
   const saved=storage(),personal=new PersonalWords(saved),en=sourceQuestions([set],'en-ja')[0],ja=sourceQuestions([set],'ja-en')[0],other=sourceQuestions([set],'en-ja')[2];
   personal.answer(en.sources,false);assert.equal(personal.record(en.sources[0].key).weak,false);

@@ -33,6 +33,7 @@ test('both quiz directions retry only incorrect, skipped, and timed-out question
       const option=[...w.document.querySelectorAll('.option')].find(button=>(button.textContent.slice(1)===word.meaning)===correct);assert.ok(option);option.click();
     }else{find('#typed-answer').value=correct?word.english:'an incorrect answer';find('#typed-answer').dispatchEvent(new w.Event('input',{bubbles:true}));find('#answer-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));}
     await tick();assert.ok(find('.feedback').textContent.includes(word.explanation));assert.equal(intervals.size,0);
+    if(mode==='ja-en')assert.equal(find('.feedback').textContent.includes(word.english+': '+word.explanation),false);
     if(mode==='en-ja')for(const button of w.document.querySelectorAll('.option:not(.correct)')){const meaning=button.querySelector('[lang="ja"]').textContent;assert.equal(button.querySelector('.option-english').textContent,studySet.words.filter(word=>word.meaning===meaning).map(word=>word.english).join(' / '));}
   }
   try{
@@ -50,6 +51,7 @@ test('both quiz directions retry only incorrect, skipped, and timed-out question
         if(i===2)await click('[data-action="skip"]');else if(i===3)advance(mode==='ja-en'?20000:15000);else await answer(mode,i!==1);
         await click('[data-action="next"]');
       }
+      if(mode==='ja-en')for(const word of studySet.words)assert.equal(find('.review').textContent.includes(word.english+': '+word.explanation),false);
       assert.equal(find('.score-number').textContent.trim(),'2 / 5');assert.equal(core.studyStatus(studySet,savedProgress()),'none');assert.ok(find('[data-action="retry-mistakes"]').textContent.includes('3'));assert.equal(celebrations,round);
       await click('[data-action="retry-mistakes"]');assert.equal(find('.timer-seconds').textContent,mode==='ja-en'?'20s':'15s');assert.equal(find('.feedback'),null);assert.equal(intervals.size,1);
       const seen=[],retryPositions=[0,0,0,0];let lastMissed;

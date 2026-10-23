@@ -97,11 +97,17 @@ test('EN to JP reveals only the distractor English words after correct, incorrec
       else{options.find(button=>(button.querySelector('[lang="ja"]').textContent===word.meaning)===(outcome==='correct')).click();await tick();}
       assert.ok(h.find('.feedback'));assert.equal(h.w.document.querySelectorAll('.option-english').length,3);
       for(const button of h.w.document.querySelectorAll('.option')){
-        assert.equal(button.disabled,true);const meaning=button.querySelector('[lang="ja"]').textContent;
+        assert.equal(button.tagName,'DIV');assert.equal(button.querySelector('[data-action="answer"]'),null);const meaning=button.querySelector('[lang="ja"]').textContent;
         if(meaning===word.meaning)assert.equal(button.querySelector('.option-english'),null);
-        else assert.equal(button.querySelector('.option-english').textContent,quizWords.find(word=>word.meaning===meaning).english);
+        else{
+          const expected=quizWords.find(word=>word.meaning===meaning),row=button.querySelector('.option-pronunciation');
+          assert.equal(row.querySelector('.option-english-word').textContent,expected.english);assert.equal(row.querySelector('.card-ipa').textContent,'['+expected.ipa+']');
+          const italic=expected.ipaItalic?.[0];assert.equal(row.querySelector('i')?.textContent,italic?expected.ipa.slice(...italic):undefined);
+          row.querySelector('button').click();assert.equal(h.utterances.at(-1).text,expected.english);
+        }
+        assert.equal(button.querySelector('button button'),null);
       }
-      assert.equal(new statistics.LearningTracker({storage:h.w.localStorage,id:'observer'}).snapshot().answered,1);
+      assert.equal(new statistics.LearningTracker({storage:h.w.localStorage,id:'observer'}).snapshot().answered,1);assert.equal(h.find('.options [data-action="answer"]'),null);
     }finally{h.close();}
   }
 });

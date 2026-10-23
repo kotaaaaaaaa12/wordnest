@@ -1,4 +1,4 @@
-import { normalize, questionPool, shuffle, balanceAnswerPositions } from './core.js';
+import { normalize, normalizeIpaData, questionPool, shuffle, balanceAnswerPositions } from './core.js';
 const PREFIX='wordnest-personal-v1:';
 // Keep storage keys bounded even when a question has many accepted answers.
 function keyToken(value) {
@@ -78,11 +78,17 @@ export function quizFromPool(pool,mode,count,meanings,words=[]) {
   if(mode!=='en-ja')return questions;
   return balanceAnswerPositions(questions).map(question=>{
     const ids=new Set([...(question.sources || []).map(source=>source.setId),...(question.wordRefs || []).map(word=>word.setId)]);
-    const optionWords=question.options.map(option=>{
-      const candidates=bank.byMeaning.get(normalize(option)) || [],local=candidates.filter(word=>ids.has(word.setId));
-      return [...new Map((local.length?local:candidates).filter(word=>typeof word.english==='string').map(word=>[normalize(word.english),word.english])).values()];
+    const optionWordRefs=question.options.map(option=>{
+      const candidates=bank.byMeaning.get(normalize(option)) || [],local=candidates.filter(word=>ids.has(word.setId)),entries=new Map();
+      for(const word of local.length?local:candidates){
+        if(typeof word.english!=='string')continue;
+        const data=normalizeIpaData(word.ipa || '',word.ipaItalic),entry={english:word.english,...data};
+        entries.set(JSON.stringify([normalize(word.english),data.ipa,data.ipaItalic || []]),entry);
+      }
+      return [...entries.values()];
     });
-    return {...question,optionWords};
+    const optionWords=optionWordRefs.map(words=>[...new Map(words.map(word=>[normalize(word.english),word.english])).values()]);
+    return {...question,optionWords,optionWordRefs};
   });
 }
 export function collectionCards(words,mode,order) {

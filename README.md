@@ -470,3 +470,13 @@ EN → JP questions show the English word with a manual pronunciation button and
 After a four-choice answer, skip, or timeout, the three distractor choices show their matching English words in small text. The quiz snapshots this mapping after choices are shuffled. Matching entries from the question's source sets take priority; global fallback distractors use their actual catalog entries. Multiple words for one meaning are shown together. These labels never appear before feedback and are not new answer buttons.
 
 EN → JP keeps its 15-second question limit. JP → EN uses 20 seconds, including retries and collection quizzes. Deadlines, bar ratio, colors, seconds, accessibility values, and the count-screen note all use the mode-specific limit. Speech does not pause or reset the countdown. Both interface languages and the Guide explain the new behavior.
+
+## Loading labels, card contrast, and distractor pronunciation (version 1.22.1)
+
+The editor, administration startup, learner list, and individual learning statistics have separate English and Japanese loading messages. The administration page also shows its proper initial loading state while authentication is pending. Flashcard backs blend 16% of the active accent into the surface, with a 30% accent border, making the flipped side slightly more distinct in every palette.
+
+Each revealed multiple-choice distractor now shows compact rows containing its English word, registered IPA with saved italic spans, and a manual pronunciation button. Unregistered IPA and unsupported speech buttons are omitted. Source-specific pronunciation data is included in the question snapshot and reordered with the choices during retries. Revealed choices are non-answer containers with separate live pronunciation buttons; there are no nested buttons or repeat answer actions. No distractor pronunciation control or IPA appears before feedback.
+
+## Plain typing-quiz explanations (version 1.22.2)
+
+JP → EN question feedback and the end-of-quiz review now show explanation text without automatically prefixing each note with its English word. Accepted answers remain displayed above the feedback notes. Multiple notes keep their separate lines; saved explanation text, including any author-written colons, is unchanged.

@@ -14,9 +14,10 @@ test('all question counts are unique and contain exactly four distinct answer ch
   }
 });
 test('Japanese prompts group duplicate meanings and accept all matching English words',()=>{
-  const set=validateSet({title:'Shared meanings',words:[{english:'start',meaning:'始める'},{english:'begin',meaning:'始める'},{english:'finish',meaning:'終える'}]});
+  const set=validateSet({title:'Shared meanings',words:[{english:'start',meaning:'始める',explanation:'Usage: Start here.'},{english:'begin',meaning:'始める',explanation:'A second note.'},{english:'finish',meaning:'終える'}]});
   assert.equal(questionPool(set,'ja-en').length,2);
   const q=createQuiz(set,'ja-en',2).find(q=>q.prompt==='始める');
+  assert.equal(q.explanation,'Usage: Start here.\nA second note.');
   assert.ok(isCorrect(q,' BEGIN  ','ja-en'));assert.ok(isCorrect(q,'ｓｔａｒｔ','ja-en'));assert.equal(isCorrect(q,'started','ja-en'),false);
   assert.throws(()=>createQuiz(set,'en-ja',1),/needFour/);
 });

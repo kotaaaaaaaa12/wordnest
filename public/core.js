@@ -14,7 +14,9 @@ export function balanceAnswerPositions(questions, random = Math.random) {
   return questions.map((question,index)=>{
     const options=shuffle(question.options.filter(option=>normalize(option)!==normalize(question.answer)),random);
     options.splice(positions[index],0,question.answer);
-    return {...question,options,...(Array.isArray(question.optionWords)?{optionWords:options.map(option=>question.optionWords[question.options.indexOf(option)] || [])}:{})};
+    const metadata={};
+    for(const field of ['optionWords','optionWordRefs'])if(Array.isArray(question[field]))metadata[field]=options.map(option=>question[field][question.options.indexOf(option)] || []);
+    return {...question,options,...metadata};
   });
 }
 function ipaBounds(value){
@@ -99,7 +101,7 @@ export function questionPool(set, mode) {
     if (!groups.has(key)) groups.set(key, { ...w, prompt: w.meaning, answer: w.english, accepted: [], explanations: [] });
     const group = groups.get(key);
     group.accepted.push(w.english);
-    if (w.explanation) group.explanations.push(`${w.english}: ${w.explanation}`);
+    if (w.explanation) group.explanations.push(w.explanation);
   }
   return [...groups.values()].map(q => ({ ...q, explanation: q.explanations.join('\n') }));
 }

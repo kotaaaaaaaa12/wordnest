@@ -13,7 +13,8 @@ import { seed } from './fixture.js';
 const source=(await readFile('public/app.js','utf8')).replace(/^import .*;\n/gm,'');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const password='administrator-password';
-async function harness({hash='#/guide',authenticated=false,configured=true}={}) {
+const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};};
+async function harness({hash='#/guide',authenticated=false,configured=true,lang='en',delays={}}={}) {
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/'+hash,runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
   Object.assign(w,core,statistics,personalTools,rankingTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:false})});
   w.document.hasFocus=()=>true;w.Audio=class{play(){return Promise.resolve();}};
@@ -22,14 +23,16 @@ async function harness({hash='#/guide',authenticated=false,configured=true}={}) 
   const set={...structuredClone(seed),id:'seed',revision:1};
   w.fetch=async(path,options={})=>{
     let status=200,data;
-    if(path==='/api/session')data={authenticated,configured};
-    else if(path==='/api/sets' && !options.method)data={sets:[set],orderRevision:0};
+    if(path==='/api/session'){await delays.session;data={authenticated,configured};}
+    else if(path==='/api/sets' && !options.method){await delays.sets;data={sets:[set],orderRevision:0};}
     else if(path==='/api/login'){
       if(delayLogin)await delayLogin;
       if(JSON.parse(options.body).password===password){authenticated=true;data={ok:true};}
       else{status=401;data={error:'wrongPassword'};}
     }else if(path==='/api/logout'){authenticated=false;data={ok:true};}
     else if(path.startsWith('/api/sets/') && expireWrites){authenticated=false;status=401;data={error:'unauthorized'};}
+    else if(path.startsWith('/api/admin/rankings?')){await delays.learners;data={participants:[{id:'learner',name:'Learner',enabled:false,removed:false,updatedAt:'2026-10-23T00:00:00Z'}],total:1};}
+    else if(path==='/api/admin/rankings/learner/stats'){await delays.stats;data={participant:{name:'Learner',timezone:'UTC',updatedAt:'2026-10-23T00:00:00Z'},summary:{totalMs:0,averageMs:0,answered:0,correct:0,accuracy:null,flips:0,streak:0,longest:0},days:{},today:'2026-10-23'};}
     else throw new Error(path);
     return {ok:status===200,status,json:async()=>data};
   };
@@ -37,7 +40,7 @@ async function harness({hash='#/guide',authenticated=false,configured=true}={}) 
   async function click(s){const element=find(s);assert.ok(element,s);element.click();await tick();await tick();}
   function input(s,value){find(s).value=value;find(s).dispatchEvent(new w.Event('input',{bubbles:true}));}
   async function login(value=password){input('#admin-password',value);find('#admin-login-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await tick();await tick();}
-  w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();
+  w.localStorage.setItem('wordnest-language',lang);w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();
   return {w,find,click,input,login,expire(){expireWrites=true;},delay(promise){delayLogin=promise;}};
 }
 test('administrator access lives at Settings bottom and controls Edit and its guide in both languages',async()=>{
@@ -87,4 +90,20 @@ test('closing Settings during authentication does not reopen it, and unavailable
   const unavailable=await harness({configured:false});
   try{await unavailable.click('[data-action="settings"]');assert.equal(unavailable.find('#admin-login-form'),null);assert.ok(unavailable.find('#admin-controls').textContent.includes(messages.en.adminUnavailable));}
   finally{unavailable.w.close();}
+});
+test('delayed editor, administrator startup, learner list, and individual statistics have accurate bilingual loading labels',async()=>{
+  for(const lang of ['en','ja']){
+    const sets=deferred(),editor=await harness({hash:'#/edit',authenticated:true,lang,delays:{sets:sets.promise}});
+    try{
+      assert.equal(editor.find('.loading').textContent,messages[lang].loadingEditor);assert.equal(editor.find('.loading').getAttribute('role'),'status');assert.equal(editor.find('#app').textContent.includes(messages[lang].loading),false);
+      sets.resolve();await tick();await tick();assert.ok(editor.find('.editor-toolbar'));
+    }finally{sets.resolve();editor.w.close();}
+    const session=deferred(),learners=deferred(),stats=deferred(),admin=await harness({hash:'#/admin',authenticated:true,lang,delays:{session:session.promise,learners:learners.promise,stats:stats.promise}});
+    try{
+      assert.equal(admin.find('.loading').textContent,messages[lang].loadingAdmin);
+      session.resolve();await tick();await tick();assert.equal(admin.find('.administration-view [role="status"]').textContent,messages[lang].loadingLearners);assert.equal(admin.find('#app').textContent.includes(messages[lang].loading),false);
+      learners.resolve();await tick();await tick();await admin.click('[data-action="admin-stats"]');assert.equal(admin.find('.admin-stats-view [role="status"]').textContent,messages[lang].loadingStats);assert.equal(admin.find('#app').textContent.includes(messages[lang].loading),false);
+      stats.resolve();await tick();await tick();assert.equal(admin.find('.admin-stats-view [role="status"]'),null);assert.ok(admin.find('.stats-chart'));
+    }finally{session.resolve();learners.resolve();stats.resolve();admin.w.close();}
+  }
 });
