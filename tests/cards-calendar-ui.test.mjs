@@ -33,8 +33,8 @@ test('flashcards resume after reopening with the same random sequence, direction
     await cards(h,'ja-en','random');const sequence=[];for(let i=0;i<seed.words.length;i++){sequence.push(h.find('.flashcard-back .flashcard-text').textContent);if(i<seed.words.length-1)await h.click('[data-action="next-card"]');}
     for(let i=0;i<seed.words.length-4;i++)await h.click('[data-action="previous-card"]');await h.click('[data-action="flip-card"]');const count=flipCount(h),saved=h.snapshot();h.close();h=await harness({saved});
     await h.click('[data-action="open"]');await h.click('[data-activity="cards"]');assert.ok(h.find('.cards-resume').textContent.includes('JP → EN'));assert.ok(h.find('.cards-resume').textContent.includes('Random'));
-    await h.click('[data-action="resume-cards"]');assert.equal(h.find('.flashcard-back .flashcard-text').textContent,sequence[3]);assert.equal(h.find('.flashcard').getAttribute('aria-pressed'),'true');assert.equal(flipCount(h),count);
-    await h.click('[data-action="next-card"]');assert.equal(h.find('.flashcard-back .flashcard-text').textContent,sequence[4]);assert.equal(h.find('.flashcard').getAttribute('aria-pressed'),'false');
+    await h.click('[data-action="resume-cards"]');assert.equal(h.find('.flashcard-back .flashcard-text').textContent,sequence[3]);assert.equal(h.find('[data-action="flip-card"]').getAttribute('aria-pressed'),'true');assert.equal(flipCount(h),count);
+    await h.click('[data-action="next-card"]');assert.equal(h.find('.flashcard-back .flashcard-text').textContent,sequence[4]);assert.equal(h.find('[data-action="flip-card"]').getAttribute('aria-pressed'),'false');
     await h.click('[data-action="back-order"]');await h.click('[data-order="original"]');await h.click('[data-action="start-cards"]');assert.equal(h.find('.flashcard-back .flashcard-text').textContent,seed.words[0].english);assert.equal(h.find('#card-counter').textContent,'Card 1 of 20');
   }finally{h.close();}
 });

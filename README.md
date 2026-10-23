@@ -362,3 +362,15 @@ Personal and administrator calendar selections are independent. Refreshing a lea
 ## Compact editor guidance (version 1.15.1)
 
 When no word set is selected, the editor displays a compact, top-aligned 12px guidance note with modest padding. It no longer stretches the general empty-state panel to match the word-set list height. English and Japanese guidance and editor actions are unchanged.
+
+## Set-first editor selection (version 1.15.2)
+
+Before a set is selected, the editor displays a muted, borderless note under its heading using the Statistics note style. The set picker fills the available width with larger responsive cards rather than reserving most of the page for guidance. Selecting or creating a set returns to the existing editor layout.
+
+## Flashcard pronunciation (version 1.16.0)
+
+English faces of flashcards include a speaker button next to the word. Playback uses the browser's Web Speech synthesis API without a new server endpoint or API key. It applies to ordinary sets, Favorites, and Difficult words. In JP → EN, pronunciation becomes available only after the English answer is revealed; hidden-face controls are disabled and removed from keyboard navigation. Browsers without synthesis support retain normal flashcards without the speaker control.
+
+The button speaks immediately within the click gesture, retains its utterance until completion, and checks the current voice list on each click. It prefers an available US English voice, then another English voice, with an en-US language request when no voice has loaded yet. Actual voices and playback behavior depend on the browser and device. Grouped Japanese prompts read their accepted English answers separated by pauses. Tapping again replaces the previous utterance rather than queueing it. Moving, flipping, rerendering, opening a dialog, navigating, hiding, or leaving the page stops owned speech. Pronunciation works independently of quiz sound effects and never increments flip counts or changes the card side. Errors are localized and restore the button state.
+
+The flip area and pronunciation are separate native buttons, with no nested buttons. Speaker taps and keyboard activation do not trigger flips or swipes. The existing card height behavior, long meanings, swipe gestures, favorites, bookmarks, and keyboard shortcuts remain available. Regression tests mock synthesis to verify request timing, language selection, delayed voice availability, repeated taps, cleanup, errors, hidden answers, unsupported browsers, and unchanged learning counts.
