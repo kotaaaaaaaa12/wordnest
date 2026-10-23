@@ -2,11 +2,13 @@ export const messages = {
   en: {
     ipa:"Pronunciation (IPA)",
     ipaSymbols:"IPA symbols",
-    ipaPaletteHelp:"Tap a symbol to insert it at the cursor.",
+    ipaPaletteHelp:"Tap to insert. Hold a marked vowel for accented forms, then slide and release or tap a choice.",
+    ipaVariantKey:"Insert {symbol}; hold for accented forms",
+    ipaVariants:"Accented forms of {symbol}",
     insertIpaSymbol:"Insert {symbol}",
     invalidIpa:"Use up to 200 characters for IPA, without line breaks or control characters.",
     guideCardIpa:"When supplied, IPA appears in square brackets below the English word. In JP → EN, it appears only on the English side. Pronunciation notation and the device’s spoken voice are managed separately. The back of the card uses the theme accent color.",
-    guideEditIpa:"IPA is optional. Focus the IPA input to show the symbol palette; it closes when focus leaves that input. Tap a symbol to insert it at the caret or replace the selected text. Ordinary typing and paste work too. Square brackets are added on cards. IPA is saved with word sets and included in JSON/ZIP transfers. Updating IPA alone preserves quiz clears, difficult-word streaks, favorites, and flashcard bookmarks.",
+    guideEditIpa:"IPA is optional. Focus the IPA input to show the symbol palette; it closes when focus leaves that input. Tap a symbol to insert it at the caret or replace the selected text. Hold a marked vowel for accented forms such as ǽ. Slide to a choice and release, or release first and tap a choice. Ordinary typing and paste work too. Square brackets are added on cards. IPA is saved with word sets and included in JSON/ZIP transfers. Updating IPA alone preserves quiz clears, difficult-word streaks, favorites, and flashcard bookmarks.",
 
     hearPronunciation:"Hear the pronunciation of {word}",
     speechError:"Pronunciation could not be played. Check that an English voice is available on this device and try again.",
@@ -238,11 +240,13 @@ export const messages = {
   ja: {
     ipa:"発音記号（IPA）",
     ipaSymbols:"発音記号パレット",
-    ipaPaletteHelp:"記号をタップすると、カーソルの位置に挿入します。",
+    ipaPaletteHelp:"タップで挿入します。印のある母音を長押しすると、アクセント付きの候補を表示します。指を滑らせて離すか、候補をタップして選択してください。",
+    ipaVariantKey:"{symbol}を挿入（長押しでアクセント付きの候補を表示）",
+    ipaVariants:"{symbol}のアクセント付き候補",
     insertIpaSymbol:"{symbol}を挿入",
     invalidIpa:"発音記号は、改行・制御文字を含めず200文字以内で入力してください。",
     guideCardIpa:"登録された発音記号を、英単語の下に角括弧付きで表示します。JP → ENでは英単語のある裏面だけに表示します。発音記号と端末の読み上げ音声は別に管理します。カードの裏面にはテーマのアクセントカラーを使用します。",
-    guideEditIpa:"発音記号は任意です。入力欄にフォーカスがある間だけ記号パレットを表示します。記号をタップするとカーソル位置に挿入し、文字を選択している場合は置き換えます。通常の入力や貼り付けも利用できます。カードでは角括弧を自動で付けます。発音記号は単語セットと一緒に保存し、JSON・ZIPのインポートとエクスポートにも含めます。発音記号だけの変更では、クリア状況・苦手判定・お気に入り・単語カードの再開位置は変わりません。",
+    guideEditIpa:"発音記号は任意です。入力欄にフォーカスがある間だけ記号パレットを表示します。記号をタップするとカーソル位置に挿入し、文字を選択している場合は置き換えます。印のある母音を長押しすると、ǽなどのアクセント付き候補を表示します。指を滑らせて離すか、指を離してから候補をタップして選択できます。通常の入力や貼り付けも利用できます。カードでは角括弧を自動で付けます。発音記号は単語セットと一緒に保存し、JSON・ZIPのインポートとエクスポートにも含めます。発音記号だけの変更では、クリア状況・苦手判定・お気に入り・単語カードの再開位置は変わりません。",
 
     hearPronunciation:"「{word}」の発音を聞く",
     speechError:"発音を再生できませんでした。端末で英語の音声を利用できるか確認し、もう一度お試しください。",

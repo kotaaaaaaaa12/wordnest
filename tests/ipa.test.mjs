@@ -10,8 +10,10 @@ test('optional IPA preserves Unicode, accepts pasted delimiters, validates types
   assert.deepEqual(validateSet(legacy),legacy);assert.deepEqual(validateSet({...legacy,words:[{...legacy.words[0],ipa:'[]'}]}),legacy);
   const distinct='ɹ ɻ ʀ ʁ θ ð ɚ ɝ ˈ ˌ ː';assert.equal(validateSet({...legacy,words:[{...legacy.words[0],ipa:distinct}]}).words[0].ipa,distinct);
   for(const value of [null,{},4,[], 'a'.repeat(201),'a\nb','a\tb','a\0b'])assert.throws(()=>validateSet({...legacy,words:[{...legacy.words[0],ipa:value}]}),/invalidIpa/);
-  const saved=validateSet(set),files={'first.json':strToU8(JSON.stringify(portable(saved))),'legacy.json':strToU8(JSON.stringify(portable(legacy)))};
-  const imported=Object.values(unzipSync(zipSync(files))).flatMap(bytes=>parseImport(JSON.parse(strFromU8(bytes))));assert.deepEqual(imported,[saved,legacy]);
+  const accented=validateSet({...legacy,title:'Combining marks',words:[{...legacy.words[0],ipa:'ǽ æ̀ æ̂ ǣ æ̆ æ̃ æ̈ é'}]});
+  assert.equal(accented.words[0].ipa,'ǽ æ̀ æ̂ ǣ æ̆ æ̃ æ̈ é');
+  const saved=validateSet(set),files={'first.json':strToU8(JSON.stringify(portable(saved))),'legacy.json':strToU8(JSON.stringify(portable(legacy))),'accents.json':strToU8(JSON.stringify(portable(accented)))};
+  const imported=Object.values(unzipSync(zipSync(files))).flatMap(bytes=>parseImport(JSON.parse(strFromU8(bytes))));assert.deepEqual(imported,[saved,legacy,accented]);
 });
 test('changing IPA preserves clears, difficult-word streaks, favorites, and resumable flashcards while loading the updated notation',()=>{
   const set={...structuredClone(legacy),id:'words'},edited=structuredClone(set),store=memory(),personal=new PersonalWords(store),originalQuestion=sourceQuestions([set],'en-ja')[0];edited.words[0].ipa='əˈtʃiːv';

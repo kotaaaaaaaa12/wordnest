@@ -505,23 +505,94 @@ function resultView() {
   const qz=state.quiz,correct=qz.answers.filter(a=>a.correct).length,missed=qz.questions.length-correct,perfect=missed===0;
   return `<section class="flow"><div class="result-hero">${qz.isRetry?`<span class="pill">${t('retryRound')}</span>`:''}<div class="result-medal">${icon(perfect?'trophy':'leaf')}</div><h1>${t(perfect?'perfect':'completed')}</h1><div class="score-number">${correct}<small> / ${qz.questions.length}</small></div><span class="pill">${Math.round(correct/qz.questions.length*100)}%</span></div><div class="center-actions">${missed?`<button class="btn primary" data-action="retry-mistakes">${icon('refresh')}${t('retryMistakes',{n:missed})}</button>`:''}${btn('again','again',missed?'ghost':'primary')}${btn('returnHome','back-home')}</div><div class="review"><h2>${t('review')}</h2>${qz.questions.map((q,i)=>{const a=qz.answers[i];return `<div class="review-item"><span class="verdict ${a.correct?'':'bad'}" aria-label="${t(a.correct?'correctLabel':'incorrectLabel')}">${icon(a.correct?'check':'close')}</span><div><strong>${e(q.english)} — ${e(q.meaning)}</strong>${!a.correct?`<p>${a.timedOut?t('timedOut')+' · ':''}${t('yourAnswer')}: ${e(a.answer||t('skipped'))}</p>`:''}${qz.mode==='ja-en' && q.accepted.length>1?`<p>${t('correctAnswer')}: ${e(q.accepted.join(' / '))}</p>`:''}${q.explanation?`<p>${e(q.explanation)}</p>`:''}</div></div>`}).join('')}</div></section>`;
 }
-const IPA_SYMBOLS=['ə','æ','ʌ','ɑ','ɒ','ɔ','ɛ','ɜ','ɚ','ɝ','ɪ','ʊ','ʃ','ʒ','θ','ð','ŋ','ɡ','ɹ','ˈ','ˌ','ː'];
-let activeIpaInput=null,ipaPalette=null;
+const IPA_VOWELS=['ə','æ','ʌ','ɑ','ɒ','ɔ','ɛ','ɜ','ɚ','ɝ','ɪ','ʊ','a','e','i','o','u'];
+const IPA_SYMBOLS=[...IPA_VOWELS,'ʃ','ʒ','θ','ð','ŋ','ɡ','ɹ','ˈ','ˌ','ː'];
+const IPA_VARIANTS=Object.fromEntries(IPA_VOWELS.map(symbol=>[symbol,['','\u0301','\u0300','\u0302','\u0304','\u0306','\u0303','\u0308'].map(mark=>symbol+mark)]));
+const IPA_ALLOWED=new Set([...IPA_SYMBOLS,...Object.values(IPA_VARIANTS).flat()]);
+let activeIpaInput=null,ipaPalette=null,ipaVariants=null,ipaPress=null,ipaSuppressedClick=null;
+function cancelIpaPress(){
+  const press=ipaPress;if(!press)return;
+  ipaPress=null;clearTimeout(press.timer);
+  try{if(press.button.hasPointerCapture?.(press.id))press.button.releasePointerCapture(press.id);}catch{}
+}
+function closeIpaVariants(){
+  if(ipaPress)suppressIpaClick(ipaPress.button);
+  cancelIpaPress();ipaVariants?.remove();ipaVariants=null;
+  ipaPalette?.querySelector('[aria-expanded="true"]')?.setAttribute('aria-expanded','false');
+}
 function hideIpaPalette(){
+  closeIpaVariants();
   activeIpaInput?.removeAttribute('aria-controls');activeIpaInput=null;ipaPalette?.remove();ipaPalette=null;
 }
 function showIpaPalette(input){
   if(state.route!=='edit' || !state.authenticated || !state.draft)return;
   hideIpaPalette();activeIpaInput=input;ipaPalette=document.createElement('div');ipaPalette.id='ipa-palette';ipaPalette.className='ipa-palette';ipaPalette.setAttribute('role','group');ipaPalette.setAttribute('aria-label',t('ipaSymbols'));
-  ipaPalette.innerHTML=`<small>${t('ipaPaletteHelp')}</small><div>${IPA_SYMBOLS.map(symbol=>`<button type="button" tabindex="-1" data-action="insert-ipa" data-ipa-symbol="${e(symbol)}" aria-label="${e(t('insertIpaSymbol',{symbol}))}">${e(symbol)}</button>`).join('')}</div>`;
+  ipaPalette.innerHTML=`<small>${t('ipaPaletteHelp')}</small><div>${IPA_SYMBOLS.map(symbol=>`<button type="button" tabindex="-1" data-action="insert-ipa" data-ipa-symbol="${e(symbol)}" ${IPA_VARIANTS[symbol]?'data-ipa-variants aria-expanded="false"':''} aria-label="${e(t(IPA_VARIANTS[symbol]?'ipaVariantKey':'insertIpaSymbol',{symbol}))}">${e(symbol)}</button>`).join('')}</div>`;
   input.closest('.ipa-editor').append(ipaPalette);input.setAttribute('aria-controls',ipaPalette.id);
 }
 function insertIpa(button){
   const input=activeIpaInput;if(!input || document.activeElement!==input || !input.isConnected || !state.authenticated || state.route!=='edit')return;
-  const symbol=button.dataset.ipaSymbol;if(!IPA_SYMBOLS.includes(symbol))return;
+  const symbol=button.dataset.ipaSymbol;if(!IPA_ALLOWED.has(symbol))return;
+  closeIpaVariants();
   const start=input.selectionStart ?? input.value.length,end=input.selectionEnd ?? start;
   if(input.value.length-(end-start)+symbol.length>input.maxLength){toast(t('invalidIpa'));return;}
   input.setRangeText(symbol,start,end,'end');input.dispatchEvent(new Event('input',{bubbles:true}));
+}
+function openIpaVariants(button){
+  if(!activeIpaInput || document.activeElement!==activeIpaInput || !button.isConnected || modal.open || !state.authenticated || state.route!=='edit')return false;
+  const variants=IPA_VARIANTS[button.dataset.ipaSymbol];if(!variants)return false;
+  ipaVariants?.remove();ipaPalette.querySelector('[aria-expanded="true"]')?.setAttribute('aria-expanded','false');
+  ipaVariants=document.createElement('div');ipaVariants.className='ipa-variants';ipaVariants.setAttribute('role','group');ipaVariants.setAttribute('aria-label',t('ipaVariants',{symbol:button.dataset.ipaSymbol}));
+  ipaVariants.innerHTML=variants.map(symbol=>`<button type="button" tabindex="-1" data-action="insert-ipa" data-ipa-variant data-ipa-symbol="${e(symbol)}" aria-label="${e(t('insertIpaSymbol',{symbol}))}">${e(symbol)}</button>`).join('');
+  document.body.append(ipaVariants);button.setAttribute('aria-expanded','true');
+  // Fixed positioning avoids clipping inside the editor. Account for the on-screen keyboard.
+  const viewport=window.visualViewport,view={left:viewport?.offsetLeft||0,top:viewport?.offsetTop||0,width:viewport?.width||window.innerWidth,height:viewport?.height||window.innerHeight},anchor=button.getBoundingClientRect();
+  const width=Math.min(360,view.width-16);ipaVariants.style.width=width+'px';
+  const height=ipaVariants.getBoundingClientRect().height||62,left=Math.max(view.left+8,Math.min(anchor.left+anchor.width/2-width/2,view.left+view.width-width-8));
+  const preferred=anchor.top-height-10>=view.top+8?anchor.top-height-10:anchor.bottom+10;
+  ipaVariants.style.left=left+'px';ipaVariants.style.top=Math.max(view.top+8,Math.min(preferred,view.top+view.height-height-8))+'px';
+  return true;
+}
+function ipaVariantAt(x,y){
+  if(!ipaVariants)return null;
+  // Pointer capture retargets events to the held key, so hit-test the real coordinates.
+  const hit=document.elementFromPoint?.(x,y)?.closest('[data-ipa-variant]');
+  if(hit && ipaVariants.contains(hit))return hit;
+  return [...ipaVariants.querySelectorAll('button')].find(button=>{const r=button.getBoundingClientRect();return r.width>0 && x>=r.left && x<=r.right && y>=r.top && y<=r.bottom;})||null;
+}
+function suppressIpaClick(button){ipaSuppressedClick={button,until:Date.now()+900};}
+function beginIpaPress(event){
+  const button=event.target.closest('[data-ipa-symbol]');
+  if(event.isPrimary===false){if(ipaPress)suppressIpaClick(ipaPress.button);closeIpaVariants();return;}
+  if(event.button>0){if(event.button===2 && button?.hasAttribute('data-ipa-variants') && activeIpaInput===document.activeElement)event.preventDefault();return;}
+  if(!button){if(!event.target.closest('.ipa-variants'))closeIpaVariants();return;}
+  if(document.activeElement!==activeIpaInput || !activeIpaInput)return;
+  event.preventDefault();
+  if(button.hasAttribute('data-ipa-variant'))return;
+  closeIpaVariants();ipaSuppressedClick=null;
+  if(!IPA_VARIANTS[button.dataset.ipaSymbol])return;
+  const press={button,id:event.pointerId,x:event.clientX,y:event.clientY,opened:false,timer:0};ipaPress=press;
+  try{button.setPointerCapture?.(event.pointerId);}catch{}
+  press.timer=setTimeout(()=>{if(ipaPress===press)press.opened=openIpaVariants(button);},420);
+}
+function moveIpaPress(event){
+  const press=ipaPress;if(!press || event.pointerId!==press.id)return;
+  if(!press.opened){if(Math.hypot(event.clientX-press.x,event.clientY-press.y)>12){suppressIpaClick(press.button);closeIpaVariants();}return;}
+  event.preventDefault();const selected=ipaVariantAt(event.clientX,event.clientY);
+  for(const button of ipaVariants?.querySelectorAll('button')||[])button.classList.toggle('is-selected',button===selected);
+}
+function finishIpaPress(event,cancelled=false){
+  const press=ipaPress;if(!press || event.pointerId!==press.id)return;
+  const opened=press.opened,selected=!cancelled && opened?ipaVariantAt(event.clientX,event.clientY):null;
+  if(cancelled || opened)suppressIpaClick(press.button);
+  cancelIpaPress();
+  if(cancelled){closeIpaVariants();return;}
+  if(!opened)return; // A short tap is handled by the ordinary click action.
+  event.preventDefault();
+  if(selected){insertIpa(selected);return;}
+  const r=press.button.getBoundingClientRect();
+  if(event.clientX<r.left || event.clientX>r.right || event.clientY<r.top || event.clientY>r.bottom)closeIpaVariants();
+  // Releasing over the original key leaves the alternatives open for a separate tap.
 }
 function ipaEditor(word,index){
   return `<div class="wide ipa-editor"><label for="word-${index}-ipa">${t('ipa')} · ${t('optional')}<span class="ipa-input-wrap"><span aria-hidden="true">[</span><input id="word-${index}-ipa" class="ipa-input" data-word="${index}" data-field="ipa" value="${e(word.ipa || '')}" maxlength="200" lang="en-fonipa" dir="ltr" placeholder="əˈtʃiːv" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"><span aria-hidden="true">]</span></span></label></div>`;
@@ -533,7 +604,7 @@ function editor() {
 }
 const modal=$('#modal');
 function dialog(content, setup) {
-  stopCardSpeech();
+  stopCardSpeech();hideIpaPalette();
   return new Promise(resolve=>{
     const previous=document.activeElement;
     modal.innerHTML=content;
@@ -893,8 +964,26 @@ document.addEventListener('keydown',event=>{
 });
 document.addEventListener('focusin',event=>{if(event.target.matches('input[data-field="ipa"]'))showIpaPalette(event.target);});
 document.addEventListener('focusout',event=>{if(event.target===activeIpaInput)hideIpaPalette();});
-// Palette taps keep the input focused, retaining its caret and mobile keyboard.
-document.addEventListener('pointerdown',event=>{if(event.target.closest('[data-ipa-symbol]') && document.activeElement===activeIpaInput)event.preventDefault();},true);
+// Keep the caret and mobile keyboard while holding a key or selecting a variant.
+document.addEventListener('pointerdown',beginIpaPress,true);
+document.addEventListener('pointermove',moveIpaPress,{capture:true,passive:false});
+document.addEventListener('pointerup',event=>finishIpaPress(event),true);
+document.addEventListener('pointercancel',event=>finishIpaPress(event,true),true);
+document.addEventListener('lostpointercapture',event=>finishIpaPress(event,true),true);
+document.addEventListener('contextmenu',event=>{
+  const button=event.target.closest('[data-ipa-variants]');
+  if(event.target.closest('.ipa-variants'))event.preventDefault();
+  if(!button || document.activeElement!==activeIpaInput)return;
+  event.preventDefault();if(!ipaVariants){const opened=openIpaVariants(button);if(ipaPress)ipaPress.opened=opened;}
+});
+document.addEventListener('click',event=>{
+  if(ipaSuppressedClick?.button===event.target.closest('[data-ipa-symbol]') && Date.now()<ipaSuppressedClick.until){event.preventDefault();event.stopImmediatePropagation();ipaSuppressedClick=null;}
+},true);
+document.addEventListener('keydown',event=>{if(event.key==='Escape' && (ipaVariants || ipaPress)){event.preventDefault();closeIpaVariants();}});
+document.addEventListener('scroll',closeIpaVariants,{capture:true,passive:true});
+window.addEventListener('resize',closeIpaVariants);
+window.visualViewport?.addEventListener('resize',closeIpaVariants);
+window.visualViewport?.addEventListener('scroll',closeIpaVariants);
 document.addEventListener('mousedown',event=>{if(event.button===0 && event.target.closest('button,a'))event.preventDefault();},true);
 document.addEventListener('click',async event=>{
   const pressed=event.target.closest('button,a');if(pressed && document.activeElement===pressed)pressed.blur();
@@ -917,10 +1006,10 @@ document.addEventListener('submit',async event=>{
   if(event.target.id==='answer-form'){event.preventDefault();if(!state.quiz.typed.trim())return;submitAnswer(state.quiz.typed);}
   if(event.target.id==='admin-login-form'){event.preventDefault();await submitAdmin(event.target);}
 });
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')stopCardSpeech();syncLearning();updateQuizClock();});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'){stopCardSpeech();closeIpaVariants();}syncLearning();updateQuizClock();});
 window.addEventListener('pageshow',()=>{syncLearning();updateQuizClock();});
-window.addEventListener('pagehide',()=>{stopCardSpeech();learning.setActive(false);ranking.flushOnExit();});
-window.addEventListener('blur',()=>{stopCardSpeech();learning.setActive(false);});
+window.addEventListener('pagehide',()=>{stopCardSpeech();closeIpaVariants();learning.setActive(false);ranking.flushOnExit();});
+window.addEventListener('blur',()=>{stopCardSpeech();closeIpaVariants();learning.setActive(false);});
 window.addEventListener('focus',syncLearning);
 for(const type of ['pointerdown','click','keydown','input','scroll'])document.addEventListener(type,()=>{if(learning.active)learning.touch();},{capture:true,passive:true});
 let rankingHeartbeatAt=0;
