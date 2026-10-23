@@ -61,3 +61,16 @@ test('unsupported browsers retain flashcard flips, arrows, swipes, and readable 
   try{assert.equal(h.find('[data-action="speak-card"]'),null);assert.equal(h.find('.flashcard-front .flashcard-text').textContent,'achieve');await h.click('[data-action="flip-card"]');assert.equal(h.flips(),1);await h.click('[data-action="next-card"]');assert.equal(h.find('.flashcard-front .flashcard-text').textContent,'adapt');h.w.document.body.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:' ',bubbles:true}));assert.equal(h.flips(),2);}
   finally{h.close();}
 });
+test('tapping visible card text or its face flips in both directions while speaker taps and swipe clicks stay separate',async()=>{
+  for(const mode of ['en-ja','ja-en']){
+    const h=await harness({mode});
+    try{
+      await h.click('.flashcard-front .flashcard-text');assert.equal(h.find('[data-action="flip-card"]').getAttribute('aria-pressed'),'true','the visible word must flip the card');assert.equal(h.flips(),1);
+      await h.click('.flashcard-back .eyebrow');assert.equal(h.find('[data-action="flip-card"]').getAttribute('aria-pressed'),'false','the back face must flip to the front');assert.equal(h.flips(),2);
+      await h.click('.flashcard-inner');assert.equal(h.flips(),3);await h.click('[data-action="flip-card"]');assert.equal(h.flips(),4);
+      if(mode==='ja-en')await h.click('.flashcard-front .flashcard-text');const flips=h.flips();await h.click('[data-action="speak-card"]');assert.equal(h.flips(),flips);assert.equal(h.utterances.length,1);
+      const card=h.find('.flashcard');for(const [type,x] of [['pointerdown',240],['pointermove',140],['pointerup',140]]){const event=new h.w.MouseEvent(type,{bubbles:true,cancelable:true,clientX:x,clientY:120,button:0});Object.defineProperty(event,'pointerId',{value:7});card.dispatchEvent(event);}
+      assert.equal(h.find('.flashcard-front .flashcard-text').textContent,mode==='en-ja'?'adapt':'適応する');await h.click('.flashcard-front .flashcard-text');assert.equal(h.find('[data-action="flip-card"]').getAttribute('aria-pressed'),'false','the synthesized click after a swipe must not flip the next card');
+    }finally{h.close();}
+  }
+});
