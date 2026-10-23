@@ -120,6 +120,7 @@ export class PersonalWords {
   write(type,key,value) {this.syncResets();const name=PREFIX+type+':'+keyToken(key);this.memory.set(name,{...value,epoch:this.epochs[type]});try{if(!this.storage)throw new Error('Storage unavailable');for(const [pending,entry] of this.memory){this.storage.setItem(pending,JSON.stringify(entry));this.memory.delete(pending);}this.persistent=true;}catch{this.persistent=false;}}
   record(key){return clean(this.read('question',key));}
   answer(sources,correct) {
+    this.storage?.recordAnswers?.([...new Set(sources.map(source=>PREFIX+'question:'+keyToken(source.key)))],correct);
     for(const key of new Set(sources.map(source=>source.key))){
       const previous=this.read('question',key);if(correct && !previous)continue;
       const next=clean(previous);

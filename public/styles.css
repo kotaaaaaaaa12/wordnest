@@ -98,3 +98,8 @@ select:focus,select:focus-visible,select:active{border-color:var(--line);outline
 .options .option:disabled{opacity:1;cursor:default}
 
 .option-english{display:flex;flex-direction:column;gap:5px}.option-pronunciation{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;max-width:100%}.option-english-word{font-size:12px;line-height:1.6;overflow-wrap:anywhere;min-width:0}.option-pronunciation .card-ipa{font-size:12px;line-height:1.6}.option-pronunciation .quiz-pronounce{width:24px;height:24px;padding:4px}.option-pronunciation .quiz-pronounce .ui-icon{width:14px;height:14px}.options div.option{cursor:default}
+
+.account-form{display:grid;gap:16px;margin-top:22px}.account-form>small{font-size:11px;line-height:1.7;margin-top:-9px}.account-form .modal-actions{margin-top:4px}.account-check{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:400}.account-id{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:12px;overflow-wrap:anywhere}.account-id>span{font-size:12px;color:var(--muted)}.account-id strong{font-size:16px}.account-actions{display:grid;justify-items:start;gap:12px;margin-top:22px}.account-links{display:flex;flex-wrap:wrap;gap:18px;margin-top:22px}.account-recovery-code{font-family:ui-monospace,monospace;font-size:14px;word-break:break-all;width:100%}#account-settings{display:grid;justify-items:start;gap:12px}#account-settings p{font-size:12px}#account-settings small{font-size:11px;line-height:1.7}.sidebar-bottom .account-trigger{margin-bottom:0}
+@media(max-width:760px){.sidebar-bottom{gap:6px}.account-form{gap:14px}.account-recovery-code{font-size:12px}}
+
+textarea.account-recovery-code{resize:none;min-height:80px;line-height:1.7}

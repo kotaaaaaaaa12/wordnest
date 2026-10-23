@@ -1,4 +1,5 @@
 import { rankingApi, rankingAdminApi, rankingSchema } from './rankings.js';
+import { accountApi, accountSchema, accountSession } from './accounts.js';
 import { validateSet } from '../public/core.js';
 const initialized = new WeakMap();
 const encoder = new TextEncoder();
@@ -9,6 +10,7 @@ async function initialize(db) {
   if (!initialized.has(db)) initialized.set(db, (async () => {
     await db.batch([
       ...rankingSchema.map(sql=>db.prepare(sql)),
+      ...accountSchema.map(sql=>db.prepare(sql)),
       db.prepare('CREATE TABLE IF NOT EXISTS sets (id TEXT PRIMARY KEY, title TEXT NOT NULL, words TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL, published INTEGER NOT NULL DEFAULT 1 CHECK(published IN (0,1)))'),
       db.prepare('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY)'),
       db.prepare('CREATE TABLE IF NOT EXISTS set_order (id INTEGER PRIMARY KEY CHECK(id=1), ids TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0)'),
@@ -83,6 +85,7 @@ async function api(request, env) {
   if (!env.DB) return reply({ error: 'databaseMissing' }, 503);
   await initialize(env.DB);
   const configured = Boolean(env.ADMIN_PASSWORD && env.ADMIN_PASSWORD.length >= 12);
+  if(path.startsWith('/api/account/'))return accountApi(request,env.DB,body);
   if (path === '/api/session' && method === 'GET') return reply({ authenticated: await authenticated(request, env), configured });
   if (path === '/api/login' && method === 'POST') {
     if (!configured) return reply({ error: 'passwordSetup' }, 503);
@@ -108,7 +111,7 @@ async function api(request, env) {
     rows.results.sort((a,b)=>(positions.get(a.id)??Number.MAX_SAFE_INTEGER)-(positions.get(b.id)??Number.MAX_SAFE_INTEGER));
     return reply({ sets: rows.results.map(s => ({ id: s.id, title: s.title, words: JSON.parse(s.words), published: s.published===1, revision: s.revision, updatedAt: s.updated_at })), orderRevision: order.revision });
   }
-  if(path==='/api/rankings' || path.startsWith('/api/ranking/'))return rankingApi(request,env.DB,body);
+  if(path==='/api/rankings' || path.startsWith('/api/ranking/'))return rankingApi(request,env.DB,body,(await accountSession(request,env.DB))?.id);
   if (!await authenticated(request, env)) return reply({ error: 'unauthorized' }, 401);
   if(path.startsWith('/api/admin/'))return rankingAdminApi(request,env.DB,body);
   if (path === '/api/sets/order' && method === 'PUT') {
@@ -157,6 +160,8 @@ export default {
     if (!new URL(request.url).pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     try { return await api(request, env); }
     catch (error) {
+      if(error.message?.includes('accountAlreadyLinked'))return reply({error:'accountAlreadyLinked'},409);
+      if(error.message?.startsWith('account'))return reply({error:error.message},error.status || 400);
       const known = ['invalidTitle', 'invalidWords', 'invalidIpa', 'invalidIpaStyle', 'invalidVisibility', 'duplicateWord', 'invalidImport', 'jsonRequired', 'tooLarge'];
       if((error.status && error.message.startsWith('ranking')) || ['invalidRankingData','invalidRankingName','invalidRankingMessage'].includes(error.message))return reply({error:error.message},error.status || 400);
       if (known.includes(error.message)) return reply({ error: error.message }, error.status || 400);

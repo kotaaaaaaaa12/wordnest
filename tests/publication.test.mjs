@@ -8,6 +8,7 @@ import * as core from '../public/core.js';
 import * as statistics from '../public/stats.js';
 import * as personalTools from '../public/personal.js';
 import * as rankingTools from '../public/rankings.js';
+import * as accountTools from '../public/accounts.js';
 import { icon } from '../public/icons.js';
 import { messages, translator } from '../public/i18n.js';
 import * as zip from 'fflate';
@@ -61,7 +62,7 @@ test('editor publication switch saves private drafts, reloads the administrator 
     const data=await(await request(mf,'/api/sets',{method:'POST',cookie,data:{sets:[example,{...example,title:'Hidden set',published:false}]}})).json(),hidden=data.sets[1];cookie='';
     dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:origin+'/#/',runScripts:'outside-only',pretendToBeVisual:true});
     const w=dom.window,find=selector=>w.document.querySelector(selector);
-    Object.assign(w,core,statistics,personalTools,rankingTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:false})});
+    Object.assign(w,core,statistics,personalTools,rankingTools,accountTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:false})});
     w.document.hasFocus=()=>true;w.Audio=class{play(){return Promise.resolve();}};w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){}});
     w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
     w.fetch=async(path,options={})=>{const response=await mf.dispatchFetch(origin+path,{...options,headers:{...options.headers,...(cookie?{Cookie:cookie}:{})}});const updated=response.headers.get('set-cookie');if(updated)cookie=updated.includes('Max-Age=0')?'':updated.split(';')[0];return response;};

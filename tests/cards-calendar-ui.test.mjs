@@ -6,6 +6,7 @@ import * as core from '../public/core.js';
 import * as statistics from '../public/stats.js';
 import * as personalTools from '../public/personal.js';
 import * as rankingTools from '../public/rankings.js';
+import * as accountTools from '../public/accounts.js';
 import { icon } from '../public/icons.js';
 import { messages, translator } from '../public/i18n.js';
 import * as zip from 'fflate';
@@ -14,7 +15,7 @@ const source=(await readFile('public/app.js','utf8')).replace(/^import .*;\n/gm,
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 async function harness({saved={},lang='en',hash='#/',set={...seed,id:'seed',revision:1},now=new Date(2026,9,21,12).getTime()}={}){
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/'+hash,runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
-  Object.assign(w,core,statistics,personalTools,rankingTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:false})});w.Date.now=()=>now;w.document.hasFocus=()=>true;
+  Object.assign(w,core,statistics,personalTools,rankingTools,accountTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:false})});w.Date.now=()=>now;w.document.hasFocus=()=>true;
   const timeout=w.setTimeout.bind(w);w.setTimeout=(callback,delay,...args)=>['learningHeartbeat','retry'].includes(callback?.name)?0:timeout(callback,delay,...args);
   w.Audio=class{play(){return Promise.resolve();}};w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){}});
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};

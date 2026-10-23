@@ -64,13 +64,16 @@ async function leaderboard(db,url){
   }
   return json({metric,rows,mine,total,minimumAnswers:metric==='accuracy'?30:0,updatedAt:new Date().toISOString()});
 }
-export async function rankingApi(request,db,readBody){
+export async function rankingApi(request,db,readBody,accountId){
   const url=new URL(request.url),path=url.pathname,method=request.method;
   if(path==='/api/rankings' && method==='GET')return leaderboard(db,url);
   if(!['/api/ranking/profile','/api/ranking/stats','/api/ranking/notice'].includes(path))return json({error:'notFound'},404);
-  const id=await identity(request);
+  if(accountId && request.headers.has('X-Wordnest-Account') && request.headers.get('X-Wordnest-Account')!==accountId)throw fail('rankingUnauthorized',401);
+  const id=accountId || await identity(request);
+  if(!accountId && await db.prepare('SELECT id FROM accounts WHERE id=? UNION ALL SELECT account_id AS id FROM account_aliases WHERE profile_id=?').bind(id,id).first())throw fail('rankingUnauthorized',401);
   if(path==='/api/ranking/profile' && method==='GET')return json({profile:await publicProfile(db,await db.prepare('SELECT * FROM ranking_profiles WHERE id=?').bind(id).first())});
   if(!['POST','PUT','DELETE'].includes(method))return json({error:'methodNotAllowed'},405);
+  if(accountId && path==='/api/ranking/stats')return json({error:'accountStatsManaged'},409);
   await limit(db,request,id);
   const data=await readBody(request);if(!Number.isSafeInteger(data.revision) || data.revision<0)throw fail('invalidRankingData');
   const row=await db.prepare('SELECT * FROM ranking_profiles WHERE id=?').bind(id).first(),now=new Date().toISOString();
@@ -81,7 +84,7 @@ export async function rankingApi(request,db,readBody){
     return json({profile:await publicProfile(db,await db.prepare('SELECT * FROM ranking_profiles WHERE id=?').bind(id).first())});
   }
   if(path==='/api/ranking/profile' && method==='POST'){
-    const name=validName(data.name),epoch=validEpoch(data.epoch),timezone=validZone(data.timezone);if(typeof data.enabled!=='boolean')throw fail('invalidRankingData');
+    const name=validName(data.name),epoch=accountId?row.epoch:validEpoch(data.epoch),timezone=validZone(data.timezone);if(typeof data.enabled!=='boolean')throw fail('invalidRankingData');
     let updated;
     if(!row){
       if(data.revision!==0)throw fail('rankingConflict',409);

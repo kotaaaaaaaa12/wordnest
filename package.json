@@ -1,13 +1,13 @@
 {
   "name": "wordnest-quiz",
-  "version": "1.22.7",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check src/worker.js && node --check public/app.js && node --check public/core.js && node --check public/i18n.js && node --check public/theme.js && node --check public/icons.js && node --check public/stats.js && node --check public/personal.js && node --check public/rankings.js && node --check src/rankings.js",
+    "check": "node --check src/worker.js && node --check public/app.js && node --check public/core.js && node --check public/i18n.js && node --check public/theme.js && node --check public/icons.js && node --check public/stats.js && node --check public/personal.js && node --check public/rankings.js && node --check src/rankings.js && node --check public/accounts.js && node --check public/account-study.js && node --check src/accounts.js",
     "build:vendor": "node scripts/vendor.mjs",
     "build:icons": "node scripts/icons.mjs"
   },
@@ -17,6 +17,7 @@
     "wrangler": "^4.45.0"
   },
   "dependencies": {
+    "@noble/hashes": "2.0.1",
     "fflate": "0.8.2"
   }
 }

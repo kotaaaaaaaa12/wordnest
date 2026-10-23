@@ -1,3 +1,4 @@
+import { AccountClient } from './accounts.js';
 import { RankingClient, rankingMetrics } from './rankings.js';
 import { FlashcardBookmarks, PersonalWords, wordIdentity, catalogWord, findCatalogWord, sourceQuestions, collectionQuestions, canMultipleChoice, quizFromPool, collectionCards } from './personal.js';
 import { LearningTracker, localDay, studyCalendar, recentStudyDays } from './stats.js';
@@ -8,11 +9,13 @@ import { zipSync, unzipSync, strToU8, strFromU8 } from './vendor/fflate.js';
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const e = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const storage = { get(key, fallback) { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }, set(key, value) { try { localStorage.setItem(key, value); } catch {} } };
-let learningStorage;try{learningStorage=localStorage;}catch{}
-const personal=new PersonalWords(learningStorage);
-const bookmarks=new FlashcardBookmarks(learningStorage);
-const learning=new LearningTracker({storage:learningStorage,now:()=>Date.now()});
+let learningStorage,rawStudyStorage;try{rawStudyStorage=localStorage;}catch{}
+const storage = { get(key, fallback) { try { return (key==='wordnest-progress'?learningStorage:rawStudyStorage)?.getItem(key) ?? fallback; } catch { return fallback; } }, set(key, value) { try { (key==='wordnest-progress'?learningStorage:rawStudyStorage)?.setItem(key, value); } catch {} } };
+const account=new AccountClient({storage:rawStudyStorage,fetch:(...args)=>fetch(...args),beforeSwitch:()=>learning.setActive(false),onSwitch:switchStudyAccount,onSync:accountSynced});
+learningStorage=account.storage;
+let personal=new PersonalWords(learningStorage);
+let bookmarks=new FlashcardBookmarks(learningStorage);
+let learning=new LearningTracker({storage:learningStorage,now:()=>Date.now()});
 let languageChoice = storage.get('wordnest-language','auto');
 if (!['auto','en','ja'].includes(languageChoice)) languageChoice = 'auto';
 let lang, t;
@@ -36,7 +39,7 @@ function applyTheme() {
 applyTheme();
 systemTheme.addEventListener?.('change', () => { if (themeChoice === 'auto') applyTheme(); });
 const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, sessionKnown:false, adminBusy:false, adminError:'', configured:true, rankingMetric:'totalMs', rankingData:null, rankingBusy:false, rankingError:'', adminData:null, adminStats:null, adminStatsId:null, adminStatsBusy:false, adminStatsError:'', adminSearch:'', adminStatus:'all', adminBusyList:false, adminListError:'', route:routeFromHash(), screen:'home', calendars:{self:{month:null,date:null},admin:{month:null,date:null}}, libraryTab:'sets', collection:null, weakScope:'single', weakMode:'en-ja', weakSetId:null, weakIds:null, weakPickerOpen:false, favoriteSet:'all', wordSearch:'', listLimit:100, selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
-const ranking=new RankingClient({storage:learningStorage,fetch:(...args)=>fetch(...args),snapshot:()=>{
+const ranking=new RankingClient({account,storage:learningStorage,fetch:(...args)=>fetch(...args),snapshot:()=>{
   const snapshot=learning.snapshot();return {epoch:learning.epoch,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',days:snapshot.days};
 },onChange:()=>{refreshRankingSettings();queueRankingNotice();if(state.route==='rankings')render();}});
 let soundEnabled = storage.get('wordnest-sound','on') === 'on';
@@ -132,7 +135,7 @@ async function api(path, options={}) {
 }
 async function load() {
   state.loadError=''; render();
-  try { const [data, session]=await Promise.all([api('/api/sets'),api('/api/session')]); state.sets=data.sets; state.orderRevision=data.orderRevision; state.authenticated=session.authenticated; state.sessionKnown=true; state.configured=session.configured; if(!state.authenticated)restrictSetsToPublic();state.loaded=true; }
+  try { await account.initialize();const [data, session]=await Promise.all([api('/api/sets'),api('/api/session')]); state.sets=data.sets; state.orderRevision=data.orderRevision; state.authenticated=session.authenticated; state.sessionKnown=true; state.configured=session.configured; if(!state.authenticated)restrictSetsToPublic();state.loaded=true; }
   catch(error) { state.sessionKnown=true;state.loadError=message(error); }
   render();
   if(state.route==='rankings')refreshRankings();else ranking.sync(true).catch(()=>{});
@@ -142,7 +145,7 @@ async function load() {
 function routeFromHash() { return location.hash==='#/stats'?'stats':location.hash==='#/rankings'?'rankings':location.hash==='#/admin'?'admin':location.hash==='#/guide'?'guide':location.hash.startsWith('#/edit')?'edit':'home'; }
 const routeHref=route=>route==='home'?'#/':`#/${route}`;
 function shell(content) {
-  return `<div class="app-shell"><aside class="sidebar"><a href="#/" data-nav="home" class="brand"><span class="brand-mark">${icon('book')}</span>wordnest<span style="color:var(--accent)">.</span></a><nav class="nav ${state.authenticated?'nav-admin':''}" style="--nav-count:${state.authenticated?6:4}" aria-label="${t('home')}"><a href="#/" data-nav="home" class="${state.route==='home'?'active':''}">${icon('book')}${t('home')}</a><a href="#/stats" data-nav="stats" class="${state.route==='stats'?'active':''}">${icon('stats')}${t('stats')}</a><a href="#/rankings" data-nav="rankings" class="${state.route==='rankings'?'active':''}">${icon('trophy')}${t('rankings')}</a><a href="#/guide" data-nav="guide" class="${state.route==='guide'?'active':''}">${icon('guide')}${t('guide')}</a>${state.authenticated?`<a href="#/edit" data-nav="edit" class="${state.route==='edit'?'active':''}">${icon('edit')}${t('edit')}</a><a href="#/admin" data-nav="admin" class="${state.route==='admin'?'active':''}">${icon('settings')}${t('admin')}</a>`:''}</nav><div class="sidebar-bottom"><button class="settings-trigger" data-action="settings">${icon('settings')}${t('settings')}</button></div></aside><main class="main">${content}</main></div>`;
+  return `<div class="app-shell"><aside class="sidebar"><a href="#/" data-nav="home" class="brand"><span class="brand-mark">${icon('book')}</span>wordnest<span style="color:var(--accent)">.</span></a><nav class="nav ${state.authenticated?'nav-admin':''}" style="--nav-count:${state.authenticated?6:4}" aria-label="${t('home')}"><a href="#/" data-nav="home" class="${state.route==='home'?'active':''}">${icon('book')}${t('home')}</a><a href="#/stats" data-nav="stats" class="${state.route==='stats'?'active':''}">${icon('stats')}${t('stats')}</a><a href="#/rankings" data-nav="rankings" class="${state.route==='rankings'?'active':''}">${icon('trophy')}${t('rankings')}</a><a href="#/guide" data-nav="guide" class="${state.route==='guide'?'active':''}">${icon('guide')}${t('guide')}</a>${state.authenticated?`<a href="#/edit" data-nav="edit" class="${state.route==='edit'?'active':''}">${icon('edit')}${t('edit')}</a><a href="#/admin" data-nav="admin" class="${state.route==='admin'?'active':''}">${icon('settings')}${t('admin')}</a>`:''}</nav><div class="sidebar-bottom"><button class="settings-trigger account-trigger" data-action="account" aria-label="${t('account')}">${icon('user')}${t('account')}</button><button class="settings-trigger" data-action="settings">${icon('settings')}${t('settings')}</button></div></aside><main class="main">${content}</main></div>`;
 }
 function isTextEntry(element) {
   return element?.matches('[contenteditable="true"]') || element?.tagName==='TEXTAREA' || (element?.tagName==='INPUT' && ['text','search','email','password','tel','url','number'].includes(element.type));
@@ -298,7 +301,7 @@ async function removeRankingParticipant(button){
 }
 let rankingOnboardingStarted=false;
 function maybeRankingOnboarding(){
-  if(rankingOnboardingStarted || ranking.preferences())return;
+  if(rankingOnboardingStarted || account.user || ranking.preferences())return;
   if(modal.open){setTimeout(maybeRankingOnboarding,500);return;}
   rankingOnboardingStarted=true;rankingNameDialog(true);
 }
@@ -336,7 +339,7 @@ let statsRenderedDay;
 function statsView() {
   statsRenderedDay=localDay(Date.now());
   const data=learning.snapshot();
-  return `<section class="stats-view"><h1>${t('stats')}</h1><p class="stats-note">${t('statsLocal')}</p>${!learning.persistent?`<p class="error" role="status">${t('statsStorageError')}</p>`:''}${studyMetricCards(data)}${studyCharts(data.days,statsRenderedDay,'self')}<div class="stats-details"><p>${t('statsTimeRule')}</p><p>${t('statsCountRule')}</p><p>${t('statsStreakRule')}</p></div></section>`;
+  return `<section class="stats-view"><h1>${t('stats')}</h1><p class="stats-note">${t(account.user?'accountStatsHelp':'statsLocal')}</p>${!learning.persistent?`<p class="error" role="status">${t('statsStorageError')}</p>`:''}${studyMetricCards(data)}${studyCharts(data.days,statsRenderedDay,'self')}<div class="stats-details"><p>${t('statsTimeRule')}</p><p>${t('statsCountRule')}</p><p>${t('statsStreakRule')}</p></div></section>`;
 }
 function studyCharts(days,today,scope){
   const recent=recentStudyDays(days,today),maximum=Math.max(...recent.map(day=>day.ms),1),dateFormat=new Intl.DateTimeFormat(lang==='ja'?'ja-JP':'en-US',{month:'numeric',day:'numeric',timeZone:'UTC'});
@@ -367,7 +370,7 @@ function calendarView(data,scope,today){
 }
 function guideView() {
   const section=(id,symbol,title,items)=>`<section class="guide-section" aria-labelledby="${id}"><h2 id="${id}">${icon(symbol)}${t(title)}</h2><ul>${items.map(key=>`<li>${e(t(key))}</li>`).join('')}</ul></section>`;
-  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizSpeech','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls','guideCardsSpeech','guideCardIpa','guideCardsResume'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-personal','star','personalTools',['guideWeak','guideChoiceOptions','guideWeakRecovery','guideFavorites','guideSearch','guidePersonalStorage'])}${section('guide-records','stats','stats',['guideStats','guideCalendar','statsTimeRule','statsCountRule','statsStreakRule'])}${section('guide-rankings','trophy','rankings',['guideRankings','rankingAccuracyRule','guideRankingPrivacy'])}${section('guide-settings','settings','settings',['guideSettings','guideDeleteData','guideSounds'])}${state.authenticated?section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideEditIpa','guideTransfers','guideEditShared'])+section('guide-admin','settings','admin',['guideAdministration']):''}</article>`;
+  return `<article class="guide-view"><h1>${t('guideTitle')}</h1>${section('guide-quiz','quiz','quiz',['guideQuizStart','guideQuizModes','guideQuizTimer','guideQuizSpeech','guideQuizResults'])}${section('guide-cards','cards','flashcards',['guideCardsStart','guideCardsControls','guideCardsSpeech','guideCardIpa','guideCardsResume'])}<section class="guide-section" aria-labelledby="guide-clears"><h2 id="guide-clears">${icon('trophy')}${t('guideClearTitle')}</h2><p>${t('guideClearRule')}</p><ul class="guide-legend">${['none','en-ja','ja-en','both'].map(status=>`<li class="study-${status}"><span class="guide-swatch">${icon('book')}</span><span>${e(t(status==='none'?'notCleared':status==='both'?'bothCleared':'directionCleared',{direction:status==='en-ja'?'EN → JP':'JP → EN'}))}</span></li>`).join('')}</ul><p>${t('guideClearStorage')}</p><p>${t('guideClearEdits')}</p></section>${section('guide-personal','star','personalTools',['guideWeak','guideChoiceOptions','guideWeakRecovery','guideFavorites','guideSearch','guidePersonalStorage'])}${section('guide-records','stats','stats',['guideStats','guideCalendar','statsTimeRule','statsCountRule','statsStreakRule'])}${section('guide-rankings','trophy','rankings',['guideRankings','rankingAccuracyRule','guideRankingPrivacy'])}${section('guide-account','user','account',['guideAccount','accountRecoveryWarning'])}${section('guide-settings','settings','settings',['guideSettings','guideDeleteData','guideSounds'])}${state.authenticated?section('guide-edit','edit','edit',['guideEditAccess','guideEditManage','guideEditIpa','guideTransfers','guideEditShared'])+section('guide-admin','settings','admin',['guideAdministration']):''}</article>`;
 }
 function readStudyProgress() {
   try { const value=JSON.parse(storage.get('wordnest-progress','{}'));return value && typeof value==='object' && !Array.isArray(value)?value:{}; } catch { return {}; }
@@ -921,11 +924,11 @@ const learningDataTypes={
   all:{label:'allLearningData',help:'allLearningDataHelp'}
 };
 function settingsDataContent() {
-  return `<section class="settings-section settings-data" aria-labelledby="learning-data-title"><h3 id="learning-data-title">${t('deleteLearningData')}</h3><p class="settings-data-note">${t('learningDataScope')}</p><div class="settings-data-list">${Object.entries(learningDataTypes).filter(([type])=>type!=='all').map(([type,{label}])=>`<div class="settings-data-row"><span>${t(label)}</span><button class="btn ghost small" data-delete-learning="${type}" aria-label="${e(t('deleteNamedData',{name:t(label)}))}">${t('delete')}</button></div>`).join('')}</div><button class="btn danger" data-delete-learning="all">${icon('trash')}${t('deleteAllLearningData')}</button></section>`;
+  return `<section class="settings-section settings-data" aria-labelledby="learning-data-title"><h3 id="learning-data-title">${t('deleteLearningData')}</h3><p class="settings-data-note">${t(account.user?'accountDataScope':'learningDataScope')}</p><div class="settings-data-list">${Object.entries(learningDataTypes).filter(([type])=>type!=='all').map(([type,{label}])=>`<div class="settings-data-row"><span>${t(label)}</span><button class="btn ghost small" data-delete-learning="${type}" aria-label="${e(t('deleteNamedData',{name:t(label)}))}">${t('delete')}</button></div>`).join('')}</div><button class="btn danger" data-delete-learning="all">${icon('trash')}${t('deleteAllLearningData')}</button></section>`;
 }
 async function deleteLearningData(type) {
   const target=learningDataTypes[type];if(!target)return;
-  const confirmed=await dialog(`<button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${e(t('deleteDataTitle',{name:t(target.label)}))}</h2><p>${t(target.help)}</p><p>${t('deleteDataWarning')}</p><div class="modal-actions"><button class="btn ghost" data-dialog="cancel">${t('cancel')}</button><button class="btn danger" data-dialog="confirm">${t('delete')}</button></div>`);
+  const confirmed=await dialog(`<button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${e(t('deleteDataTitle',{name:t(target.label)}))}</h2><p>${t(target.help)}</p>${account.user?`<p>${t('accountDataScope')}</p>`:''}<p>${t('deleteDataWarning')}</p><div class="modal-actions"><button class="btn ghost" data-dialog="cancel">${t('cancel')}</button><button class="btn danger" data-dialog="confirm">${t('delete')}</button></div>`);
   if(!confirmed)return;
   try {
     if(type==='clears' || type==='all'){if(!learningStorage)throw new Error('Storage unavailable');learningStorage.removeItem('wordnest-progress');}
@@ -933,11 +936,82 @@ async function deleteLearningData(type) {
     if(type==='weak' || type==='all')personal.reset('question');
     if(type==='favorites' || type==='all')personal.reset('favorite');
     if(type==='statistics' || type==='all'){learning.reset();try{await ranking.sync(true);}catch{toast(t('rankingResetPending'));}}
+    if(account.user)await account.sync();
     render();toast(t(ranking.error && ['statistics','all'].includes(type)?'rankingResetPending':'learningDataDeleted'));
   } catch {render();toast(t('deleteDataError'));}
 }
+function switchStudyAccount(){
+  learning.setActive(false);
+  personal=new PersonalWords(learningStorage);bookmarks=new FlashcardBookmarks(learningStorage);learning=new LearningTracker({storage:learningStorage,now:()=>Date.now()});
+  ranking.profile=null;ranking.lastSent='';ranking.error='';state.rankingData=null;state.adminStats=null;
+  if(state.route==='home'){state.screen='home';state.quiz=null;state.cards=null;state.collection=null;}
+  render();
+}
+function accountSynced(){
+  personal.memory.clear();personal.syncResets();bookmarks.pending.clear();learning.syncReset();
+  refreshAccountSettings();
+  if(!learningScreen() && !$('#modal')?.open && (state.route==='stats' || state.route==='home' && state.screen==='home'))render();
+}
+function accountSettingsContent(){
+  const error=account.error && messages.en[account.error]?t(account.error):account.error?t('accountSyncPending'):'';
+  return `<h3>${t('account')}</h3><p>${t(account.user?'accountSignedInHelp':'accountGuestHelp')}</p>${account.user?`<p class="account-id"><span>${t('accountLoginId')}</span><strong>${e(account.user.loginId)}</strong></p><small role="status">${e(error || (account.lastSync?t('accountSynced'):t('accountSyncPending')))}</small>`:''}<button class="btn ghost" data-account-open>${t(account.user?'accountManage':'accountLogin')}</button>`;
+}
+function refreshAccountSettings(){const section=$('#account-settings');if(section)section.innerHTML=accountSettingsContent();}
+const accountClose=()=>`<button type="button" class="icon-btn modal-close" data-account-close aria-label="${t('close')}">${icon('close')}</button>`;
+async function recoveryCodeDialog(code,recovered=false){
+  await dialog(`<h2 id="modal-title" tabindex="-1">${t('accountRecoveryTitle')}</h2><p>${t(recovered?'accountRecoveryReplaced':'accountRecoveryHelp')}</p><label>${t('accountRecoveryCode')}<textarea class="account-recovery-code" rows="3" readonly spellcheck="false" autocomplete="off">${e(code)}</textarea></label><p>${t('accountRecoveryWarning')}</p><div class="modal-actions"><button class="btn primary" data-dialog="confirm">${t('accountRecoverySaved')}</button></div>`,()=>{modal.oncancel=event=>event.preventDefault();});
+}
+async function accountDialog(initial){
+  let mode=initial || (account.user && !account.expired?'manage':'login');
+  for(;;){
+    const signed=!!account.user,register=mode==='register',recover=mode==='recover',change=mode==='password',manage=mode==='manage';
+    const title=manage?'accountManage':register?'accountCreate':recover?'accountRecover':change?'accountChangePassword':'accountLogin';
+    const input=(id,label,type='text',attributes='')=>`<label for="${id}">${t(label)}<input id="${id}" type="${type}" ${attributes} required></label>`;
+    const content=manage?`${accountClose()}<h2 id="modal-title" tabindex="-1">${t(title)}</h2><p class="account-id"><span>${t('accountLoginId')}</span><strong>${e(account.user.loginId)}</strong></p><p>${t('accountSignedInHelp')}</p><p>${e(account.error && messages.en[account.error]?t(account.error):t('accountSynced'))}</p><p class="error" id="account-error" role="alert" hidden></p><div class="account-actions"><button class="btn ghost" data-account-command="sync">${t('accountSyncNow')}</button><button class="btn ghost" data-account-mode="password">${t('accountChangePassword')}</button>${Object.keys(account.guestEntries()).some(key=>!key.startsWith('wordnest-reset-'))?`<button class="btn ghost" data-account-command="import">${t('accountImportGuest')}</button><p>${t('accountImportHelp')}</p>`:''}<button class="btn ghost" data-account-command="logout">${t('accountLogout')}</button></div>`:`${accountClose()}<h2 id="modal-title" tabindex="-1">${t(title)}</h2><p>${t(register?'accountCreateHelp':recover?'accountRecoverHelp':change?'accountPasswordHelp':'accountLoginHelp')}</p><form id="account-form" class="account-form">${change?'':input('account-login-id','accountLoginId','text',`value="${e(account.user?.loginId || '')}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" minlength="3" maxlength="32" pattern="[a-zA-Z0-9_]{3,32}"`)}${register?`<small>${t('accountIdHelp')}</small>`:''}${recover?input('account-recovery','accountRecoveryCode','text','autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="80"'):change?input('account-current-password','accountCurrentPassword','password','autocomplete="current-password" maxlength="128"'):''}${input('account-password',recover || change?'accountNewPassword':'accountPassword','password',`autocomplete="${register || recover || change?'new-password':'current-password'}" maxlength="128" ${register || recover || change?'minlength="15"':''}`)}${register || recover || change?`<small>${t('accountPasswordRule')}</small>${input('account-confirm','accountConfirmPassword','password','autocomplete="new-password" minlength="15" maxlength="128"')}`:''}${register?`${input('account-display-name','profileName','text',`value="${e(ranking.preferences()?.name || '')}" autocomplete="nickname" maxlength="40"`)}<small>${t('accountDisplayNameHelp')}</small><label class="account-check"><input type="checkbox" id="account-listed" ${ranking.preferences()?.choice==='joined'?'checked':''}>${t('rankingParticipation')}</label>`:''}<p class="error" id="account-error" role="alert" hidden></p><div class="modal-actions"><button class="btn primary" type="submit">${t(register?'accountCreate':recover?'accountResetPassword':change?'save':'accountLogin')}</button></div></form><div class="account-links">${account.user && account.expired?`<button class="text-btn" data-account-command="logout">${t('accountLogout')}</button>`:''}${mode==='login'?`<button class="text-btn" data-account-mode="register">${t('accountCreate')}</button><button class="text-btn" data-account-mode="recover">${t('accountForgotPassword')}</button>`:`<button class="text-btn" data-account-mode="${signed && !account.expired?'manage':'login'}">${t('back')}</button>`}</div>`;
+    const result=await dialog(content,finish=>{
+      let busy=false;
+      const run=async work=>{
+        if(busy)return;busy=true;const controls=$$('button,input',modal);controls.forEach(control=>control.disabled=true);const error=$('#account-error',modal);error.hidden=true;
+        try{await work();}catch(err){error.textContent=message(err);error.hidden=false;}finally{busy=false;controls.filter(control=>control.isConnected).forEach(control=>control.disabled=false);}
+      };
+      modal.oncancel=event=>{event.preventDefault();if(!busy)finish(false);};
+      modal.onclick=event=>{
+        if(busy)return;
+        const navigation=event.target.closest('[data-account-mode]'),command=event.target.closest('[data-account-command]');
+        if(event.target.closest('[data-account-close]')){finish(false);return;}
+        if(navigation){finish({mode:navigation.dataset.accountMode});return;}
+        if(command)run(async()=>{
+          const value=command.dataset.accountCommand;
+          if(value==='logout'){await account.logout();finish(false);return;}
+          if(value==='import'){await account.importGuest();await ranking.sync(true);toast(t('accountImportDone'));}
+          else{await account.sync();await ranking.sync(true);toast(t('accountSynced'));}
+          finish({mode:'manage'});
+        });
+      };
+      modal.onsubmit=event=>{
+        if(event.target.id!=='account-form')return;event.preventDefault();if(busy)return;
+        const loginId=$('#account-login-id',modal)?.value,password=$('#account-password',modal).value,confirmation=$('#account-confirm',modal)?.value,name=$('#account-display-name',modal)?.value,enabled=$('#account-listed',modal)?.checked,currentPassword=$('#account-current-password',modal)?.value,recoveryCode=$('#account-recovery',modal)?.value;
+        run(async()=>{
+          if(confirmation!==undefined && confirmation!==password)throw new Error('accountPasswordMismatch');
+          let response;
+          if(register)response=await account.register({loginId,password,name,enabled});
+          else if(recover)response=await account.recover(loginId,recoveryCode,password);
+          else if(change)response=await account.changePassword(currentPassword,password);
+          else response=await account.login(loginId,password);
+          event.target.reset();
+          if(!recover)await ranking.sync(true).catch(()=>{});
+          finish({mode:recover?'login':'manage',recoveryCode:response?.recoveryCode,replaced:recover || change});
+        });
+      };
+    });
+    if(!result)return;
+    if(result.recoveryCode)await recoveryCodeDialog(result.recoveryCode,result.replaced);
+    mode=result.mode;
+  }
+}
+
 function settingsContent() {
-  return `<button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t('settings')}</h2><div class="settings-section"><label for="theme-choice">${t('appearance')}<select id="theme-choice">${['auto','light','dark'].map(value=>`<option value="${value}" ${themeChoice===value?'selected':''}>${t(value)}</option>`).join('')}</select></label>${['light','dark'].map(mode=>`<label for="${mode}-palette">${t(mode==='light'?'lightTheme':'darkTheme')}<select id="${mode}-palette">${paletteChoices[mode].map(value=>`<option value="${value}" ${(mode==='light'?lightPalette:darkPalette)===value?'selected':''}>${t('palette_'+value)}</option>`).join('')}</select></label>`).join('')}<label for="settings-language">${t('language')}<select id="settings-language"><option value="auto" ${languageChoice==='auto'?'selected':''}>${t('auto')}</option><option value="en" ${languageChoice==='en'?'selected':''}>English</option><option value="ja" ${languageChoice==='ja'?'selected':''}>日本語</option></select></label><button class="btn ghost" data-settings-sound aria-pressed="${soundEnabled}">${icon(soundEnabled?'sound':'mute')}${t(soundEnabled?'soundOn':'soundOff')}</button></div><section class="settings-section" id="ranking-settings" aria-labelledby="ranking-settings-title" data-state="${e(rankingSettingsSignature())}">${rankingSettingsContent()}</section>${settingsDataContent()}<section class="settings-section settings-admin" id="admin-controls" aria-labelledby="admin-settings-title" data-state="${e(adminSignature())}">${adminSettingsContent()}</section><div class="modal-actions"><button class="btn primary" data-dialog="cancel">${t('close')}</button></div>`;
+  return `<button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t('settings')}</h2><section class="settings-section" id="account-settings">${accountSettingsContent()}</section><div class="settings-section"><label for="theme-choice">${t('appearance')}<select id="theme-choice">${['auto','light','dark'].map(value=>`<option value="${value}" ${themeChoice===value?'selected':''}>${t(value)}</option>`).join('')}</select></label>${['light','dark'].map(mode=>`<label for="${mode}-palette">${t(mode==='light'?'lightTheme':'darkTheme')}<select id="${mode}-palette">${paletteChoices[mode].map(value=>`<option value="${value}" ${(mode==='light'?lightPalette:darkPalette)===value?'selected':''}>${t('palette_'+value)}</option>`).join('')}</select></label>`).join('')}<label for="settings-language">${t('language')}<select id="settings-language"><option value="auto" ${languageChoice==='auto'?'selected':''}>${t('auto')}</option><option value="en" ${languageChoice==='en'?'selected':''}>English</option><option value="ja" ${languageChoice==='ja'?'selected':''}>日本語</option></select></label><button class="btn ghost" data-settings-sound aria-pressed="${soundEnabled}">${icon(soundEnabled?'sound':'mute')}${t(soundEnabled?'soundOn':'soundOff')}</button></div><section class="settings-section" id="ranking-settings" aria-labelledby="ranking-settings-title" data-state="${e(rankingSettingsSignature())}">${rankingSettingsContent()}</section>${settingsDataContent()}<section class="settings-section settings-admin" id="admin-controls" aria-labelledby="admin-settings-title" data-state="${e(adminSignature())}">${adminSettingsContent()}</section><div class="modal-actions"><button class="btn primary" data-dialog="cancel">${t('close')}</button></div>`;
 }
 async function settingsDialog() {
   let scroll=0;
@@ -954,6 +1028,7 @@ async function settingsDialog() {
       };
       modal.onclick=event=>{
         const deletion=event.target.closest('[data-delete-learning]');
+        if(event.target.closest('[data-account-open]')){finish('account');return;}
         if(event.target.closest('[data-ranking-private-name]')){finish('private-name');return;}
         if(event.target.closest('[data-ranking-settings]')){finish(ranking.preferences()?.choice==='joined'?'ranking-off':'ranking-name');return;}
         if(deletion){finish({deleteData:deletion.dataset.deleteLearning,scroll:modal.scrollTop});return;}
@@ -962,6 +1037,7 @@ async function settingsDialog() {
         if(event.target.closest('[data-settings-sound]')){toggleSound();modal.innerHTML=settingsContent();$('#modal-title',modal)?.focus({preventScroll:true});return;}
       };
     });
+    if(action==='account'){await accountDialog();continue;}
     if(action==='private-name'){await rankingNameDialog(false,true);continue;}
     if(action==='ranking-name'){await rankingNameDialog();continue;}
     if(action==='ranking-off'){ranking.decline().then(()=>{if(state.route==='rankings')refreshRankings(false);}).catch(error=>toast(message(error)));continue;}
@@ -1090,6 +1166,7 @@ const actions={
   sound(){toggleSound();render();},
   async reload(){if(!await discardGuard())return;state.dirty=false;state.draft=null;state.selected.clear();state.loaded=false;state.screen='home';state.quiz=null;await load();},
   open(button){state.collection=null;state.setId=button.dataset.id;state.screen='activity';state.cards=null;state.error='';render();window.scrollTo(0,0);},
+  account(){accountDialog();},
   'back-home'(){ranking.sync().catch(()=>{});state.collection=null;state.screen='home';state.quiz=null;state.cards=null;cancelAnimationFrame(confettiFrame);const c=$('#confetti');c.getContext('2d')?.clearRect(0,0,c.width,c.height);render();window.scrollTo(0,0);},
   'back-activity'(){if(state.collection){actions['back-home']();return;}state.screen='activity';state.error='';render();},
   activity(button){state.activity=button.dataset.activity;state.screen='mode';state.order='original';state.error='';render();},
@@ -1254,7 +1331,7 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState!==
 window.addEventListener('pageshow',()=>{syncLearning();updateQuizClock();});
 window.addEventListener('pagehide',()=>{stopEffects();stopSpeech();closeIpaVariants();learning.setActive(false);ranking.flushOnExit();});
 window.addEventListener('blur',()=>{stopSpeech();closeIpaVariants();learning.setActive(false);});
-window.addEventListener('focus',syncLearning);
+window.addEventListener('focus',()=>{syncLearning();if(account.user)ranking.sync(true).catch(()=>{});});
 for(const type of ['pointerdown','click','keydown','input','scroll'])document.addEventListener(type,()=>{if(learning.active)learning.touch();},{capture:true,passive:true});
 let rankingHeartbeatAt=0;
 function learningHeartbeat(){learning.tick();learning.persist();if(Date.now()-rankingHeartbeatAt>=30000){rankingHeartbeatAt=Date.now();ranking.sync().then(()=>{if(state.route==='rankings')refreshRankings(false);}).catch(()=>{});}if(state.route==='stats' && statsRenderedDay!==localDay(Date.now()))render();setTimeout(learningHeartbeat,1000);}
@@ -1272,7 +1349,16 @@ window.addEventListener('storage',event=>{
   else if(['wordnest-reset-question','wordnest-reset-favorite'].includes(event.key)){personal.syncResets();if(state.route==='home')render();}
 });
 
-window.addEventListener('online',()=>ranking.sync(true).then(()=>{if(state.route==='rankings')refreshRankings(false);}).catch(()=>{}));
+window.addEventListener('online',()=>account.initialize().then(()=>ranking.sync(true)).then(()=>{if(state.route==='rankings')refreshRankings(false);}).catch(()=>{}));
 window.addEventListener('storage',event=>{if(event.key==='wordnest-ranking-v1' || event.key==='wordnest-reset-learning'){refreshRankingSettings();ranking.sync(true).then(()=>{if(state.route==='rankings')refreshRankings(false);}).catch(()=>{});if(state.route==='rankings')render();}});
 
 window.addEventListener('storage',event=>{if((event.key?.startsWith('wordnest-cards-v1:') || event.key==='wordnest-reset-cards' || event.key===null) && state.route==='home' && ['mode','order'].includes(state.screen))render();});
+
+window.addEventListener('storage',event=>{
+  if(event.key==='wordnest-account-v1'){
+    const user=account.cachedUser();if(user?.id!==account.user?.id){learning.setActive(false);account.user=user;account.expired=false;switchStudyAccount();ranking.sync(true).catch(()=>{});}
+  }else if(account.user && event.key?.startsWith(`wordnest-user:${account.user.id}:data:`)){
+    personal.memory.clear();personal.syncResets();learning.syncReset();bookmarks.pending.clear();
+    if(!learningScreen() && !modal.open && ['home','stats'].includes(state.route))render();
+  }
+});

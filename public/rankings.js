@@ -3,8 +3,8 @@ export const rankingMetrics={totalMs:'totalTime',averageMs:'averageTime',answere
 export function rankingName(value){const name=String(value || '').trim().normalize('NFC');if([...name].length<1 || [...name].length>20 || /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/.test(name))throw new Error('invalidRankingName');return name;}
 export function rankingNameKey(value){return String(value).normalize('NFKC').replace(/[\u200b-\u200d\ufeff]/g,'').replace(/\s+/g,' ').trim().toLowerCase();}
 export class RankingClient {
-  constructor({storage,fetch=globalThis.fetch,snapshot,onChange=()=>{},crypto=globalThis.crypto}={}){
-    this.storage=storage;this.fetch=fetch;this.snapshot=snapshot;this.onChange=onChange;this.crypto=crypto;this.queue=Promise.resolve();this.profile=null;this.lastSent='';this.error='';this.lastCheckedAt=0;
+  constructor({storage,fetch=globalThis.fetch,snapshot,onChange=()=>{},crypto=globalThis.crypto,account}={}){
+    this.account=account;this.storage=storage;this.fetch=fetch;this.snapshot=snapshot;this.onChange=onChange;this.crypto=crypto;this.queue=Promise.resolve();this.profile=null;this.lastSent='';this.error='';this.lastCheckedAt=0;
   }
   preferences(){try{const value=JSON.parse(this.storage?.getItem(RANKING_KEY) || 'null');return value && ['joined','declined'].includes(value.choice)?value:null;}catch{return null;}}
   save(value){try{if(!this.storage)throw new Error();this.storage.setItem(RANKING_KEY,JSON.stringify(value));}catch{throw new Error('rankingStorageError');}this.onChange();}
@@ -20,11 +20,12 @@ export class RankingClient {
     this.save({...previous,token,name,choice:previous?.choice || 'declined',pending:this.token()});return this.sync(true);
   }
   async request(path,method='GET',data,token,keepalive=false){
+    if(this.account?.signoutPending && !path.startsWith('/api/rankings'))throw new Error('networkError');
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);
     try{
-      const response=await this.fetch(path,{method,credentials:'same-origin',signal:controller.signal,keepalive,headers:{...(data?{'Content-Type':'application/json'}:{}),...(token?{Authorization:`Bearer ${token}`}:{})},...(data?{body:JSON.stringify(data)}:{})});
+      const response=await this.fetch(path,{method,credentials:'same-origin',signal:controller.signal,keepalive,headers:{...(this.account?.user?{'X-Wordnest-Account':this.account.user.id}:{}),...(data?{'Content-Type':'application/json'}:{}),...(token?{Authorization:`Bearer ${token}`}:{})},...(data?{body:JSON.stringify(data)}:{})});
       const result=await response.json();if(!response.ok)throw new Error(result.error || 'serverError');return result;
-    }catch(error){if(error?.message && ['rankingConflict','rankingDisabled','rankingUnauthorized','rankingRateLimit','invalidRankingData','invalidRankingName','rankingStorageError','serverError','rankingNoticeRequired','rankingNameUnchanged'].includes(error.message))throw error;throw new Error('networkError');}
+    }catch(error){if(error?.message && ['accountSessionExpired','rankingConflict','rankingDisabled','rankingUnauthorized','rankingRateLimit','invalidRankingData','invalidRankingName','rankingStorageError','serverError','rankingNoticeRequired','rankingNameUnchanged'].includes(error.message))throw error;throw new Error('networkError');}
     finally{clearTimeout(timeout);}
   }
   remember(profile){
@@ -39,7 +40,7 @@ export class RankingClient {
   }
   acknowledgeNotice(noticeId){
     const work=this.queue.catch(()=>{}).then(async()=>{
-      const prefs=this.preferences();if(!prefs?.token)return;
+      const prefs=this.preferences();if(!prefs?.token && !this.account?.user)return;
       const result=await this.request('/api/ranking/notice','POST',{revision:this.profile?.revision || 0,noticeId},prefs.token);
       this.remember(result.profile);return result;
     });this.queue=work;return work;
@@ -49,6 +50,8 @@ export class RankingClient {
     this.queue=work;return work;
   }
   async flush(force){
+    if(this.account?.signoutPending)return;
+    if(this.account?.user)return this.flushAccount();
     let prefs=this.preferences();if(!prefs)return;
     // Upgrade browsers that previously declined before a server identity was created.
     if(!prefs.token || !prefs.name){const token=prefs.token || this.token();this.save({...prefs,token,name:prefs.name || `Learner ${this.token().slice(0,8)}`,pending:this.token()});prefs=this.preferences();}
@@ -86,8 +89,35 @@ export class RankingClient {
       throw new Error('rankingConflict');
     }catch(error){this.error=error.message;this.onChange();throw error;}
   }
+  async flushAccount(){
+    if(this.account.expired)throw new Error('accountSessionExpired');
+    try{
+      await this.account.sync();
+      for(let attempt=0;attempt<4;attempt++){
+        const response=await this.request('/api/ranking/profile'),profile=response.profile;
+        if(!profile)return;
+        let prefs=this.preferences();
+        if(!prefs){this.save({id:profile.id,name:profile.name,choice:profile.enabled?'joined':'declined',pending:null,notice:profile.notice});prefs=this.preferences();}
+        if(profile.notice){
+          const rejoining=prefs.pending && prefs.choice==='joined' && prefs.notice?.id===profile.notice.id && profile.notice.acknowledged && rankingNameKey(prefs.name)!==rankingNameKey(profile.notice.removedName);
+          if(!rejoining){this.applyRemoval(profile);prefs=this.preferences();}
+        }
+        if(prefs.pending){
+          const intent=prefs.pending;
+          try{
+            const result=await this.request('/api/ranking/profile','POST',{revision:profile.revision,name:prefs.name,enabled:prefs.choice==='joined',timezone:this.snapshot().timezone,noticeId:prefs.notice?.id});
+            if(this.preferences()?.pending!==intent)continue;
+            this.save({...this.preferences(),pending:null});this.remember(result.profile);this.error='';this.onChange();return result;
+          }catch(error){if(error.message==='rankingConflict')continue;throw error;}
+        }
+        this.profile=profile;this.save({...prefs,id:profile.id,name:profile.name,choice:profile.enabled?'joined':'declined',pending:null,notice:profile.notice});this.lastCheckedAt=Date.now();this.error='';return {profile};
+      }
+      throw new Error('rankingConflict');
+    }catch(error){this.error=error.message;this.onChange();throw error;}
+  }
   async list(metric){const prefs=this.preferences(),query=new URLSearchParams({metric});if(prefs?.choice==='joined' && prefs.id)query.set('self',prefs.id);return this.request('/api/rankings?'+query);}
   flushOnExit(){
+    if(this.account?.user){this.account.flushOnExit();return;}
     const prefs=this.preferences();if(!prefs?.token || prefs.pending || !this.profile)return;
     const snapshot=this.snapshot();if(snapshot.epoch!==this.profile.epoch)return;
     const body=JSON.stringify({...snapshot,revision:this.profile.revision});

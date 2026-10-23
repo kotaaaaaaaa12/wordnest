@@ -6,6 +6,7 @@ import * as core from '../public/core.js';
 import * as statistics from '../public/stats.js';
 import * as personalTools from '../public/personal.js';
 import * as rankingTools from '../public/rankings.js';
+import * as accountTools from '../public/accounts.js';
 import { icon } from '../public/icons.js';
 import { messages, translator } from '../public/i18n.js';
 import * as zip from 'fflate';
@@ -14,7 +15,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function create({dark=false,prefs={}}={}) {
   const dom=new JSDOM('<meta name="theme-color"><div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/#/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window,listeners=[];
   const system={matches:dark,addEventListener(type,callback){if(type==='change')listeners.push(callback);}};
-  Object.assign(w,core,statistics,personalTools,rankingTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>system});w.document.hasFocus=()=>true;
+  Object.assign(w,core,statistics,personalTools,rankingTools,accountTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>system});w.document.hasFocus=()=>true;
   w.Audio=class{play(){return Promise.resolve();}};
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
   w.fetch=async path=>({ok:true,status:200,json:async()=>path==='/api/sets'?{sets:[],orderRevision:0}:{authenticated:false,configured:true}});

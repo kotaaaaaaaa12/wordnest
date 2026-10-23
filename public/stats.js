@@ -25,7 +25,9 @@ export function summarizeLearning(shards,timestamp=Date.now()) {
       if(!dayDate(key) || !value || typeof value!=='object')continue;
       const day=days[key] ||= {answered:0,correct:0,flips:0,intervals:[]};
       day.answered+=number(value.answered);day.correct+=Math.min(number(value.correct),number(value.answered));day.flips+=number(value.flips);
-      if(Array.isArray(value.intervals))day.intervals.push(...value.intervals.filter(span=>Array.isArray(span) && localDay(span[0])===key && localDay(span[1]-1)===key));
+      // Preserve the study date recorded by each device, including other timezones.
+      const midnight=Date.parse(key+'T00:00:00Z');
+      if(Array.isArray(value.intervals))day.intervals.push(...value.intervals.filter(span=>Array.isArray(span) && span.length===2 && span.every(Number.isFinite) && span[0]>=midnight-86400000 && span[1]<=midnight+2*86400000));
     }
   }
   for(const day of Object.values(days)){day.ms=mergeLearningIntervals(day.intervals).reduce((sum,[start,end])=>sum+end-start,0);delete day.intervals;}
