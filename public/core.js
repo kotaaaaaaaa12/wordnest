@@ -17,10 +17,67 @@ export function balanceAnswerPositions(questions, random = Math.random) {
     return {...question,options};
   });
 }
-export function normalizeIpa(value){
-  let text=value.trim();
-  while((text.startsWith('[') && text.endsWith(']')) || (text.startsWith('/') && text.endsWith('/')))text=text.slice(1,-1).trim();
-  return text;
+function ipaBounds(value){
+  let start=value.length-value.trimStart().length,end=value.trimEnd().length;
+  while(start<end && ((value[start]==='[' && value[end-1]===']') || (value[start]==='/' && value[end-1]==='/'))){
+    start++;end--;
+    while(start<end && /\s/u.test(value[start]))start++;
+    while(end>start && /\s/u.test(value[end-1]))end--;
+  }
+  return {start,end:Math.max(start,end),text:value.slice(start,end)};
+}
+export const normalizeIpa=value=>ipaBounds(value).text;
+const ipaSegmenter=typeof Intl.Segmenter==='function'?new Intl.Segmenter('en',{granularity:'grapheme'}):null;
+function ipaCharacters(text){
+  if(ipaSegmenter)return [...ipaSegmenter.segment(text)].map(({index,segment})=>[index,index+segment.length]);
+  const characters=[];let index=0;
+  for(const char of text){if(/\p{Mark}/u.test(char) && characters.length)characters.at(-1)[1]+=char.length;else characters.push([index,index+char.length]);index+=char.length;}
+  return characters;
+}
+function ipaRange(text,start,end){
+  const chars=ipaCharacters(text).filter(([a,b])=>a<end && b>start);
+  return chars.length?[chars[0][0],chars.at(-1)[1]]:[start,start];
+}
+function ipaFlags(text,ranges){
+  const flags=Array(text.length).fill(false);for(const [start,end] of ranges)flags.fill(true,start,end);return flags;
+}
+function ipaFlagRanges(flags){
+  const ranges=[];for(let i=0;i<flags.length;i++)if(flags[i]){const start=i;while(flags[i+1])i++;ranges.push([start,i+1]);}return ranges;
+}
+export function ipaItalicRanges(text,ranges=[]){
+  if(!Array.isArray(ranges) || ranges.length>200 || ranges.some(range=>!Array.isArray(range) || range.length!==2 || !Number.isInteger(range[0]) || !Number.isInteger(range[1]) || range[0]<0 || range[0]>=range[1] || range[1]>text.length))throw new Error('invalidIpaStyle');
+  return ipaFlagRanges(ipaFlags(text,ranges.map(([start,end])=>ipaRange(text,start,end))));
+}
+export function normalizeIpaData(value,ranges){
+  const normalized=ipaBounds(value),italic=ipaItalicRanges(value,ranges).map(([start,end])=>[Math.max(start,normalized.start)-normalized.start,Math.min(end,normalized.end)-normalized.start]).filter(([start,end])=>end>start);
+  return {ipa:normalized.text,...(italic.length?{ipaItalic:ipaItalicRanges(normalized.text,italic)}:{})};
+}
+export function ipaRuns(value,ranges){
+  const data=normalizeIpaData(value,ranges),flags=ipaFlags(data.ipa,data.ipaItalic||[]),runs=[];
+  for(let start=0;start<data.ipa.length;){let end=start+1;while(end<data.ipa.length && flags[end]===flags[start])end++;runs.push({text:data.ipa.slice(start,end),italic:flags[start]});start=end;}
+  return runs;
+}
+export function toggleIpaItalic(text,ranges,start,end){
+  const normalized=ipaItalicRanges(text,ranges);
+  if(!Number.isInteger(start) || !Number.isInteger(end) || start<0 || end>text.length || start>=end)return {ipaItalic:normalized,selection:[start,end]};
+  const selection=ipaRange(text,start,end),flags=ipaFlags(text,normalized),enabled=!flags.slice(...selection).every(Boolean);
+  flags.fill(enabled,...selection);return {ipaItalic:ipaFlagRanges(flags),selection};
+}
+export function remapIpaItalic(before,after,ranges,hint){
+  const normalized=ipaItalicRanges(before,ranges);if(before===after)return normalized;
+  let start=hint?.start,end=hint?.end,added=after.length-before.length+end-start;
+  if(start===end && after.length<before.length && hint?.inputType?.startsWith('delete')){
+    if(hint.inputType.endsWith('Backward'))start-=before.length-after.length;
+    else if(hint.inputType.endsWith('Forward'))end+=before.length-after.length;
+    added=after.length-before.length+end-start;
+  }
+  if(!Number.isInteger(start) || !Number.isInteger(end) || start<0 || end<start || end>before.length || added<0 || after.slice(0,start)!==before.slice(0,start) || after.slice(start+added)!==before.slice(end)){
+    start=0;while(start<before.length && start<after.length && before[start]===after[start])start++;
+    end=before.length;let suffix=after.length;while(end>start && suffix>start && before[end-1]===after[suffix-1]){end--;suffix--;}
+    added=suffix-start;
+  }
+  const flags=ipaFlags(before,normalized),inherit=end>start?flags.slice(start,end).every(Boolean):start>0 && !!flags[start-1] && !!flags[start];
+  return ipaItalicRanges(after,ipaFlagRanges([...flags.slice(0,start),...Array(added).fill(inherit),...flags.slice(end)]));
 }
 export function validateSet(input) {
   if (!input || typeof input !== 'object' || typeof input.title !== 'string' || !input.title.trim() || input.title.trim().length > 150) throw new Error('invalidTitle');
@@ -29,11 +86,11 @@ export function validateSet(input) {
   const words = input.words.map(w => {
     if (!w || typeof w.english !== 'string' || typeof w.meaning !== 'string' || !w.english.trim() || !w.meaning.trim() || w.english.length > 150 || w.meaning.length > 300 || (w.explanation !== undefined && typeof w.explanation !== 'string') || (w.explanation || '').length > 2000) throw new Error('invalidWords');
     if(w.ipa!==undefined && (typeof w.ipa!=='string' || w.ipa.length>200 || /[\u0000-\u001f\u007f]/.test(w.ipa)))throw new Error('invalidIpa');
-    const ipa=normalizeIpa(w.ipa || '');
+    const pronunciation=normalizeIpaData(w.ipa || '',w.ipaItalic);
     const key = normalize(w.english);
     if (seen.has(key)) throw new Error('duplicateWord');
     seen.add(key);
-    return { english: w.english.trim(), meaning: w.meaning.trim(), explanation: (w.explanation || '').trim(),...(ipa?{ipa}:{}) };
+    return { english: w.english.trim(), meaning: w.meaning.trim(), explanation: (w.explanation || '').trim(),...(pronunciation.ipa?pronunciation:{}) };
   });
   return { title: input.title.trim(), words };
 }

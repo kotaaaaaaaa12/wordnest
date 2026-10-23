@@ -146,3 +146,41 @@ test('accent candidates stay inside the visual viewport above the keyboard and c
     await hold(h,key);h.w.dispatchEvent(new h.w.Event('resize'));assert.equal(h.find('.ipa-variants'),null);
   }finally{await h.close();}
 });
+test('individual IPA characters toggle italics with a normal default, whole combining characters, undo/redo and escaped previews',async()=>{
+  const h=await harness('ja');
+  try{
+    const css=h.w.document.createElement('style');css.textContent=await readFile('public/styles.css','utf8');h.w.document.head.append(css);
+    const input=h.find('#word-0-ipa'),preview=h.find('.ipa-preview-value'),button=h.find('[data-action="ipa-italic"]');input.focus();h.input('#word-0-ipa','əkwéintəns');assert.equal(preview.textContent,'[əkwéintəns]');assert.equal(preview.querySelector('i'),null);assert.equal(h.w.getComputedStyle(preview).fontStyle,'normal');
+    input.setSelectionRange(7,8);input.dispatchEvent(new h.w.Event('select',{bubbles:true}));assert.equal(button.disabled,false);assert.equal(pointer(h,button,'pointerdown').defaultPrevented,true);button.click();assert.equal(input.value,'əkwéintəns');assert.equal(h.w.document.activeElement,input);assert.equal(input.selectionStart,7);assert.equal(button.getAttribute('aria-pressed'),'true');assert.equal(preview.querySelectorAll('i').length,1);assert.equal(preview.querySelector('i').textContent,'ə');assert.equal(h.w.getComputedStyle(preview.querySelector('i')).fontStyle,'italic');
+    button.click();assert.equal(preview.querySelector('i'),null);assert.equal(button.getAttribute('aria-pressed'),'false');
+    h.input('#word-0-ipa','');h.input('#word-0-ipa','kǽt');input.setSelectionRange(2,3);input.dispatchEvent(new h.w.Event('select',{bubbles:true}));button.click();assert.equal(preview.querySelector('i').textContent,'ǽ');assert.deepEqual([input.selectionStart,input.selectionEnd],[1,3]);
+    input.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true,cancelable:true}));assert.equal(preview.querySelector('i'),null);input.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'z',metaKey:true,shiftKey:true,bubbles:true,cancelable:true}));assert.equal(preview.querySelector('i').textContent,'ǽ');
+    input.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'i',metaKey:true,bubbles:true,cancelable:true}));assert.equal(preview.querySelector('i'),null);
+    input.setSelectionRange(1,3);input.dispatchEvent(new h.w.Event('select',{bubbles:true}));button.click();input.setSelectionRange(0,0);input.dispatchEvent(new h.w.InputEvent('beforeinput',{inputType:'insertText',data:'X',bubbles:true,cancelable:true}));h.input('#word-0-ipa','Xkǽt');assert.equal(preview.querySelector('i').textContent,'ǽ');assert.equal(preview.textContent,'[Xkǽt]');
+    const undo=new h.w.InputEvent('beforeinput',{inputType:'historyUndo',bubbles:true,cancelable:true});input.dispatchEvent(undo);assert.equal(undo.defaultPrevented,true);assert.equal(input.value,'kǽt');assert.equal(preview.querySelector('i').textContent,'ǽ');
+    h.input('#word-0-ipa','');h.input('#word-0-ipa','<img src=x onerror=alert(1)>');input.setSelectionRange(0,input.value.length);input.dispatchEvent(new h.w.Event('select',{bubbles:true}));button.click();assert.equal(preview.querySelector('img'),null);assert.equal(preview.querySelector('i').textContent,'<img src=x onerror=alert(1)>');
+  }finally{await h.close();}
+});
+test('per-character IPA formatting persists in D1 and JSON/ZIP, appears in import previews and in both English card faces',async()=>{
+  const h=await harness();
+  try{
+    h.input('#word-0-ipa',' [əkwéintəns] ');h.input('#word-1-ipa','kǽt');
+    for(const [index,start,end] of [[0,9,10],[1,1,3]]){const input=h.find('#word-'+index+'-ipa');input.focus();input.setSelectionRange(start,end);input.dispatchEvent(new h.w.Event('select',{bubbles:true}));await h.click('.ipa-editor:has(#word-'+index+'-ipa) [data-action="ipa-italic"]');}
+    await h.click('[data-action="save"]');await waitFor(()=>h.find('#word-0-ipa')?.value==='əkwéintəns'&&!h.find('#dirty-label').textContent,'format saved');
+    const saved=(await(await h.request('/api/sets')).json()).sets[0];assert.deepEqual(saved.words[0].ipaItalic,[[7,8]]);assert.deepEqual(saved.words[1].ipaItalic,[[1,3]]);
+    await h.click('[data-action="export-draft"]');const exported=JSON.parse(await h.downloads.at(-1).text());assert.deepEqual(exported.words,saved.words);
+    await h.click('[data-action="import"]');const picker=h.find('#import-files'),bytes=zip.zipSync({'formatted.json':zip.strToU8(JSON.stringify(exported))});Object.defineProperty(picker,'files',{value:[{name:'formatted.zip',size:bytes.length,arrayBuffer:async()=>bytes.buffer}]});await picker.onchange({target:picker});const details=h.find('[data-import-inspect]');details.open=true;details.dispatchEvent(new h.w.Event('toggle'));assert.equal(details.querySelector('.import-ipa i').textContent,'ə');await h.click('#import-confirm');await waitFor(()=>!h.find('#modal').open,'format imported');
+    const copies=(await(await h.request('/api/sets')).json()).sets;assert.equal(copies.length,2);for(const set of copies)assert.deepEqual(set.words,saved.words);
+    await h.click('.nav [data-nav="home"]');await h.click('[data-action="open"][data-id="'+h.set.id+'"]');await h.click('[data-activity="cards"]');await h.click('[data-mode="en-ja"]');await h.click('[data-action="start-cards"]');assert.equal(h.find('.flashcard-front .card-ipa').textContent,'[əkwéintəns]');assert.equal(h.find('.flashcard-front .card-ipa i').textContent,'ə');assert.equal(h.find('.flashcard-front .card-ipa').childNodes[0].textContent,'[əkwéint');
+    await h.click('[data-action="back-order"]');await h.click('[data-action="back-mode"]');await h.click('[data-mode="ja-en"]');await h.click('[data-action="start-cards"]');assert.equal(h.find('.flashcard-front .card-ipa'),null);await h.click('.flashcard-front .flashcard-text');assert.equal(h.find('.flashcard-back .card-ipa i').textContent,'ə');
+  }finally{await h.close();}
+});
+test('D1 rejects malformed pronunciation text and formatting as validation errors without changing saved sets',async()=>{
+  const h=await harness();
+  try{
+    for(const fields of [{ipa:'abc',ipaItalic:[[0,9]]},{ipa:'abc',ipaItalic:'<i>'},{ipa:'abc',ipaItalic:[[1,1]]},{ipa:'a\nb'}]){
+      const response=await h.request('/api/sets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'Invalid',words:[{english:'word',meaning:'単語',...fields}]})});assert.equal(response.status,400);assert.match((await response.json()).error,/^invalidIpa(?:Style)?$/);
+    }
+    const sets=(await(await h.request('/api/sets')).json()).sets;assert.equal(sets.length,1);assert.equal(sets[0].words[0].ipa,undefined);
+  }finally{await h.close();}
+});

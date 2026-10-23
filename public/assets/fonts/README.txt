@@ -13,4 +13,5 @@ Reserved Font Names: Charis and SIL.
 License: SIL Open Font License 1.1. See Charis-OFL.txt.
 
 The application serves these fonts from its own origin. IPA uses the
-italic face; the regular face is available in the same bundled family.
+regular face by default. Explicitly selected characters use the italic
+face; the saved text keeps its ordinary Unicode characters.

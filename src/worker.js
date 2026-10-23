@@ -148,7 +148,7 @@ export default {
     if (!new URL(request.url).pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     try { return await api(request, env); }
     catch (error) {
-      const known = ['invalidTitle', 'invalidWords', 'duplicateWord', 'invalidImport', 'jsonRequired', 'tooLarge'];
+      const known = ['invalidTitle', 'invalidWords', 'invalidIpa', 'invalidIpaStyle', 'duplicateWord', 'invalidImport', 'jsonRequired', 'tooLarge'];
       if((error.status && error.message.startsWith('ranking')) || ['invalidRankingData','invalidRankingName','invalidRankingMessage'].includes(error.message))return reply({error:error.message},error.status || 400);
       if (known.includes(error.message)) return reply({ error: error.message }, error.status || 400);
       console.error('API request failed', error.message);

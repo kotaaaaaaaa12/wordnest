@@ -415,3 +415,24 @@ Category changes retain the active field and its selection. Common stress/length
 The base inventory and phonetic-detail coverage were checked against [Oxford's English pronunciation guide](https://www.oxfordlearnersdictionaries.com/about/english/pronunciation_english) and [Charles University's English transcription reference](https://fonetika.ff.cuni.cz/o-fonetice/foneticka-transkripce/ipa-transcription-english/). The two sources distinguish dictionary-level symbols from narrower phonetic details; the palette offers both. English accents and dictionary conventions vary, so the key count includes alternative spellings and combinations rather than counting English phonemes.
 
 Verification includes category/caret interaction, the checked dictionary inventory, correct insertion of combining marks without dotted circles, D1 persistence, existing long-press and card behavior, and contrast of the softened back in every palette. Both bundled font faces match the official release, and their corresponding character maps cover every code point used by the palette and its variants. No database migration is needed.
+
+## Per-character IPA italics (version 1.19.0)
+
+Pronunciation now uses the regular Charis face by default. In Edit, select one character or a range inside the IPA input, then choose **Italic** to toggle only that selection. Combining accents stay with their base letter. Selecting a mixed regular/italic range makes the entire selection italic; selecting an entirely italic range removes its formatting. The button preserves focus and text selection on pointer taps. **Preview** shows the actual mixed styles beneath the plain-text input, and the same styling appears on English card faces and import previews. Palette keys remain regular; long-press accent selection still works.
+
+Ctrl/Command+I toggles the selection. Ctrl/Command+Z and Shift+Ctrl/Command+Z undo/redo changes in the current IPA input, including formatting; the field keeps up to 100 edits until it is rebuilt. Native beforeinput undo/redo requests are handled when cancellable. Typing, pasting, palette insertion and deletion shift formatting with the edited text. New characters inherit italics when inserted inside an italic span or when replacing a fully italic selection. Inserting at the end of an italic span starts regular text; combining marks still stay styled with their preceding letter. Ordinary text copy/paste carries characters; JSON/ZIP transfers carry the formatting as well.
+
+The optional `ipaItalic` field stores zero-based, half-open UTF-16 ranges into `ipa`, matching native input selection offsets. For example:
+
+```json
+{
+  "english": "acquaintance",
+  "meaning": "知人",
+  "ipa": "əkwéintəns",
+  "ipaItalic": [[7, 8]]
+}
+```
+
+This formats only the second schwa. Saved data contains ordinary Unicode text plus ranges, with no HTML or mathematical italic substitutes. Validation rejects malformed/out-of-bounds ranges, merges overlapping ranges and expands boundaries to whole graphemes. Trimming pasted brackets/slashes also adjusts range offsets. Absent or empty formatting is omitted from exports; older sets and JSON files continue to load as regular IPA. D1 persists the extra word property without a schema migration. Changing only IPA or its styling preserves quiz clears, difficult-word streaks, favorites and resumable decks.
+
+Italic styling is explicit presentation data, not an automatic interpretation of a pronunciation convention. No word is automatically labeled optional or silent. Both UI languages explain selection and preview behavior. Automated checks cover formatting controls, combining accents, insertion/deletion, undo/redo, escaped HTML, D1 saves/reloads, JSON/ZIP transfers, previews and both flashcard directions. Physical iOS/iPadOS testing remains unperformed.
