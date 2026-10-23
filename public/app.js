@@ -44,10 +44,9 @@ const sounds=Object.fromEntries(['correct','incorrect','confetti'].map(name=>{
   const audio=new Audio(`/assets/audio/${name}.mp3`);audio.preload='none';
   return [name,{audio,buffer:null,offset:0,loading:null}];
 }));
-let effectContext=null,effectContextAttempted=false,effectResume=null,effectGeneration=0;
+let effectContext=null,effectContextAttempted=false;
 const effectSources=new Set();
 function stopEffects(){
-  effectGeneration++;
   for(const source of effectSources){try{source.stop();source.disconnect();}catch{}}
   effectSources.clear();
   for(const {audio} of Object.values(sounds)){try{audio.pause?.();audio.currentTime=0;}catch{}}
@@ -59,7 +58,10 @@ function leadingEffectOffset(buffer){
 }
 function preloadEffect(name){
   const effect=sounds[name];if(effect.loading)return effect.loading;
-  if(!effectContext){effect.audio.preload='auto';try{effect.audio.load?.();}catch{}effect.loading=Promise.resolve();return effect.loading;}
+  // Keep the media path ready even when decoding succeeds: Web Audio can still
+  // be suspended, interrupted, or unavailable when an answer is revealed.
+  effect.audio.preload='auto';try{effect.audio.load?.();}catch{}
+  if(!effectContext){effect.loading=Promise.resolve();return effect.loading;}
   const context=effectContext;
   effect.loading=(async()=>{
     try{
@@ -67,7 +69,7 @@ function preloadEffect(name){
       if(!response.ok)throw new Error('Audio unavailable');
       const data=await response.arrayBuffer(),buffer=await context.decodeAudioData(data);
       effect.buffer=buffer;effect.offset=leadingEffectOffset(buffer);
-    }catch{effect.audio.preload='auto';try{effect.audio.load?.();}catch{}}
+    }catch{}
   })();
   return effect.loading;
 }
@@ -82,31 +84,24 @@ function prepareEffects(){
 }
 function unlockEffects(){
   prepareEffects();
-  if(!soundEnabled || !effectContext || effectContext.state==='running' || effectContext.state==='closed' || effectResume)return effectResume;
-  try{
-    const promise=Promise.resolve(effectContext.resume()).catch(()=>{});
-    effectResume=promise;promise.finally(()=>{if(effectResume===promise)effectResume=null;});
-    return promise;
-  }catch{return null;}
+  if(!soundEnabled || !effectContext || effectContext.state==='running' || effectContext.state==='closed')return;
+  // Retry on later gestures even if an earlier resume is still pending.
+  try{return Promise.resolve(effectContext.resume()).catch(()=>{});}catch{}
 }
 function play(name){
   if(!soundEnabled || !sounds[name] || document.visibilityState==='hidden')return;
-  stopEffects();const effect=sounds[name],generation=effectGeneration,requested=performance.now();
-  const scene={route:state.route,screen:state.screen,quiz:state.quiz,index:state.quiz?.index};
-  const current=()=>soundEnabled && generation===effectGeneration && scene.route===state.route && scene.screen===state.screen && scene.quiz===state.quiz && scene.index===state.quiz?.index && document.visibilityState!=='hidden';
-  if(effect.buffer && effectContext && effectContext.state!=='closed'){
-    const start=()=>{
-      if(!current() || effectContext.state!=='running')return;
-      try{
-        const source=effectContext.createBufferSource();source.buffer=effect.buffer;source.connect(effectContext.destination);effectSources.add(source);
-        source.onended=()=>{effectSources.delete(source);try{source.disconnect();}catch{}};
-        source.start(0,effect.offset);
-      }catch{}
-    };
-    if(effectContext.state==='running')start();
-    else{const resumed=unlockEffects();resumed?.then(()=>{if(performance.now()-requested<=150)start();});}
-    return;
+  stopEffects();const effect=sounds[name];
+  if(effect.buffer && effectContext?.state==='running'){
+    let source;
+    try{
+      source=effectContext.createBufferSource();source.buffer=effect.buffer;source.connect(effectContext.destination);effectSources.add(source);
+      source.onended=()=>{effectSources.delete(source);try{source.disconnect();}catch{}};
+      source.start(0,effect.offset);return;
+    }catch{effectSources.delete(source);try{source?.disconnect();}catch{}}
   }
+  // Do not await resume or schedule this sound for later. Start the preloaded
+  // media element in the current gesture, with no duplicate or stale replay.
+  unlockEffects();
   try{effect.audio.currentTime=0;effect.audio.play()?.catch(()=>{});}catch{}
 }
 function toggleSound(){

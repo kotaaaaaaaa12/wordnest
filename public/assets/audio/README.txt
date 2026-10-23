@@ -11,3 +11,7 @@ With sound enabled, supported browsers preload and decode the files for immediat
 quiz feedback. Detected leading silence is skipped during playback; the original
 files are unchanged. Short clips with little leading silence also work best in
 the media fallback. Sound effects remain separate from word pronunciation.
+
+Media elements preload as well as decoded buffers. If Web Audio is not running
+or a buffer cannot start, the app immediately uses the prepared media element
+without waiting for audio-context resume or scheduling delayed playback.
