@@ -446,3 +446,7 @@ The IPA field is now an accessible single-line rich-text editing surface, so reg
 Composition input keeps its native editing DOM until the composition is committed. Enter does not create paragraphs. Pasting and dropping use plain text, collapse line breaks to spaces and preserve the 200 UTF-16-unit limit without cutting combining sequences. An empty/image-only clipboard does not erase selected text. HTML from clipboard contents is never inserted as markup. Formatting remains ordinary `ipa` text with optional `ipaItalic` ranges, so existing D1 data and JSON/ZIP files work without conversion or a migration.
 
 Additional automated tests cover repeated italic palette insertion, visible field spans, styled long-press candidates, regular/italic replacement at precise native ranges, per-word modes, composition stability, safe paste and limits, and restoring focus/selection after settings language changes. Tests use JSDOM plus real D1 through Miniflare; physical iOS/iPadOS behavior has not been verified.
+
+## Palette-only italic controls (version 1.20.1)
+
+The separate selection-based **Italic** button and its Ctrl/Command+I shortcut have been removed. The palette's **Italic input** toggle is now the only italic control; it styles new input until turned off. English and Japanese instructions reflect this change. Native rich-text formatting commands are blocked in the IPA field. Existing saved italic ranges still display and survive editing, saving, and JSON/ZIP transfers. Selection for replacing text, caret restoration, and undo/redo remain available.

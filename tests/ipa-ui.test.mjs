@@ -160,26 +160,29 @@ test('accent candidates stay inside the visual viewport above the keyboard and c
     await hold(h,key);h.w.dispatchEvent(new h.w.Event('resize'));assert.equal(h.find('.ipa-variants'),null);
   }finally{await h.close();}
 });
-test('individual IPA characters toggle italics with a normal default, whole combining characters, undo/redo and escaped previews',async()=>{
+test('only palette input controls italics; selection buttons and native selection-format commands are disabled',async()=>{
   const h=await harness('ja');
   try{
     const css=h.w.document.createElement('style');css.textContent=await readFile('public/styles.css','utf8');h.w.document.head.append(css);
-    const input=h.find('#word-0-ipa'),preview=h.find('.ipa-preview-value'),button=h.find('[data-action="ipa-italic"]');input.focus();h.input('#word-0-ipa','əkwéintəns');assert.equal(preview.textContent,'[əkwéintəns]');assert.equal(preview.querySelector('i'),null);assert.equal(h.w.getComputedStyle(preview).fontStyle,'normal');
-    select(h,input,7,8);input.dispatchEvent(new h.w.Event('select',{bubbles:true}));assert.equal(button.disabled,false);assert.equal(pointer(h,button,'pointerdown').defaultPrevented,true);button.click();assert.equal(input.textContent,'əkwéintəns');assert.equal(h.w.document.activeElement,input);assert.equal(selection(h,input)[0],7);assert.equal(button.getAttribute('aria-pressed'),'true');assert.equal(preview.querySelectorAll('i').length,1);assert.equal(preview.querySelector('i').textContent,'ə');assert.equal(h.w.getComputedStyle(preview.querySelector('i')).fontStyle,'italic');
-    button.click();assert.equal(preview.querySelector('i'),null);assert.equal(button.getAttribute('aria-pressed'),'false');
-    h.input('#word-0-ipa','');h.input('#word-0-ipa','kǽt');select(h,input,2,3);input.dispatchEvent(new h.w.Event('select',{bubbles:true}));button.click();assert.equal(preview.querySelector('i').textContent,'ǽ');assert.deepEqual([selection(h,input)[0],selection(h,input)[1]],[1,3]);
-    input.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true,cancelable:true}));assert.equal(preview.querySelector('i'),null);input.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'z',metaKey:true,shiftKey:true,bubbles:true,cancelable:true}));assert.equal(preview.querySelector('i').textContent,'ǽ');
-    input.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'i',metaKey:true,bubbles:true,cancelable:true}));assert.equal(preview.querySelector('i'),null);
-    select(h,input,1,3);input.dispatchEvent(new h.w.Event('select',{bubbles:true}));button.click();select(h,input,0,0);input.dispatchEvent(new h.w.InputEvent('beforeinput',{inputType:'insertText',data:'X',bubbles:true,cancelable:true}));h.input('#word-0-ipa','Xkǽt');assert.equal(preview.querySelector('i').textContent,'ǽ');assert.equal(preview.textContent,'[Xkǽt]');
+    const input=h.find('#word-0-ipa'),preview=h.find('.ipa-preview-value');input.focus();typeText(h,input,'k');assert.equal(preview.querySelector('i'),null);assert.equal(h.w.getComputedStyle(preview).fontStyle,'normal');
+    await h.click('[data-action="ipa-shift"]');typeText(h,input,'ǽ');await h.click('[data-action="ipa-shift"]');typeText(h,input,'t');assert.equal(input.textContent,'kǽt');assert.equal(preview.querySelector('i').textContent,'ǽ');assert.equal(h.w.getComputedStyle(preview.querySelector('i')).fontStyle,'italic');
+    select(h,input,0,4);assert.equal(h.find('[data-action="ipa-italic"]'),null);assert.equal(h.find('.ipa-format'),null);
+    for(const modifier of ['ctrlKey','metaKey']){
+      const shortcut=new h.w.KeyboardEvent('keydown',{key:'i',[modifier]:true,bubbles:true,cancelable:true});input.dispatchEvent(shortcut);assert.equal(shortcut.defaultPrevented,true);assert.equal(preview.querySelector('i').textContent,'ǽ');assert.equal(h.find('[data-action="ipa-shift"]').getAttribute('aria-pressed'),'false');
+    }
+    const format=new h.w.InputEvent('beforeinput',{inputType:'formatItalic',bubbles:true,cancelable:true});input.dispatchEvent(format);assert.equal(format.defaultPrevented,true);assert.equal(input.querySelector('i').textContent,'ǽ');assert.deepEqual(selection(h,input),[0,4]);
+    select(h,input,0);typeText(h,input,'X');assert.equal(input.textContent,'Xkǽt');assert.equal(preview.querySelector('i').textContent,'ǽ');
     const undo=new h.w.InputEvent('beforeinput',{inputType:'historyUndo',bubbles:true,cancelable:true});input.dispatchEvent(undo);assert.equal(undo.defaultPrevented,true);assert.equal(input.textContent,'kǽt');assert.equal(preview.querySelector('i').textContent,'ǽ');
-    h.input('#word-0-ipa','');h.input('#word-0-ipa','<img src=x onerror=alert(1)>');select(h,input,0,input.textContent.length);input.dispatchEvent(new h.w.Event('select',{bubbles:true}));button.click();assert.equal(preview.querySelector('img'),null);assert.equal(preview.querySelector('i').textContent,'<img src=x onerror=alert(1)>');
+    input.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'z',metaKey:true,shiftKey:true,bubbles:true,cancelable:true}));assert.equal(input.textContent,'Xkǽt');assert.equal(preview.querySelector('i').textContent,'ǽ');
+    select(h,input,0,input.textContent.length);await h.click('[data-action="ipa-shift"]');typeText(h,input,'<img src=x onerror=alert(1)>');assert.equal(preview.querySelector('img'),null);assert.equal(preview.querySelector('i').textContent,'<img src=x onerror=alert(1)>');
   }finally{await h.close();}
 });
 test('per-character IPA formatting persists in D1 and JSON/ZIP, appears in import previews and in both English card faces',async()=>{
   const h=await harness();
   try{
-    h.input('#word-0-ipa',' [əkwéintəns] ');h.input('#word-1-ipa','kǽt');
-    for(const [index,start,end] of [[0,9,10],[1,1,3]]){const input=h.find('#word-'+index+'-ipa');input.focus();select(h,input,start,end);input.dispatchEvent(new h.w.Event('select',{bubbles:true}));await h.click('.ipa-editor:has(#word-'+index+'-ipa) [data-action="ipa-italic"]');}
+    for(const [index,prefix,italic,suffix] of [[0,' [əkwéint','ə','ns] '],[1,'k','ǽ','t']]){
+      const input=h.find('#word-'+index+'-ipa');input.focus();typeText(h,input,prefix);await h.click('[data-action="ipa-shift"]');typeText(h,input,italic);await h.click('[data-action="ipa-shift"]');typeText(h,input,suffix);
+    }
     await h.click('[data-action="save"]');await waitFor(()=>h.find('#word-0-ipa')?.textContent==='əkwéintəns'&&!h.find('#dirty-label').textContent,'format saved');
     const saved=(await(await h.request('/api/sets')).json()).sets[0];assert.deepEqual(saved.words[0].ipaItalic,[[7,8]]);assert.deepEqual(saved.words[1].ipaItalic,[[1,3]]);
     await h.click('[data-action="export-draft"]');const exported=JSON.parse(await h.downloads.at(-1).text());assert.deepEqual(exported.words,saved.words);
@@ -211,16 +214,16 @@ test('palette italic input stays enabled, styles keys and long-press variants, a
     const saved=(await(await h.request('/api/sets')).json()).sets[0];assert.equal(saved.words[0].ipa,'əæθaǽ');assert.deepEqual(saved.words[0].ipaItalic,[[0,3],[4,6]]);
   }finally{await h.close();}
 });
-test('rich-field native ranges, keyboard edits and selection formatting retain precise caret positions and per-field input modes',async()=>{
+test('rich-field native ranges and keyboard replacements retain precise caret positions and per-field input modes',async()=>{
   const h=await harness();
   try{
     let input=h.find('#word-0-ipa');await h.click('#word-0-ipa-label');assert.equal(h.w.document.activeElement,input);select(h,input,0);typeText(h,input,'ab');select(h,input,1);await h.click('[data-action="ipa-shift"]');typeText(h,input,'ə');assert.equal(input.textContent,'aəb');assert.equal(input.querySelector('i').textContent,'ə');assert.deepEqual(selection(h,input),[2,2]);
     h.find('#word-1-ipa').focus();assert.equal(h.find('[data-action="ipa-shift"]').getAttribute('aria-pressed'),'false');keyFor(h,'æ').click();assert.equal(h.find('#word-1-ipa').querySelector('i'),null);input.focus();assert.equal(h.find('[data-action="ipa-shift"]').getAttribute('aria-pressed'),'true');
     select(h,input,1,2);await h.click('[data-action="ipa-shift"]');assert.deepEqual(selection(h,input),[1,2]);typeText(h,input,'XY');assert.equal(input.textContent,'aXYb');assert.equal(input.querySelector('i'),null);assert.deepEqual(selection(h,input),[3,3]);
-    select(h,input,1,3);input.dispatchEvent(new h.w.Event('selectionchange',{bubbles:true}));await h.click('.ipa-editor:has(#word-0-ipa) [data-action="ipa-italic"]');assert.equal(input.querySelector('i').textContent,'XY');assert.deepEqual(selection(h,input),[1,3]);
+    select(h,input,1,3);input.dispatchEvent(new h.w.Event('selectionchange',{bubbles:true}));await h.click('[data-action="ipa-shift"]');typeText(h,input,'UV');assert.equal(input.querySelector('i').textContent,'UV');assert.deepEqual(selection(h,input),[3,3]);select(h,input,1,3);
     await h.click('[data-action="settings"]');assert.equal(h.find('.ipa-palette'),null);await h.click('[data-dialog="cancel"]');assert.equal(h.w.document.activeElement,input);assert.deepEqual(selection(h,input),[1,3]);
-    input.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true,cancelable:true}));assert.equal(input.querySelector('i'),null);input.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'z',ctrlKey:true,shiftKey:true,bubbles:true,cancelable:true}));assert.equal(input.querySelector('i').textContent,'XY');
-    await h.click('[data-action="ipa-shift"]');select(h,input,1,3);await h.click('[data-action="settings"]');const language=h.find('#settings-language');language.value='ja';language.dispatchEvent(new h.w.Event('change',{bubbles:true}));await tick();await h.click('[data-dialog="cancel"]');input=h.find('#word-0-ipa');assert.equal(h.w.document.activeElement,input);assert.deepEqual(selection(h,input),[1,3]);assert.equal(input.querySelector('i').textContent,'XY');assert.equal(h.find('[data-action="ipa-shift"]').getAttribute('aria-pressed'),'true');
+    input.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true,cancelable:true}));assert.equal(input.querySelector('i'),null);input.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'z',ctrlKey:true,shiftKey:true,bubbles:true,cancelable:true}));assert.equal(input.querySelector('i').textContent,'UV');
+    select(h,input,1,3);await h.click('[data-action="settings"]');const language=h.find('#settings-language');language.value='ja';language.dispatchEvent(new h.w.Event('change',{bubbles:true}));await tick();await h.click('[data-dialog="cancel"]');input=h.find('#word-0-ipa');assert.equal(h.w.document.activeElement,input);assert.deepEqual(selection(h,input),[1,3]);assert.equal(input.querySelector('i').textContent,'UV');assert.equal(h.find('[data-action="ipa-shift"]').getAttribute('aria-pressed'),'true');
   }finally{await h.close();}
 });
 test('rich IPA handles composition, single-line paste, HTML safety and grapheme-aware length limits',async()=>{

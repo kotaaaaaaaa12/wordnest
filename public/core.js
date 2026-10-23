@@ -59,12 +59,6 @@ export function ipaRawRuns(value,ranges){
 }
 export function ipaRuns(value,ranges){const data=normalizeIpaData(value,ranges);return ipaRawRuns(data.ipa,data.ipaItalic);}
 export function limitIpaText(value,length=200){const chars=ipaCharacters(value).filter(([,end])=>end<=length);return chars.length?value.slice(0,chars.at(-1)[1]):'';}
-export function toggleIpaItalic(text,ranges,start,end){
-  const normalized=ipaItalicRanges(text,ranges);
-  if(!Number.isInteger(start) || !Number.isInteger(end) || start<0 || end>text.length || start>=end)return {ipaItalic:normalized,selection:[start,end]};
-  const selection=ipaRange(text,start,end),flags=ipaFlags(text,normalized),enabled=!flags.slice(...selection).every(Boolean);
-  flags.fill(enabled,...selection);return {ipaItalic:ipaFlagRanges(flags),selection};
-}
 export function remapIpaItalic(before,after,ranges,hint){
   const normalized=ipaItalicRanges(before,ranges);if(before===after)return normalized;
   let start=hint?.start,end=hint?.end,added=after.length-before.length+end-start;

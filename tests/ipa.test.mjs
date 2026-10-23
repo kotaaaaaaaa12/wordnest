@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateSet,normalizeIpa,normalizeIpaData,ipaItalicRanges,ipaRuns,ipaRawRuns,limitIpaText,toggleIpaItalic,remapIpaItalic,portable,parseImport,studyKey,studyStatus,createFlashcards} from '../public/core.js';
+import {validateSet,normalizeIpa,normalizeIpaData,ipaItalicRanges,ipaRuns,ipaRawRuns,limitIpaText,remapIpaItalic,portable,parseImport,studyKey,studyStatus,createFlashcards} from '../public/core.js';
 import {PersonalWords,sourceQuestions,wordIdentity,FlashcardBookmarks} from '../public/personal.js';
 import {zipSync,unzipSync,strToU8,strFromU8} from 'fflate';
 const legacy={title:'Words',words:[{english:'achieve',meaning:'達成する',explanation:'A note.'}]};
@@ -24,8 +24,8 @@ test('changing IPA preserves clears, difficult-word streaks, favorites, and resu
 test('IPA style ranges validate, merge, normalize pasted delimiters and keep whole graphemes together',()=>{
   assert.deepEqual(normalizeIpaData(' [əkwéintəns] ',[[9,10]]),{ipa:'əkwéintəns',ipaItalic:[[7,8]]});
   assert.deepEqual(ipaItalicRanges('abcdef',[[4,6],[2,5],[2,3]]),[[2,6]]);assert.deepEqual(ipaItalicRanges('kǽt',[[2,3]]),[[1,3]]);
-  assert.deepEqual(toggleIpaItalic('kǽt',[],2,3),{ipaItalic:[[1,3]],selection:[1,3]});assert.deepEqual(toggleIpaItalic('kǽt',[[1,3]],1,3).ipaItalic,[]);
-  assert.deepEqual(toggleIpaItalic('a😀b',[],2,3),{ipaItalic:[[1,3]],selection:[1,3]});
+  assert.deepEqual(ipaItalicRanges('kǽt',[[2,3]]),[[1,3]]);
+  assert.deepEqual(ipaItalicRanges('a😀b',[[2,3]]),[[1,3]]);
   assert.deepEqual(ipaRuns('əkwéintəns',[[7,8]]),[{text:'əkwéint',italic:false},{text:'ə',italic:true},{text:'ns',italic:false}]);
   for(const ranges of [null,{},'italic',[[0]],[[0,1,2]],[[-1,1]],[[0,20]],[[1,1]],[[0,'1']],Array(201).fill([0,1])])assert.throws(()=>normalizeIpaData('abc',ranges),/invalidIpaStyle/);
   assert.deepEqual(normalizeIpaData(' [ ] ',[[1,4]]),{ipa:''});assert.deepEqual(normalizeIpaData(' / [ kǽt ] / ',[[5,8]]),{ipa:'kǽt',ipaItalic:[[0,3]]});
