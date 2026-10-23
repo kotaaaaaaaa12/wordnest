@@ -119,14 +119,14 @@ After choosing **Flashcards** and a direction, choose **Original order**, **Reve
 
 - Enable administrator mode with the administrator password at the bottom of Settings. Authentication reveals Edit, Administration, and their guides; ending administrator mode or an expired-session response hides them. Unsaved drafts remain in memory after session expiry and can be resumed after authenticating again.
 - Word sets are shared across browsers and stored in D1, not in local storage.
-- The editor supports a title, English word, meaning, and optional explanation.
+- The editor supports a title, English word, meaning, optional pronunciation (IPA), and optional explanation.
 - Save changes explicitly. Saving keeps the editor open.
 - Switching sets or pages with unsaved edits opens a confirmation dialog. Closing/reloading the page uses the browser's native unsaved-changes warning when supported.
 - A signed, HttpOnly cookie remembers editor authentication for up to 30 days in the authenticated browser profile. Other browsers/profiles need the password separately. This is browser authentication, not hardware-device attestation.
 - Exit administrator mode clears that browser's cookie. Changing `ADMIN_PASSWORD` invalidates every existing editor session.
 - The server checks authentication for every write, validates all imported data, rejects cross-origin writes, and limits password attempts per client IP to 10 in a 15-minute window.
 - Concurrent edits are checked using revision numbers. A stale save/delete is rejected. Export your draft before refreshing to preserve your work.
-- Up to 200 sets and 1,000 words per set are supported. Titles: 150 characters. English: 150. Meaning: 300. Explanation: 2,000.
+- Up to 200 sets and 1,000 words per set are supported. Titles: 150 characters. English: 150. Meaning: 300. IPA: 200. Explanation: 2,000.
 
 The quiz content is public to visitors who can access the Worker URL. The editing password protects modifications; it does not hide the vocabulary data.
 
@@ -170,13 +170,14 @@ Supported JSON format:
     {
       "english": "achieve",
       "meaning": "達成する",
+      "ipa": "əˈtʃiːv",
       "explanation": "She worked hard to achieve her goal."
     }
   ]
 }
 ```
 
-`explanation` can be omitted. `format` and `version` are export metadata. An array of sets or an object containing a `sets` array is also accepted. ZIPs must contain JSON files; unrelated files are ignored. Import accepts up to 100 sets at a time, under 2 MB of JSON in total, with up to 8 MB of input files. Set IDs and revisions are never imported, so backups can be moved between deployments.
+`ipa` and `explanation` can be omitted. `format` and `version` are export metadata. An array of sets or an object containing a `sets` array is also accepted. ZIPs must contain JSON files; unrelated files are ignored. Import accepts up to 100 sets at a time, under 2 MB of JSON in total, with up to 8 MB of input files. Set IDs and revisions are never imported, so backups can be moved between deployments.
 
 ## Local development
 
@@ -378,3 +379,11 @@ The flip area and pronunciation are separate native buttons, with no nested butt
 ## Flashcard face taps (version 1.16.1)
 
 Pointer taps on the visible word, label, card face, or unused card space now flip the card through delegated card handling. The former full-card transparent button beneath a pointer-disabled 3D layer has been replaced with an explicit, visible hint button. The card faces receive pointer events directly, and inactive faces reject them. Speaker buttons still invoke pronunciation independently. The same swipe-click suppression protects both card-body taps and the hint button, preserving keyboard controls, speech cleanup, and accurate flip counts. A regression test exercises the actual visible text and face targets in both directions rather than clicking only the flip action programmatically.
+
+## Optional IPA and theme-colored cards (version 1.17.0)
+
+Each word has an optional **Pronunciation (IPA)** field in Edit. Its symbol palette appears only while that input has focus. Tapping a symbol inserts it at the cursor or replaces the selection, keeping the input focused; typing and pasting also work. The field accepts up to 200 characters without line breaks or control characters. Matching pasted square brackets or slashes are stripped on save/import; flashcards consistently display square brackets, such as `[əˈtʃiːv]`.
+
+IPA appears below the English word, including on the revealed English side in JP → EN. Grouped collection cards can show each source word's notation. IPA is display data and does not change the speech synthesis request. Empty fields remain absent from exports, so existing sets and JSON files work unchanged. Nonempty IPA is saved in D1 and included in JSON/ZIP import/export and import previews. Updating only IPA preserves clears, difficult-word streaks, favorites, and flashcard bookmarks. No database migration or new service is required.
+
+Flashcard backs use the selected theme's accent color in all six palettes. Word, IPA, label, and flip-hint foreground colors are chosen for readable contrast. Automated coverage includes palette focus and caret insertion, real D1 persistence and transfers, both card directions, unchanged learning progress, and all six back-face color combinations.

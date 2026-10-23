@@ -17,16 +17,23 @@ export function balanceAnswerPositions(questions, random = Math.random) {
     return {...question,options};
   });
 }
+export function normalizeIpa(value){
+  let text=value.trim();
+  while((text.startsWith('[') && text.endsWith(']')) || (text.startsWith('/') && text.endsWith('/')))text=text.slice(1,-1).trim();
+  return text;
+}
 export function validateSet(input) {
   if (!input || typeof input !== 'object' || typeof input.title !== 'string' || !input.title.trim() || input.title.trim().length > 150) throw new Error('invalidTitle');
   if (!Array.isArray(input.words) || !input.words.length || input.words.length > 1000) throw new Error('invalidWords');
   const seen = new Set();
   const words = input.words.map(w => {
     if (!w || typeof w.english !== 'string' || typeof w.meaning !== 'string' || !w.english.trim() || !w.meaning.trim() || w.english.length > 150 || w.meaning.length > 300 || (w.explanation !== undefined && typeof w.explanation !== 'string') || (w.explanation || '').length > 2000) throw new Error('invalidWords');
+    if(w.ipa!==undefined && (typeof w.ipa!=='string' || w.ipa.length>200 || /[\u0000-\u001f\u007f]/.test(w.ipa)))throw new Error('invalidIpa');
+    const ipa=normalizeIpa(w.ipa || '');
     const key = normalize(w.english);
     if (seen.has(key)) throw new Error('duplicateWord');
     seen.add(key);
-    return { english: w.english.trim(), meaning: w.meaning.trim(), explanation: (w.explanation || '').trim() };
+    return { english: w.english.trim(), meaning: w.meaning.trim(), explanation: (w.explanation || '').trim(),...(ipa?{ipa}:{}) };
   });
   return { title: input.title.trim(), words };
 }

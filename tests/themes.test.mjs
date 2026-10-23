@@ -124,3 +124,10 @@ test('modal backgrounds stay neutral and the active palette persists through mod
     }finally{w.close();}
   }
 });
+test('flashcard backs use the active accent with readable word, IPA, and hint colors in all six palettes',()=>{
+  for(const [mode,palettes] of Object.entries({light:['default','ocean','lavender'],dark:['default','midnight','graphite']}))for(const palette of palettes){
+    const {w}=create({prefs:{'wordnest-theme':mode,[`wordnest-${mode}-palette`]:palette}});
+    try{w.eval(boot);const root=w.document.documentElement,accent=resolveToken(w,root,'--accent'),ink=resolveToken(w,root,'--card-back-ink');assert.equal(declaration(w,'.flashcard-back','background'),'var(--accent)');assert.equal(declaration(w,'.flashcard-back','color'),'var(--card-back-ink)');assert.ok(contrast(accent,ink)>=4.5,mode+'/'+palette+' small IPA and hint contrast');}
+    finally{w.close();}
+  }
+});
