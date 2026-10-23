@@ -6,3 +6,8 @@ confetti.mp3   Played on the results screen after a perfect score.
 
 Audio files are not included. The app works without them.
 Use the exact lowercase filenames above.
+
+With sound enabled, supported browsers preload and decode the files for immediate
+quiz feedback. Detected leading silence is skipped during playback; the original
+files are unchanged. Short clips with little leading silence also work best in
+the media fallback. Sound effects remain separate from word pronunciation.

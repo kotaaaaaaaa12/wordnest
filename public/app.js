@@ -40,8 +40,82 @@ const ranking=new RankingClient({storage:learningStorage,fetch:(...args)=>fetch(
   const snapshot=learning.snapshot();return {epoch:learning.epoch,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',days:snapshot.days};
 },onChange:()=>{refreshRankingSettings();queueRankingNotice();if(state.route==='rankings')render();}});
 let soundEnabled = storage.get('wordnest-sound','on') === 'on';
-const sounds = Object.fromEntries(['correct','incorrect','confetti'].map(name => { const audio = new Audio(`/assets/audio/${name}.mp3`); audio.preload='auto'; return [name,audio]; }));
-function play(name) { if (!soundEnabled) return; try { sounds[name].currentTime=0; sounds[name].play()?.catch(()=>{}); } catch {} }
+const sounds=Object.fromEntries(['correct','incorrect','confetti'].map(name=>{
+  const audio=new Audio(`/assets/audio/${name}.mp3`);audio.preload='none';
+  return [name,{audio,buffer:null,offset:0,loading:null}];
+}));
+let effectContext=null,effectContextAttempted=false,effectResume=null,effectGeneration=0;
+const effectSources=new Set();
+function stopEffects(){
+  effectGeneration++;
+  for(const source of effectSources){try{source.stop();source.disconnect();}catch{}}
+  effectSources.clear();
+  for(const {audio} of Object.values(sounds)){try{audio.pause?.();audio.currentTime=0;}catch{}}
+}
+function leadingEffectOffset(buffer){
+  const channels=Array.from({length:buffer.numberOfChannels},(_,index)=>buffer.getChannelData(index));
+  for(let frame=0;frame<buffer.length;frame++)if(channels.some(channel=>Math.abs(channel[frame])>0.001))return Math.max(0,frame/buffer.sampleRate-0.005);
+  return 0;
+}
+function preloadEffect(name){
+  const effect=sounds[name];if(effect.loading)return effect.loading;
+  if(!effectContext){effect.audio.preload='auto';try{effect.audio.load?.();}catch{}effect.loading=Promise.resolve();return effect.loading;}
+  const context=effectContext;
+  effect.loading=(async()=>{
+    try{
+      const response=await fetch(`/assets/audio/${name}.mp3`,{cache:'default'});
+      if(!response.ok)throw new Error('Audio unavailable');
+      const data=await response.arrayBuffer(),buffer=await context.decodeAudioData(data);
+      effect.buffer=buffer;effect.offset=leadingEffectOffset(buffer);
+    }catch{effect.audio.preload='auto';try{effect.audio.load?.();}catch{}}
+  })();
+  return effect.loading;
+}
+function prepareEffects(){
+  if(!soundEnabled)return;
+  if(!effectContextAttempted){
+    effectContextAttempted=true;
+    const Context=window.AudioContext || window.webkitAudioContext;
+    if(Context){try{effectContext=new Context({latencyHint:'interactive'});}catch{try{effectContext=new Context();}catch{}}}
+  }
+  for(const name of Object.keys(sounds))preloadEffect(name);
+}
+function unlockEffects(){
+  prepareEffects();
+  if(!soundEnabled || !effectContext || effectContext.state==='running' || effectContext.state==='closed' || effectResume)return effectResume;
+  try{
+    const promise=Promise.resolve(effectContext.resume()).catch(()=>{});
+    effectResume=promise;promise.finally(()=>{if(effectResume===promise)effectResume=null;});
+    return promise;
+  }catch{return null;}
+}
+function play(name){
+  if(!soundEnabled || !sounds[name] || document.visibilityState==='hidden')return;
+  stopEffects();const effect=sounds[name],generation=effectGeneration,requested=performance.now();
+  const scene={route:state.route,screen:state.screen,quiz:state.quiz,index:state.quiz?.index};
+  const current=()=>soundEnabled && generation===effectGeneration && scene.route===state.route && scene.screen===state.screen && scene.quiz===state.quiz && scene.index===state.quiz?.index && document.visibilityState!=='hidden';
+  if(effect.buffer && effectContext && effectContext.state!=='closed'){
+    const start=()=>{
+      if(!current() || effectContext.state!=='running')return;
+      try{
+        const source=effectContext.createBufferSource();source.buffer=effect.buffer;source.connect(effectContext.destination);effectSources.add(source);
+        source.onended=()=>{effectSources.delete(source);try{source.disconnect();}catch{}};
+        source.start(0,effect.offset);
+      }catch{}
+    };
+    if(effectContext.state==='running')start();
+    else{const resumed=unlockEffects();resumed?.then(()=>{if(performance.now()-requested<=150)start();});}
+    return;
+  }
+  try{effect.audio.currentTime=0;effect.audio.play()?.catch(()=>{});}catch{}
+}
+function toggleSound(){
+  soundEnabled=!soundEnabled;storage.set('wordnest-sound',soundEnabled?'on':'off');
+  if(soundEnabled)unlockEffects();else stopEffects();
+}
+prepareEffects();
+for(const type of ['pointerdown','touchend','click','keydown'])document.addEventListener(type,unlockEffects,{capture:true,passive:true});
+
 const btn = (key, action, type='ghost', extra='') => `<button class="btn ${type}" data-action="${action}" ${extra}>${t(key)}</button>`;
 let toastTimer;
 function toast(message) { $('#toast').textContent=message; $('#toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),4000); }
@@ -78,7 +152,7 @@ function isTextEntry(element) {
 }
 function loadingView(key){return `<div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>${t(key)}</div>`;}
 function render() {
-  stopSpeech();hideIpaPalette();
+  stopSpeech();stopEffects();hideIpaPalette();
   learning.tick();
   if(state.sessionKnown && ['edit','admin'].includes(state.route) && !state.authenticated){state.route='home';state.screen='home';state.quiz=null;state.cards=null;state.collection=null;history.replaceState(null,'',routeHref('home'));}
   if($('#weak-picker'))state.weakPickerOpen=$('#weak-picker').open;
@@ -888,7 +962,7 @@ async function settingsDialog() {
         if(deletion){finish({deleteData:deletion.dataset.deleteLearning,scroll:modal.scrollTop});return;}
         if(event.target.closest('[data-admin-lock]')){finish('lock');return;}
         if(event.target.closest('[data-dialog]')){finish(false);return;}
-        if(event.target.closest('[data-settings-sound]')){soundEnabled=!soundEnabled;storage.set('wordnest-sound',soundEnabled?'on':'off');modal.innerHTML=settingsContent();$('#modal-title',modal)?.focus({preventScroll:true});return;}
+        if(event.target.closest('[data-settings-sound]')){toggleSound();modal.innerHTML=settingsContent();$('#modal-title',modal)?.focus({preventScroll:true});return;}
       };
     });
     if(action==='private-name'){await rankingNameDialog(false,true);continue;}
@@ -985,7 +1059,7 @@ function submitAnswer(answer,skipped=false,forceTimeout=false) {
   if(timedOut)qz.remainingMs=0;
   stopQuizClock();
   const q=qz.questions[qz.index],correct=!timedOut && !skipped && isCorrect(q,answer,qz.mode);
-  qz.answers[qz.index]={answer:answer.trim(),correct,timedOut};learning.answer(correct,timedOut?qz.deadline:Date.now());personal.answer(q.sources,correct);play(correct?'correct':'incorrect');render();
+  qz.answers[qz.index]={answer:answer.trim(),correct,timedOut};learning.answer(correct,timedOut?qz.deadline:Date.now());personal.answer(q.sources,correct);render();play(correct?'correct':'incorrect');
 }
 let confettiFrame=0;
 function confetti() {
@@ -1016,7 +1090,7 @@ const actions={
   'word-detail':wordDetail,
   'start-collection'(button){state.collection=buildCollection(button.dataset.kind);state.activity=button.dataset.activity;state.error='';state.order='original';state.setId=null;if(state.collection.kind==='weak'){state.mode=state.collection.mode;prepareCount();state.screen=state.activity==='cards'?'order':'count';}else state.screen='mode';render();window.scrollTo(0,0);},
   'manage-sets':manageSetsDialog,
-  sound(){soundEnabled=!soundEnabled;storage.set('wordnest-sound',soundEnabled?'on':'off');render();},
+  sound(){toggleSound();render();},
   async reload(){if(!await discardGuard())return;state.dirty=false;state.draft=null;state.selected.clear();state.loaded=false;state.screen='home';state.quiz=null;await load();},
   open(button){state.collection=null;state.setId=button.dataset.id;state.screen='activity';state.cards=null;state.error='';render();window.scrollTo(0,0);},
   'back-home'(){ranking.sync().catch(()=>{});state.collection=null;state.screen='home';state.quiz=null;state.cards=null;cancelAnimationFrame(confettiFrame);const c=$('#confetti');c.getContext('2d')?.clearRect(0,0,c.width,c.height);render();window.scrollTo(0,0);},
@@ -1179,9 +1253,9 @@ document.addEventListener('submit',async event=>{
   if(event.target.id==='answer-form'){event.preventDefault();if(!state.quiz.typed.trim())return;submitAnswer(state.quiz.typed);}
   if(event.target.id==='admin-login-form'){event.preventDefault();await submitAdmin(event.target);}
 });
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'){stopSpeech();closeIpaVariants();}syncLearning();updateQuizClock();});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'){stopEffects();stopSpeech();closeIpaVariants();}syncLearning();updateQuizClock();});
 window.addEventListener('pageshow',()=>{syncLearning();updateQuizClock();});
-window.addEventListener('pagehide',()=>{stopSpeech();closeIpaVariants();learning.setActive(false);ranking.flushOnExit();});
+window.addEventListener('pagehide',()=>{stopEffects();stopSpeech();closeIpaVariants();learning.setActive(false);ranking.flushOnExit();});
 window.addEventListener('blur',()=>{stopSpeech();closeIpaVariants();learning.setActive(false);});
 window.addEventListener('focus',syncLearning);
 for(const type of ['pointerdown','click','keydown','input','scroll'])document.addEventListener(type,()=>{if(learning.active)learning.touch();},{capture:true,passive:true});

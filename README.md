@@ -480,3 +480,11 @@ Each revealed multiple-choice distractor now shows compact rows containing its E
 ## Plain typing-quiz explanations (version 1.22.2)
 
 JP → EN question feedback and the end-of-quiz review now show explanation text without automatically prefixing each note with its English word. Accepted answers remain displayed above the feedback notes. Multiple notes keep their separate lines; saved explanation text, including any author-written colons, is unchanged.
+
+## Prepared quiz sound effects (version 1.22.3)
+
+When effects are enabled, the app fetches and decodes `correct.mp3`, `incorrect.mp3`, and `confetti.mp3` into reusable Web Audio buffers before answering. It requests an interactive audio context and resumes it during early pointer, keyboard, or click interactions. Answer feedback is rendered before the prepared buffer is started in the same event handler; no fetch or decode is awaited in the ready playback path. Browser HTTP cache validation remains enabled so replacing a clip is not hidden by a forced stale cache entry.
+
+Playback skips detected leading silence with a small 5 ms lead-in, without changing the supplied MP3 files. New effects replace active effects, muting stops playback, and scene changes or page hiding cancel obsolete playback. A slow audio-context resume cannot replay an old answer after changing questions. Browsers without Web Audio, missing files, or decode failures keep a nonblocking media-element fallback. Existing speech pronunciation remains separate from the effects setting.
+
+Automated tests exercise prepared playback ordering, leading-silence offsets, caching, timeouts, perfect-score audio, mute controls, suspended contexts, stale-playback prevention, and media fallbacks. Actual MP3 files are supplied by the site owner and are not bundled; physical iOS/iPadOS or Bluetooth output latency has not been measured. Implementation references: [Web Audio best practices](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Best_practices) and [Web Audio API](https://www.w3.org/TR/webaudio/).
