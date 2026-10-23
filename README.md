@@ -523,3 +523,9 @@ Revealed multiple-choice distractors use matching 12 px English and IPA text wit
 ## Clearer typing-quiz answers (version 1.22.7)
 
 JP → EN feedback places the correct-answer label above the accepted answers. English answers use prominent 26 px text, paired with 20 px IPA and a 32 px pronunciation button containing a 17 px icon. Rows align vertically and wrap within narrow screens; multiple accepted answers retain separate rows. Other quiz and flashcard pronunciation sizes are unchanged.
+
+## Compact mobile practice (version 2.0.1)
+
+At widths up to 760 px, active quizzes and flashcards use a compact header with the brand/home link and Settings. Navigation tabs and the separate account button are hidden during practice; account management remains available through Settings. The full navigation returns when practice ends or the learner returns to a selection screen. Desktop and tablet layouts retain their existing navigation.
+
+Mobile practice also reduces spacing around the timer, progress, counters, and question card; keeps typing input and submission on one row; and reduces unused flashcard spacing. Question and answer text sizes remain readable, long content can wrap and scroll, and the existing quit confirmation still protects an unfinished quiz.

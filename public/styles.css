@@ -103,3 +103,37 @@ select:focus,select:focus-visible,select:active{border-color:var(--line);outline
 @media(max-width:760px){.sidebar-bottom{gap:6px}.account-form{gap:14px}.account-recovery-code{font-size:12px}}
 
 textarea.account-recovery-code{resize:none;min-height:80px;line-height:1.7}
+
+/* Keep active practice close to the top of narrow screens. */
+.practice-counter{margin-bottom:16px}
+@media(max-width:760px){
+  .is-practicing .sidebar{display:flex;flex-wrap:nowrap;justify-content:space-between;gap:12px;padding:8px 16px;min-height:52px}
+  .is-practicing .sidebar .nav,.is-practicing .account-trigger{display:none}
+  .is-practicing .sidebar .brand{font-size:18px;gap:8px;min-width:0}
+  .is-practicing .brand-mark{width:28px;height:28px;border-radius:9px}
+  .is-practicing .brand-mark svg{width:21px;height:21px}
+  .is-practicing .sidebar-bottom{margin:0;flex-shrink:0;padding:0;width:auto}
+  .is-practicing .main{padding:12px 16px max(20px,env(safe-area-inset-bottom))}
+  .is-practicing .quiz-meta{gap:8px;line-height:1.5}
+  .is-practicing .quiz-meta>span:first-child{min-width:0;overflow-wrap:anywhere}
+  .is-practicing .quiz-meta .text-btn{flex-shrink:0;min-height:36px;padding:6px 0}
+  .is-practicing .question-timer{margin-top:10px}
+  .is-practicing .timer-meta{margin-bottom:7px}
+  .is-practicing .timer-track{height:6px}
+  .is-practicing .question-timer+.progress{margin:10px 0 10px}
+  .is-practicing .practice-counter{margin-bottom:10px}
+  .is-practicing .question-card{min-height:140px;padding:20px 16px;border-radius:18px}
+  .is-practicing .question-card .eyebrow{margin-bottom:14px;font-size:10px}
+  .is-practicing .options{margin-top:14px;gap:8px}
+  .is-practicing .option{min-height:56px;padding:12px;line-height:1.55}
+  .is-practicing .typing-form{grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:14px}
+  .is-practicing .typing-form input{width:100%;padding:13px 12px;font-size:16px}
+  .is-practicing .typing-form .btn{padding:12px;font-size:12px}
+  .is-practicing .quiz-actions{margin-top:14px}
+  .is-practicing .flashcards-view{margin:0 auto}
+  .is-practicing .flashcards-view>.progress{margin:10px 0 12px}
+  .is-practicing .card-tools{margin-bottom:8px}
+  .is-practicing .card-tools>small:empty{display:none}
+  .is-practicing .flashcard-controls{margin-top:14px}
+  .is-practicing .swipe-hint{margin-top:10px}
+}
