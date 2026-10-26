@@ -565,3 +565,7 @@ HTML uses `Cache-Control: no-store`. Entry scripts, styles, and every transitive
 `npx wrangler deploy` automatically runs `node scripts/release.mjs` through Wrangler's custom build hook; the dashboard build command stays empty. The script updates query strings in place and removes the obsolete generated `public/releases` directory from v2.2.1, including overlay deployments. Remove that old generated directory from Git as well if it was committed. `npm run build:release` performs the same preparation locally.
 
 Settings ends with a small `wordnest v2.2.2` label. The build script keeps this display in sync with `package.json`; appearance and language changes preserve it.
+
+## Ranking category picker (version 2.2.4)
+
+Rankings uses a themed category button instead of a native select. It opens a dialog with all eight categories in a two-column grid, with an icon and a checked selected state. Selection closes the dialog before requesting the next ranking. Canceling or selecting the current category does not issue a request. Repeated taps cannot submit a selection twice, and older responses cannot replace the most recently selected ranking. Category changes fetch rankings without performing another study sync; the Refresh button still synchronizes records. Both languages and all existing themes are supported.

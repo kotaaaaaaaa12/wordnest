@@ -1,4 +1,4 @@
-import { eraseGuestData } from './account-study.js?v=2.2.2-73cecc6809b407cb';
+import { eraseGuestData } from './account-study.js?v=2.2.4-2aa08f72a0a3120f';
 export const RANKING_KEY='wordnest-ranking-v1';
 export const rankingMetrics={totalMs:'totalTime',averageMs:'averageTime',answered:'answeredQuestions',correct:'correctQuestions',accuracy:'accuracy',flips:'cardFlips',streak:'currentStreak',longest:'longestStreak'};
 export function rankingName(value){const name=String(value || '').trim().normalize('NFC');if([...name].length<1 || [...name].length>20 || /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/.test(name))throw new Error('invalidRankingName');return name;}

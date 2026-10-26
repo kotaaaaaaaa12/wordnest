@@ -48,12 +48,32 @@ test('asynchronous ranking renders never refocus selects, while password input k
   const {w,find,click,finish}=await harness();
   try{
     await click('.nav [data-nav="rankings"]');assert.ok(find('.ranking-loading'));
-    const picker=find('#ranking-metric');picker.focus();let selectFocus=0;const focus=w.HTMLSelectElement.prototype.focus;w.HTMLSelectElement.prototype.focus=function(...args){selectFocus++;return focus.apply(this,args);};
-    finish();await tick();await tick();assert.equal(selectFocus,0);assert.notEqual(w.document.activeElement.tagName,'SELECT');
+    const picker=find('#ranking-metric');picker.focus();let selectFocus=0;const focus=w.HTMLSelectElement.prototype.focus;w.HTMLSelectElement.prototype.focus=function(...args){selectFocus++;return focus.apply(this,args);};await click('[data-action="ranking-category"]');assert.equal(find('#ranking-metric').getAttribute('aria-expanded'),'true');assert.equal(find('[data-ranking-category][aria-pressed="true"]').dataset.rankingCategory,'totalMs');
+    finish();await tick();await tick();assert.equal(selectFocus,0);assert.notEqual(w.document.activeElement.tagName,'SELECT');assert.ok(find('#modal').open,'background ranking completion keeps the category dialog open');assert.equal(find('#ranking-metric').getAttribute('aria-expanded'),'true');find('#modal').dispatchEvent(new w.Event('cancel',{cancelable:true}));await tick();assert.equal(find('#modal').open,false);assert.equal(find('#ranking-metric').getAttribute('aria-expanded'),'false');
     // Closing a modal must not restore focus to its previously focused picker.
     find('#ranking-metric').focus();const count=selectFocus;await click('[data-action="settings"]');await click('[data-dialog="cancel"]');assert.equal(selectFocus,count);assert.notEqual(w.document.activeElement.tagName,'SELECT');
     await click('[data-action="ranking-refresh"]');assert.ok(find('.ranking-loading'));await click('[data-action="settings"]');
     const input=find('#admin-password');input.focus();input.value='still typing';input.setSelectionRange(1,5);let calls=0;const inputFocus=input.focus.bind(input);input.focus=(...args)=>{calls++;return inputFocus(...args);};
     finish();await tick();await tick();assert.equal(calls,0);assert.equal(w.document.activeElement,input);assert.equal(input.selectionStart,1);assert.equal(input.selectionEnd,5);assert.equal(selectFocus,count);
+  }finally{w.close();}
+});
+
+test('category selection cancels safely, ignores repeated taps, and keeps the newest ranking when responses arrive out of order',async()=>{
+  const {w,find,click,finish}=await harness();
+  try{
+    await click('.nav [data-nav="rankings"]');finish();await tick();await tick();
+    const requests=[],pending=new Map(),original=w.fetch;
+    w.fetch=(path,...args)=>{
+      if(!path.startsWith('/api/rankings?'))return original(path,...args);
+      const metric=new URL(path,'https://wordnest.example').searchParams.get('metric');requests.push(metric);
+      return new Promise(resolve=>pending.set(metric,()=>resolve({ok:true,status:200,json:async()=>({metric,rows:[{id:metric,name:metric,rank:1,value:60}],mine:null,total:1})})));
+    };
+    await click('[data-action="ranking-category"]');await click('[data-dialog="cancel"]');assert.equal(requests.length,0);assert.equal(find('#modal').open,false);
+    await click('[data-action="ranking-category"]');await click('[data-ranking-category="totalMs"]');assert.equal(requests.length,0,'same category does not refetch');
+    await click('[data-action="ranking-category"]');const stale=find('[data-ranking-category="answered"]');stale.click();stale.click();await tick();await tick();assert.deepEqual(requests,['answered']);assert.equal(find('#modal').open,false);
+    await click('[data-action="ranking-category"]');await click('[data-ranking-category="correct"]');assert.deepEqual(requests,['answered','correct']);
+    pending.get('correct')();await tick();await tick();assert.equal(find('.ranking-name').textContent,'correct');
+    pending.get('answered')();await tick();await tick();assert.equal(find('.ranking-name').textContent,'correct');assert.ok(find('#ranking-metric').textContent.includes(messages.en.correctQuestions));assert.equal(find('#modal').open,false);
+    await click('[data-action="settings"]');find('#settings-language').value='ja';find('#settings-language').dispatchEvent(new w.Event('change',{bubbles:true}));await click('[data-dialog="cancel"]');await click('[data-action="ranking-category"]');assert.equal(find('#modal-title').textContent,messages.ja.rankingMetric);assert.equal(find('[data-ranking-category="correct"]').getAttribute('aria-pressed'),'true');assert.ok(find('[data-ranking-category="correct"]').textContent.includes(messages.ja.correctQuestions));
   }finally{w.close();}
 });

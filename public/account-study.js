@@ -1,4 +1,4 @@
-import { mergeLearningIntervals, summarizeStudyDays } from './stats.js?v=2.2.2-73cecc6809b407cb';
+import { mergeLearningIntervals, summarizeStudyDays } from './stats.js?v=2.2.4-2aa08f72a0a3120f';
 export const categories=['learning','question','favorite','progress','cards'];
 export function studyCategory(key){
   if(key==='wordnest-progress')return 'progress';
