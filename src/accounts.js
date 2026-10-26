@@ -5,7 +5,7 @@ const encoder=new TextEncoder(),SESSION_SECONDS=30*86400;
 const json=(data,status=200,headers={})=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers}});
 const fail=(message,status=400)=>Object.assign(new Error(message),{status});
 export const accountSchema=[
- 'CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY,login_id TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,recovery_hash TEXT NOT NULL,study TEXT NOT NULL,sync_revision INTEGER NOT NULL DEFAULT 0,sync_marker TEXT NOT NULL DEFAULT \'\',created_at TEXT NOT NULL)',
+ 'CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY,login_id TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,recovery_hash TEXT NOT NULL DEFAULT \'\',study TEXT NOT NULL,sync_revision INTEGER NOT NULL DEFAULT 0,sync_marker TEXT NOT NULL DEFAULT \'\',created_at TEXT NOT NULL)',
  'CREATE TABLE IF NOT EXISTS account_sessions (hash TEXT PRIMARY KEY,account_id TEXT NOT NULL,expires INTEGER NOT NULL,credential_hash TEXT NOT NULL)',
  'CREATE INDEX IF NOT EXISTS account_sessions_owner ON account_sessions(account_id)',
  'CREATE TABLE IF NOT EXISTS account_aliases (profile_id TEXT PRIMARY KEY,account_id TEXT NOT NULL)',
@@ -56,6 +56,7 @@ function updateRanking(db,id,study,timezone,marker){
 export async function accountApi(request,db,readBody){
  const path=new URL(request.url).pathname,method=request.method;
  if(path==='/api/account/session' && method==='GET'){const session=await accountSession(request,db);return json({user:session?user(session):null});}
+ if(path==='/api/account/recover')return json({error:'accountRecoveryDisabled'},410);
  if(method!=='POST')return json({error:'notFound'},404);
  const data=await readBody(request);if(!data || typeof data!=='object' || Array.isArray(data))throw fail('accountInvalidData');
  if(path==='/api/account/register'){
@@ -66,18 +67,18 @@ export async function accountApi(request,db,readBody){
   const legacy=typeof data.legacyToken==='string' && /^[a-f0-9]{64}$/.test(data.legacyToken)?await tokenHash(data.legacyToken):null;
   if(legacy && await db.prepare('SELECT account_id FROM account_aliases WHERE profile_id=?').bind(legacy).first())throw fail('accountAlreadyLinked',409);
   if(encoder.encode(JSON.stringify(study)).length>1800000)throw fail('accountDataTooLarge',413);
-  const accountId=legacy || random(),salt=random(),recoveryCode=random().match(/.{1,8}/g).join('-'),hash=await passwordHash(supplied,salt),recoveryHash=await tokenHash(recoveryCode.replaceAll('-',''));
+  const accountId=legacy || random(),salt=random(),hash=await passwordHash(supplied,salt);
   const now=new Date().toISOString(),marker=crypto.randomUUID();
   // Preserve an existing removal notice; account creation does not bypass moderation.
   const moderation=legacy?await db.prepare('SELECT active FROM ranking_moderation WHERE profile_id=? AND active=1').bind(legacy).first():null;
   try{
    await db.batch([
-    db.prepare('INSERT INTO accounts (id,login_id,password_hash,password_salt,recovery_hash,study,sync_marker,created_at) VALUES (?,?,?,?,?,?,?,?)').bind(accountId,id,hash,salt,recoveryHash,JSON.stringify(study),marker,now),
+    db.prepare('INSERT INTO accounts (id,login_id,password_hash,password_salt,recovery_hash,study,sync_marker,created_at) VALUES (?,?,?,?,?,?,?,?)').bind(accountId,id,hash,salt,'',JSON.stringify(study),marker,now),
     db.prepare('INSERT INTO ranking_profiles (id,name,enabled,epoch,timezone,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=CASE WHEN ? THEN ranking_profiles.name ELSE excluded.name END,enabled=CASE WHEN ? THEN 0 ELSE excluded.enabled END,revision=ranking_profiles.revision+1').bind(accountId,name,moderation?0:Number(data.enabled),'account:'+study.epochs.learning,timezone,now,moderation?1:0,moderation?1:0),
     updateRanking(db,accountId,study,timezone,marker)
    ]);
   }catch(error){if(await db.prepare('SELECT id FROM accounts WHERE login_id=?').bind(id).first())throw fail('accountIdTaken',409);if(legacy && await db.prepare('SELECT id FROM accounts WHERE id=?').bind(legacy).first())throw fail('accountAlreadyLinked',409);throw error;}
-  return json({user:{id:accountId,loginId:id},study,recoveryCode},201,{'Set-Cookie':await issueSession(request,db,accountId,hash)});
+  return json({user:{id:accountId,loginId:id},study},201,{'Set-Cookie':await issueSession(request,db,accountId,hash)});
  }
  if(path==='/api/account/login'){
   const id=loginId(data.loginId);await rateLimit(request,db,'login',id);
@@ -87,18 +88,6 @@ export async function accountApi(request,db,readBody){
   if(!row || !equal(hash,row.password_hash))throw fail('accountWrongCredentials',401);
   return json({user:user(row)},200,{'Set-Cookie':await issueSession(request,db,row.id,hash)});
  }
- if(path==='/api/account/recover'){
-  const id=loginId(data.loginId);await rateLimit(request,db,'recover',id);const supplied=password(data.password);
-  const row=await db.prepare('SELECT * FROM accounts WHERE login_id=?').bind(id).first(),code=typeof data.recoveryCode==='string'?data.recoveryCode.toLowerCase().replaceAll('-','').trim():'';
-  if(!row || !/^[a-f0-9]{64}$/.test(code) || !equal(await tokenHash(code),row.recovery_hash))throw fail('accountWrongRecovery',401);
-  const salt=random(),hash=await passwordHash(supplied,salt),next=random(),marker=crypto.randomUUID();
-  const result=await db.batch([
-   db.prepare('UPDATE accounts SET password_hash=?,password_salt=?,recovery_hash=?,sync_marker=? WHERE id=? AND recovery_hash=? RETURNING id').bind(hash,salt,await tokenHash(next),marker,row.id,row.recovery_hash),
-   db.prepare('DELETE FROM account_sessions WHERE account_id=? AND EXISTS(SELECT 1 FROM accounts WHERE id=? AND sync_marker=?)').bind(row.id,row.id,marker)
-  ]);
-  if(!result[0].results.length)throw fail('accountWrongRecovery',401);
-  return json({recoveryCode:next.match(/.{1,8}/g).join('-')});
- }
  const session=await accountSession(request,db);if(!session)throw fail('accountUnauthorized',401);
  if(path==='/api/account/logout'){
   await db.prepare('DELETE FROM account_sessions WHERE hash=?').bind(await tokenHash(sessionToken(request))).run();
@@ -106,14 +95,15 @@ export async function accountApi(request,db,readBody){
  }
  if(path==='/api/account/password'){
   await rateLimit(request,db,'password',session.id);const next=password(data.password),row=await db.prepare('SELECT * FROM accounts WHERE id=?').bind(session.id).first();
+  if(!row)throw fail('accountUnauthorized',401);
   if(typeof data.currentPassword!=='string' || data.currentPassword.length>256 || !equal(await passwordHash(data.currentPassword,row.password_salt),row.password_hash))throw fail('accountWrongCredentials',401);
-  const salt=random(),hash=await passwordHash(next,salt),recovery=random(),marker=crypto.randomUUID();
+  const salt=random(),hash=await passwordHash(next,salt),marker=crypto.randomUUID();
   const result=await db.batch([
-   db.prepare('UPDATE accounts SET password_hash=?,password_salt=?,recovery_hash=?,sync_marker=? WHERE id=? AND password_hash=? RETURNING id').bind(hash,salt,await tokenHash(recovery),marker,row.id,row.password_hash),
+   db.prepare('UPDATE accounts SET password_hash=?,password_salt=?,recovery_hash=\'\',sync_marker=? WHERE id=? AND password_hash=? RETURNING id').bind(hash,salt,marker,row.id,row.password_hash),
    db.prepare('DELETE FROM account_sessions WHERE account_id=? AND EXISTS(SELECT 1 FROM accounts WHERE id=? AND sync_marker=?)').bind(row.id,row.id,marker)
   ]);
   if(!result[0].results.length)throw fail('accountConflict',409);
-  return json({recoveryCode:recovery.match(/.{1,8}/g).join('-')},200,{'Set-Cookie':await issueSession(request,db,row.id,hash)});
+  return json({ok:true},200,{'Set-Cookie':await issueSession(request,db,row.id,hash)});
  }
  if(path==='/api/account/sync'){
   if(data.accountId!==session.id)throw fail('accountSessionChanged',409);
@@ -127,7 +117,9 @@ export async function accountApi(request,db,readBody){
    if(owner && owner.account_id!==session.id)throw fail('accountAlreadyLinked',409);
   }
   for(let attempt=0;attempt<5;attempt++){
-   const row=await db.prepare('SELECT study,sync_revision FROM accounts WHERE id=?').bind(session.id).first(),study=JSON.parse(row.study);
+   const row=await db.prepare('SELECT study,sync_revision FROM accounts WHERE id=? AND password_hash=(SELECT credential_hash FROM account_sessions WHERE hash=?)').bind(session.id,await tokenHash(sessionToken(request))).first();
+   if(!row)throw fail('accountUnauthorized',401);
+   const study=JSON.parse(row.study);
    const known=data.operations.length?(await db.prepare('SELECT op_id,payload_hash FROM account_ops WHERE account_id=? AND op_id IN ('+data.operations.map(()=>'?').join(',')+')').bind(session.id,...data.operations.map(op=>op.id)).all()).results:[];
    const seen=new Map(known.map(op=>[op.op_id,op.payload_hash])),pending=[];
    for(const [index,op] of data.operations.entries()){
@@ -137,7 +129,7 @@ export async function accountApi(request,db,readBody){
    if(!pending.length)return json({user:user(session),study,revision:row.sync_revision,acknowledged:data.operations.map(op=>op.id)});
    const serialized=JSON.stringify(study);if(encoder.encode(serialized).length>1800000)throw fail('accountDataTooLarge',413);
    const marker=crypto.randomUUID(),results=await db.batch([
-    db.prepare('UPDATE accounts SET study=?,sync_revision=sync_revision+1,sync_marker=? WHERE id=? AND sync_revision=? RETURNING sync_revision').bind(serialized,marker,session.id,row.sync_revision),
+    db.prepare('UPDATE accounts SET study=?,sync_revision=sync_revision+1,sync_marker=? WHERE id=? AND sync_revision=? AND password_hash=(SELECT credential_hash FROM account_sessions WHERE hash=?) RETURNING sync_revision').bind(serialized,marker,session.id,row.sync_revision,await tokenHash(sessionToken(request))),
     ...pending.map(([id,hash])=>db.prepare('INSERT OR IGNORE INTO account_ops (account_id,op_id,payload_hash) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM accounts WHERE id=? AND sync_marker=?)').bind(session.id,id,hash,session.id,marker)),
     updateRanking(db,session.id,study,timezone,marker),
     ...legacyIds.map(id=>db.prepare('INSERT OR IGNORE INTO account_aliases (profile_id,account_id) SELECT ?,? WHERE EXISTS(SELECT 1 FROM accounts WHERE id=? AND sync_marker=?)').bind(id,session.id,session.id,marker)),
@@ -148,4 +140,34 @@ export async function accountApi(request,db,readBody){
   throw fail('accountConflict',409);
  }
  return json({error:'notFound'},404);
+}
+
+// Called only after worker.js has authenticated the administrator.
+export async function accountAdminApi(request,db,readBody){
+ const path=new URL(request.url).pathname,match=path.match(/^\/api\/admin\/accounts\/([a-f0-9]{64})(\/password)?$/);
+ if(!match || (match[2]?request.method!=='POST':request.method!=='DELETE'))return json({error:'notFound'},404);
+ const data=await readBody(request),row=await db.prepare('SELECT id,login_id,password_hash FROM accounts WHERE id=?').bind(match[1]).first();
+ if(!row)return json({error:'notFound'},404);
+ if(!data || data.loginId!==row.login_id)throw fail('accountConfirmId');
+ if(match[2]){
+  const next=password(data.password);await rateLimit(request,db,'admin-password',row.id);
+  const salt=random(),hash=await passwordHash(next,salt),marker=crypto.randomUUID();
+  const results=await db.batch([
+   db.prepare('UPDATE accounts SET password_hash=?,password_salt=?,recovery_hash=\'\',sync_marker=? WHERE id=? AND password_hash=? RETURNING id').bind(hash,salt,marker,row.id,row.password_hash),
+   db.prepare('DELETE FROM account_sessions WHERE account_id=? AND EXISTS(SELECT 1 FROM accounts WHERE id=? AND sync_marker=?)').bind(row.id,row.id,marker)
+  ]);
+  if(!results[0].results.length)throw fail('accountConflict',409);
+  return json({ok:true});
+ }
+ // Keep only anonymous credential tombstones so previously claimed guest
+ // tokens cannot recreate a deleted account's ranking profile.
+ const results=await db.batch([
+  db.prepare('INSERT OR IGNORE INTO account_aliases (profile_id,account_id) SELECT id,id FROM accounts WHERE id=? AND password_hash=?').bind(row.id,row.password_hash),
+  db.prepare('DELETE FROM accounts WHERE id=? AND password_hash=? RETURNING id').bind(row.id,row.password_hash),
+  ...['account_sessions','account_ops'].map(table=>db.prepare(`DELETE FROM ${table} WHERE account_id=? AND NOT EXISTS(SELECT 1 FROM accounts WHERE id=?)`).bind(row.id,row.id)),
+  db.prepare('DELETE FROM ranking_moderation WHERE profile_id IN (SELECT profile_id FROM account_aliases WHERE account_id=?) AND NOT EXISTS(SELECT 1 FROM accounts WHERE id=?)').bind(row.id,row.id),
+  db.prepare('DELETE FROM ranking_profiles WHERE id IN (SELECT profile_id FROM account_aliases WHERE account_id=?) AND NOT EXISTS(SELECT 1 FROM accounts WHERE id=?)').bind(row.id,row.id)
+ ]);
+ if(!results[1].results.length)throw fail('accountConflict',409);
+ return json({ok:true});
 }

@@ -127,18 +127,19 @@ export async function rankingAdminApi(request,db,readBody){
   const url=new URL(request.url),path=url.pathname;
   const statsMatch=path.match(/^\/api\/admin\/rankings\/([a-f0-9]{64})\/stats$/);
   if(statsMatch && request.method==='GET'){
-    const row=await db.prepare('SELECT id,name,enabled,timezone,days,updated_at FROM ranking_profiles WHERE id=?').bind(statsMatch[1]).first();
+    const row=await db.prepare('SELECT p.id,p.name,p.enabled,p.timezone,p.days,p.updated_at,a.login_id AS loginId,a.created_at AS accountCreatedAt FROM ranking_profiles p LEFT JOIN accounts a ON a.id=p.id WHERE p.id=?').bind(statsMatch[1]).first();
     if(!row)return json({error:'notFound'},404);
     // Recalculate streaks in the participant's timezone, including days without uploads.
     const days=JSON.parse(row.days),today=dateInZone(row.timezone),summary=summarizeStudyDays(days,today);
-    return json({days,today,participant:{id:row.id,name:row.name,enabled:Boolean(row.enabled),timezone:row.timezone,updatedAt:row.updated_at},summary});
+    return json({days,today,participant:{id:row.id,name:row.name,enabled:Boolean(row.enabled),timezone:row.timezone,updatedAt:row.updated_at,loginId:row.loginId,accountCreatedAt:row.accountCreatedAt},summary});
   }
   if(path==='/api/admin/rankings' && request.method==='GET'){
-    const status=url.searchParams.get('status') || 'all',q=(url.searchParams.get('q') || '').trim(),offset=Number(url.searchParams.get('offset') || 0);
-    if(!['all','listed','private','removed'].includes(status) || q.length>100 || !Number.isSafeInteger(offset) || offset<0 || offset>1000000)throw fail('invalidRankingData');
+    const status=url.searchParams.get('status') || 'all',kind=url.searchParams.get('kind') || 'all',q=(url.searchParams.get('q') || '').trim(),offset=Number(url.searchParams.get('offset') || 0);
+    if(!['all','listed','private','removed'].includes(status) || !['all','accounts','guests'].includes(kind) || q.length>100 || !Number.isSafeInteger(offset) || offset<0 || offset>1000000)throw fail('invalidRankingData');
     const filter={all:'1=1',listed:'p.enabled=1 AND COALESCE(m.active,0)=0',private:'p.enabled=0 AND COALESCE(m.active,0)=0',removed:'m.active=1'}[status];
-    const base=`FROM ranking_profiles p LEFT JOIN ranking_moderation m ON m.profile_id=p.id WHERE (${filter}) AND instr(lower(p.name),lower(?))>0`;
-    const result=await db.batch([db.prepare(`SELECT p.id,p.name,p.revision,p.enabled,COALESCE(m.active,0) AS removed,p.updated_at AS updatedAt,m.notice_id AS noticeId,m.removed_at AS removedAt,m.message_ja AS messageJa,m.message_en AS messageEn,m.acknowledged ${base} ORDER BY p.updated_at DESC,p.id LIMIT 50 OFFSET ?`).bind(q,offset),db.prepare(`SELECT COUNT(*) AS total ${base}`).bind(q)]);
+    const kindFilter={all:'1=1',accounts:'a.id IS NOT NULL',guests:'a.id IS NULL'}[kind];
+    const base=`FROM ranking_profiles p LEFT JOIN ranking_moderation m ON m.profile_id=p.id LEFT JOIN accounts a ON a.id=p.id WHERE (${filter}) AND (${kindFilter}) AND (instr(lower(p.name),lower(?))>0 OR instr(lower(COALESCE(a.login_id,'')),lower(?))>0)`;
+    const result=await db.batch([db.prepare(`SELECT p.id,p.name,p.revision,p.enabled,a.login_id AS loginId,a.created_at AS accountCreatedAt,COALESCE(m.active,0) AS removed,p.updated_at AS updatedAt,m.notice_id AS noticeId,m.removed_at AS removedAt,m.message_ja AS messageJa,m.message_en AS messageEn,m.acknowledged ${base} ORDER BY p.updated_at DESC,p.id LIMIT 50 OFFSET ?`).bind(q,q,offset),db.prepare(`SELECT COUNT(*) AS total ${base}`).bind(q,q)]);
     return json({participants:result[0].results,total:result[1].results[0].total,offset});
   }
   const match=path.match(/^\/api\/admin\/rankings\/([a-f0-9]{64})\/remove$/);

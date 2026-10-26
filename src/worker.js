@@ -1,5 +1,5 @@
 import { rankingApi, rankingAdminApi, rankingSchema } from './rankings.js';
-import { accountApi, accountSchema, accountSession } from './accounts.js';
+import { accountApi, accountAdminApi, accountSchema, accountSession } from './accounts.js';
 import { validateSet } from '../public/core.js';
 const initialized = new WeakMap();
 const encoder = new TextEncoder();
@@ -15,6 +15,10 @@ async function initialize(db) {
       db.prepare('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY)'),
       db.prepare('CREATE TABLE IF NOT EXISTS set_order (id INTEGER PRIMARY KEY CHECK(id=1), ids TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0)'),
       db.prepare('CREATE TABLE IF NOT EXISTS login_limits (key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires INTEGER NOT NULL)')
+    ]);
+    await db.batch([
+      db.prepare("UPDATE accounts SET recovery_hash='' WHERE recovery_hash<>'' AND NOT EXISTS(SELECT 1 FROM metadata WHERE key='retire-account-recovery-v3')"),
+      db.prepare("INSERT OR IGNORE INTO metadata (key) VALUES ('retire-account-recovery-v3')")
     ]);
     const columns=await db.prepare('PRAGMA table_info(sets)').all();
     if(!columns.results.some(column=>column.name==='published')){
@@ -113,6 +117,7 @@ async function api(request, env) {
   }
   if(path==='/api/rankings' || path.startsWith('/api/ranking/'))return rankingApi(request,env.DB,body,(await accountSession(request,env.DB))?.id);
   if (!await authenticated(request, env)) return reply({ error: 'unauthorized' }, 401);
+  if(path.startsWith('/api/admin/accounts/'))return accountAdminApi(request,env.DB,body);
   if(path.startsWith('/api/admin/'))return rankingAdminApi(request,env.DB,body);
   if (path === '/api/sets/order' && method === 'PUT') {
     const data=await body(request);

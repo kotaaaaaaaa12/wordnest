@@ -17,13 +17,13 @@ function device(mf){const raw=memoryStorage(),connection=transport(mf),account=n
  account.beforeSwitch=()=>tracker.setActive(false);account.onSwitch=()=>{tracker=new LearningTracker({storage:account.storage});personal=new PersonalWords(account.storage);cards=new FlashcardBookmarks(account.storage);ranking.profile=null;};account.onSync=()=>{tracker.syncReset();personal.memory.clear();personal.syncResets();cards.pending.clear();};
  return {raw,connection,account,ranking,get tracker(){return tracker;},get personal(){return personal;},get cards(){return cards;}};
 }
-test('accounts separate private IDs from display names, hash credentials, isolate sessions, and revoke credentials on password changes and recovery',async()=>{
+test('accounts separate private IDs from display names, hash credentials, isolate sessions, and revoke credentials on password changes without recovery codes',async()=>{
  const mf=instance(),a=transport(mf),b=transport(mf),other=transport(mf);
  try{
   const registration=await api(a,'/api/account/register','POST',{loginId:'Private_ID',password,name:'Same display name',enabled:true,timezone:'UTC',entries:{}});
   assert.equal(registration.status,201);assert.equal(registration.data.user.loginId,'private_id');assert.match(registration.headers.get('Set-Cookie'),/HttpOnly; SameSite=Strict/);assert.match(registration.headers.get('Set-Cookie'),/Secure/);
-  const recovery=registration.data.recoveryCode,id=registration.data.user.id;
-  const db=await mf.getD1Database('DB'),row=await db.prepare('SELECT * FROM accounts WHERE id=?').bind(id).first();assert.notEqual(row.password_hash,password);assert.notEqual(row.recovery_hash,recovery.replaceAll('-',''));assert.equal(row.password_salt.length,64);
+  assert.equal(Object.hasOwn(registration.data,'recoveryCode'),false);const id=registration.data.user.id;
+  const db=await mf.getD1Database('DB'),row=await db.prepare('SELECT * FROM accounts WHERE id=?').bind(id).first();assert.notEqual(row.password_hash,password);assert.equal(row.recovery_hash,'');assert.equal(row.password_salt.length,64);
   assert.equal((await api(other,'/api/account/register','POST',{loginId:'PRIVATE_id',password,name:'Other',enabled:true,timezone:'UTC',entries:{}})).status,409);
   assert.equal((await api(other,'/api/account/register','POST',{loginId:'different_id',password,name:'Same display name',enabled:false,timezone:'UTC',entries:{}})).status,201,'public names need not be unique');
   assert.equal((await api(b,'/api/account/login','POST',{loginId:'private_ID',password:'wrong password phrase'})).data.error,'accountWrongCredentials');
@@ -31,17 +31,14 @@ test('accounts separate private IDs from display names, hash credentials, isolat
   assert.equal((await api(b,'/api/session')).data.authenticated,false,'learner authentication never grants administration');
   assert.equal((await api(b,'/api/sets','POST',{title:'Private write',words:[]})).status,401);
   assert.equal((await api(b,'/api/account/password','POST',{currentPassword:'wrong',password:'replacement password phrase'})).status,401);
-  const changed=await api(a,'/api/account/password','POST',{currentPassword:password,password:'replacement password phrase'});assert.equal(changed.status,200);assert.ok(changed.data.recoveryCode);
+  const changed=await api(a,'/api/account/password','POST',{currentPassword:password,password:'replacement password phrase'});assert.equal(changed.status,200);assert.equal(Object.hasOwn(changed.data,'recoveryCode'),false);
   assert.equal((await api(b,'/api/account/session')).data.user,null);assert.equal((await api(a,'/api/account/session')).data.user.id,id);
   assert.equal((await api(b,'/api/account/login','POST',{loginId:'private_id',password})).status,401);
-  assert.equal((await api(b,'/api/account/recover','POST',{loginId:'private_id',recoveryCode:recovery,password:'recovered password phrase'})).status,401,'old recovery codes are invalidated by password changes');
-  const restored=await api(b,'/api/account/recover','POST',{loginId:'private_id',recoveryCode:changed.data.recoveryCode,password:'recovered password phrase'});assert.equal(restored.status,200);assert.ok(restored.data.recoveryCode);
-  assert.equal((await api(a,'/api/account/session')).data.user,null);assert.equal((await api(b,'/api/account/session')).data.user,null,'recovery requires an explicit new login');
-  assert.equal((await api(b,'/api/account/recover','POST',{loginId:'private_id',recoveryCode:changed.data.recoveryCode,password:'another recovered password'})).status,401);
-  assert.equal((await api(b,'/api/account/login','POST',{loginId:'private_id',password:'recovered password phrase'})).status,200);
+  assert.equal((await api(b,'/api/account/recover','POST',{loginId:'private_id',recoveryCode:'a'.repeat(64),password:'recovered password phrase'})).status,410,'legacy recovery endpoint is disabled');
+  assert.equal((await api(b,'/api/account/login','POST',{loginId:'private_id',password:'replacement password phrase'})).status,200);
   assert.equal((await api(b,'/api/account/logout','POST',{})).status,200);assert.equal((await api(b,'/api/account/session')).data.user,null);
   assert.equal((await api(a,'/api/account/register','POST',{loginId:'id',password:'short'})).status,400);assert.equal((await api(a,'/api/account/register','POST',null)).status,400);
-  await db.prepare('UPDATE login_limits SET attempts=20').run();assert.equal((await api(a,'/api/account/login','POST',{loginId:'private_id',password:'recovered password phrase'})).status,429);
+  await db.prepare('UPDATE login_limits SET attempts=20').run();assert.equal((await api(a,'/api/account/login','POST',{loginId:'private_id',password:'replacement password phrase'})).status,429);
   assert.equal((await api(a,'/api/account/login','POST',{loginId:'private_id',password}, {Origin:'https://attacker.example'})).status,403);
  }finally{await mf.dispose();}
 });
@@ -98,6 +95,89 @@ test('offline outboxes survive reloads and lost responses, guest imports dedupli
   const payload={accountId:a.account.user.id,timezone:'UTC',operations:[operation]};assert.equal((await api(a.connection,'/api/account/sync','POST',payload)).status,200);assert.equal((await api(a.connection,'/api/account/sync','POST',payload)).status,200);
   assert.equal((await api(a.connection,'/api/account/sync','POST',{...payload,operations:[{...operation,value:{on:false}}]})).status,400,'operation IDs cannot be reused with different payloads');
   await db.prepare('DELETE FROM account_sessions WHERE account_id=?').bind(a.account.user.id).run();a.tracker.answer(true);await assert.rejects(a.account.sync(),/accountUnauthorized/);assert.equal(a.account.expired,true);assert.ok(a.account.pending().length);await a.account.login('offline_user',password);assert.equal(a.tracker.snapshot().answered,5);
+ }finally{await mf.dispose();}
+});
+test('guest transfers include profile-only guests and retire local data only after an acknowledged sync, including lost responses',async()=>{
+ const mf=instance(),a=device(mf),b=device(mf),c=device(mf);
+ try{
+  await a.account.register({loginId:'guest_transfer',password,name:'Account learner',enabled:true});
+  assert.equal(a.account.hasGuestRecords(),false);
+  await b.ranking.join('Profile-only guest');const profile=b.account.guestProfile();
+  assert.equal(Object.keys(b.account.guestEntries()).length,0);assert.equal(b.account.hasGuestRecords(),true);
+  await b.account.login('guest_transfer',password);await b.account.importGuest();
+  assert.equal(b.raw.getItem('wordnest-ranking-v1'),null);assert.equal(b.account.hasGuestRecords(),false);
+  const db=await mf.getD1Database('DB');assert.equal(await db.prepare('SELECT id FROM ranking_profiles WHERE id=?').bind(profile.id).first(),null);
+  assert.equal((await api(transport(mf),'/api/ranking/profile','GET',undefined,{Authorization:'Bearer '+profile.token})).status,401);
+  c.tracker.answer(false);await c.ranking.join('Guest with records');const guest=c.account.guestProfile(),entries=c.account.guestEntries();
+  await c.account.login('guest_transfer',password);c.connection.offline=true;await assert.rejects(c.account.importGuest(),/networkError/);
+  assert.deepEqual(c.account.guestEntries(),entries);assert.equal(c.account.guestProfile().token,guest.token);
+  c.connection.offline=false;const normal=c.account.fetch;let drop=true;
+  c.account.fetch=async(path,options)=>{const response=await normal(path,options);if(drop && path==='/api/account/sync' && JSON.parse(options.body).operations.some(op=>op.type==='import')){drop=false;throw new Error('Lost import response');}return response;};
+  await assert.rejects(c.account.importGuest(),/networkError/);assert.equal(c.account.hasGuestRecords(),true);assert.deepEqual(c.account.guestEntries(),entries);
+  await c.account.sync();assert.equal(c.account.hasGuestRecords(),false);assert.equal(c.raw.getItem('wordnest-ranking-v1'),null);assert.equal(c.tracker.snapshot().answered,1);assert.equal(c.tracker.snapshot().correct,0);
+  assert.equal(await db.prepare('SELECT id FROM ranking_profiles WHERE id=?').bind(guest.id).first(),null);
+  await a.account.sync();assert.equal(a.tracker.snapshot().answered,1);assert.equal((await db.prepare('SELECT COUNT(*) AS count FROM ranking_profiles').first()).count,1);
+  await c.account.logout();assert.equal(c.tracker.snapshot().answered,0);
+ }finally{await mf.dispose();}
+});
+test('guest cleanup preserves records and a replacement profile written after the transferred snapshot',()=>{
+ const raw=memoryStorage(),account=new AccountClient({storage:raw}),token='a'.repeat(64),replacement='b'.repeat(64),key='wordnest-personal-v1:favorite:example';
+ raw.setItem(key,'{"on":false}');raw.setItem('wordnest-ranking-v1',JSON.stringify({token:replacement}));
+ account.retireGuest({[key]:'{"on":true}'},token);assert.equal(raw.getItem(key),'{"on":false}');assert.equal(account.guestProfile().token,replacement);
+});
+test('administrators identify private accounts, reset passwords, and delete accounts without reviving claimed guest credentials',async()=>{
+ const mf=instance(),a=device(mf),b=device(mf),admin=transport(mf),anonymous=transport(mf);
+ try{
+  a.tracker.answer(true);await a.ranking.join('Visible only name');const originalGuest=a.ranking.preferences();
+  await a.account.register({loginId:'hidden_login_id',password,name:'Visible only name',enabled:false});const id=a.account.user.id;
+  b.tracker.answer(false);await b.ranking.join('Imported guest');const imported=b.ranking.preferences();await b.account.login('hidden_login_id',password);await b.account.importGuest();
+  const base='/api/admin/accounts/'+id;
+  for(const connection of [anonymous,a.connection]){
+   assert.equal((await api(connection,'/api/admin/rankings')).status,401);
+   assert.equal((await api(connection,base+'/password','POST',{loginId:'hidden_login_id',password:'new administrator password'})).status,401);
+   assert.equal((await api(connection,base,'DELETE',{loginId:'hidden_login_id'})).status,401);
+  }
+  await api(admin,'/api/login','POST',{password:'a-long-admin-password'});
+  const listing=await api(admin,'/api/admin/rankings?q=HIDDEN_LOGIN&kind=accounts');assert.equal(listing.status,200);assert.equal(listing.data.total,1);assert.equal(listing.data.participants[0].loginId,'hidden_login_id');assert.ok(listing.data.participants[0].accountCreatedAt);
+  assert.equal((await api(admin,'/api/admin/rankings?kind=guests')).data.total,0);
+  assert.equal((await api(admin,'/api/admin/rankings?kind=invalid')).status,400);
+  assert.equal((await api(admin,'/api/admin/rankings/'+id+'/stats')).data.participant.loginId,'hidden_login_id');
+  assert.ok(!JSON.stringify((await api(anonymous,'/api/rankings')).data).includes('hidden_login_id'));
+  assert.ok(!JSON.stringify((await a.ranking.sync(true))).includes('hidden_login_id'));
+  assert.equal((await api(admin,base+'/password','POST',{loginId:'wrong',password:'new administrator password'})).data.error,'accountConfirmId');
+  assert.equal((await api(admin,base+'/password','POST',{loginId:'hidden_login_id',password:'short'})).data.error,'accountInvalidPassword');
+  assert.equal((await api(admin,base+'/password','POST',{loginId:'hidden_login_id',password:'new administrator password'},{Origin:'https://attacker.example'})).status,403);
+  const reset=await api(admin,base+'/password','POST',{loginId:'hidden_login_id',password:'new administrator password'});assert.equal(reset.status,200);assert.deepEqual(reset.data,{ok:true});
+  assert.equal((await api(a.connection,'/api/account/session')).data.user,null);assert.equal((await api(b.connection,'/api/account/session')).data.user,null);
+  await assert.rejects(a.account.sync(),/accountUnauthorized/);assert.equal(a.account.expired,true);
+  assert.equal((await api(anonymous,'/api/account/login','POST',{loginId:'hidden_login_id',password})).status,401);
+  await a.account.login('hidden_login_id','new administrator password');assert.equal(a.tracker.snapshot().answered,2);
+  const db=await mf.getD1Database('DB'),row=await db.prepare('SELECT * FROM accounts WHERE id=?').bind(id).first();assert.notEqual(row.password_hash,'new administrator password');assert.equal(row.recovery_hash,'');
+  assert.equal((await api(admin,base,'DELETE',{loginId:'wrong'})).data.error,'accountConfirmId');assert.ok(await db.prepare('SELECT id FROM accounts WHERE id=?').bind(id).first());
+  assert.equal((await api(admin,base,'DELETE',{loginId:'hidden_login_id'},{'Sec-Fetch-Site':'cross-site'})).status,403);
+  assert.equal((await api(admin,base,'DELETE',{loginId:'hidden_login_id'})).status,200);
+  for(const [table,column] of [['accounts','id'],['account_sessions','account_id'],['account_ops','account_id'],['ranking_profiles','id'],['ranking_moderation','profile_id']])assert.equal((await db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${column}=?`).bind(id).first()).n,0,table);
+  assert.equal((await api(a.connection,'/api/account/session')).data.user,null);await assert.rejects(a.account.sync(),/accountUnauthorized/);
+  assert.equal((await api(anonymous,'/api/account/login','POST',{loginId:'hidden_login_id',password:'new administrator password'})).status,401);
+  assert.equal((await api(admin,'/api/admin/rankings?q=hidden_login_id')).data.total,0);
+  for(const token of [originalGuest.token,imported.token]){
+   assert.equal((await api(transport(mf),'/api/ranking/profile','GET',undefined,{Authorization:'Bearer '+token})).status,401);
+   assert.equal((await api(transport(mf),'/api/account/register','POST',{loginId:'reused_guest',password,name:'Reused guest',enabled:true,timezone:'UTC',entries:{},legacyToken:token})).data.error,'accountAlreadyLinked');
+  }
+  assert.equal((await api(admin,base+'/password','POST',{loginId:'hidden_login_id',password:'another password phrase'})).status,404);
+  const fresh=await api(transport(mf),'/api/account/register','POST',{loginId:'hidden_login_id',password,name:'Fresh account',enabled:false,timezone:'UTC',entries:{}});assert.equal(fresh.status,201);assert.notEqual(fresh.data.user.id,id);assert.deepEqual(fresh.data.study.entries,{});
+ }finally{await mf.dispose();}
+});
+test('upgrading a legacy database erases recovery hashes without changing passwords, sessions, or study records',async()=>{
+ const mf=instance();
+ try{
+  const db=await mf.getD1Database('DB');
+  await db.prepare('CREATE TABLE accounts (id TEXT PRIMARY KEY,login_id TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,recovery_hash TEXT NOT NULL,study TEXT NOT NULL,sync_revision INTEGER NOT NULL DEFAULT 0,sync_marker TEXT NOT NULL DEFAULT \'\',created_at TEXT NOT NULL)').run();
+  const id='e'.repeat(64),study=JSON.stringify(emptyStudy());
+  await db.prepare('INSERT INTO accounts (id,login_id,password_hash,password_salt,recovery_hash,study,created_at) VALUES (?,?,?,?,?,?,?)').bind(id,'legacy_login','existing-password-hash','existing-salt','old-code-hash',study,'2026-10-24T00:00:00Z').run();
+  assert.equal((await api(transport(mf),'/api/account/session')).status,200);
+  const row=await db.prepare('SELECT * FROM accounts WHERE id=?').bind(id).first();assert.equal(row.recovery_hash,'');assert.equal(row.password_hash,'existing-password-hash');assert.equal(row.password_salt,'existing-salt');assert.equal(row.study,study);
+  assert.equal((await api(transport(mf),'/api/account/recover','POST',{loginId:'legacy_login',recoveryCode:'a'.repeat(64),password})).status,410);
  }finally{await mf.dispose();}
 });
 test('shared account reducers reject malformed records and merge overlapping intervals across timezones',()=>{

@@ -58,6 +58,14 @@ export class AccountClient {
   }
   return entries;
  }
+ guestProfile(){try{const profile=JSON.parse(this.raw?.getItem('wordnest-ranking-v1') || 'null');return /^[a-f0-9]{64}$/.test(profile?.token)?profile:null;}catch{return null;}}
+ hasGuestRecords(){return Boolean(this.guestProfile()) || Object.keys(this.guestEntries()).some(key=>!key.startsWith('wordnest-reset-'));}
+ retireGuest(entries,token){
+  // Only remove the snapshot acknowledged by the server. New guest activity
+  // written by another tab must remain available for a later transfer.
+  for(const [key,value] of Object.entries(entries))if(this.raw?.getItem(key)===value)this.raw.removeItem(key);
+  if(token && this.guestProfile()?.token===token)this.raw.removeItem('wordnest-ranking-v1');
+ }
  async request(path,data,keepalive=false){
   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
   try{
@@ -84,18 +92,17 @@ export class AccountClient {
  ensureStorage(){try{if(!this.raw)throw new Error();const key='wordnest-storage-check:'+uid();this.raw.setItem(key,'1');this.raw.removeItem(key);}catch{throw new Error('accountStorageError');}}
  async register({loginId,password,name,enabled}){
   this.ensureStorage();
-  const entries=this.guestEntries();let legacy;try{legacy=JSON.parse(this.raw.getItem('wordnest-ranking-v1') || 'null');}catch{}
+  const entries=this.guestEntries(),legacy=this.guestProfile();
   const result=await this.request('register',{loginId,password,name,enabled,entries,legacyToken:legacy?.token,timezone:timezone()});
   this.setUser(result.user);this.apply(result.study,[],0);
-  for(const [key,value] of Object.entries(entries))if(this.raw.getItem(key)===value)this.raw.removeItem(key);
-  this.raw.removeItem('wordnest-ranking-v1');this.lastSync=Date.now();this.onSync();return result;
+  this.retireGuest(entries,legacy?.token);this.lastSync=Date.now();this.onSync();return result;
  }
  async login(loginId,password){this.ensureStorage();const result=await this.request('login',{loginId,password});this.setUser(result.user);await this.sync();return result;}
  async importGuest(){
-  await this.sync();const entries=this.guestEntries();let legacy;try{legacy=JSON.parse(this.raw.getItem('wordnest-ranking-v1') || 'null');}catch{}
+  await this.sync();const entries=this.guestEntries(),legacy=this.guestProfile();
+  if(!this.hasGuestRecords())return;
   this.enqueue({type:'import',category:'learning',epoch:this.epoch('learning'),epochs:Object.fromEntries(categories.map(category=>[category,this.epoch(category)])),entries,legacyToken:legacy?.token});
-  await this.sync();for(const [key,value] of Object.entries(entries))if(this.raw.getItem(key)===value)this.raw.removeItem(key);
-  if(this.raw.getItem('wordnest-ranking-v1')===JSON.stringify(legacy))this.raw.removeItem('wordnest-ranking-v1');
+  await this.sync();
  }
  async logout(){
   await this.sync().catch(()=>{});
@@ -103,10 +110,13 @@ export class AccountClient {
   this.setUser(null);this.lastSync=null;this.error='';this.onSync();
  }
  async changePassword(currentPassword,password){return this.request('password',{currentPassword,password});}
- async recover(loginId,recoveryCode,password){return this.request('recover',{loginId,recoveryCode,password});}
  apply(study,acknowledged,revision){
   if(!study?.entries || !study.epochs)throw new Error('accountInvalidData');
-  const prefix=this.outboxPrefix();for(const id of acknowledged)this.raw.removeItem(prefix+id);
+  const prefix=this.outboxPrefix();for(const id of acknowledged){
+   const key=prefix+id;let entry;try{entry=JSON.parse(this.raw.getItem(key) || 'null');}catch{}
+   if(entry?.op.type==='import')this.retireGuest(entry.op.entries,entry.op.legacyToken);
+   this.raw.removeItem(key);
+  }
   const revisionKey=`wordnest-user:${this.user.id}:revision`,previousRevision=Number(this.raw.getItem(revisionKey) || -1);
   if(Number.isSafeInteger(revision) && revision<previousRevision)return;
   if(Number.isSafeInteger(revision))this.raw.setItem(revisionKey,String(revision));
@@ -140,7 +150,7 @@ export class AccountClient {
  }
  flushOnExit(){
   if(!this.user || this.expired)return;
-  const pending=this.pending().slice(0,50),data={accountId:id,operations:pending.map(entry=>entry.op),timezone:timezone()};
+  const pending=this.pending().slice(0,50),data={accountId:this.user.id,operations:pending.map(entry=>entry.op),timezone:timezone()};
   if(!pending.length || new TextEncoder().encode(JSON.stringify(data)).length>60000)return;
   // Keep the outbox until an ordinary sync confirms receipt; IDs prevent duplicates.
   this.markSent(pending);this.request('sync',data,true).catch(()=>{});
