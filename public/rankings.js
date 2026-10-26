@@ -93,6 +93,7 @@ export class RankingClient {
     if(this.account.expired)throw new Error('accountSessionExpired');
     try{
       await this.account.sync();
+      if(!this.account.user)return this.flush(true);
       for(let attempt=0;attempt<4;attempt++){
         const response=await this.request('/api/ranking/profile'),profile=response.profile;
         if(!profile)return;

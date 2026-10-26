@@ -1,4 +1,4 @@
-import { categories, studyCategory, epochKey, validateStudyEntry } from './account-study.js';
+import { categories, studyCategory, epochKey, validateStudyEntry, importStudy, applyStudyOperation } from './account-study.js';
 const CURRENT='wordnest-account-v1';
 const uid=()=>globalThis.crypto.randomUUID();
 const timezone=()=>Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -48,10 +48,11 @@ export class AccountClient {
   this.raw.removeItem(this.dataKey(key));
  }
  recordAnswers(questionKeys,correct){if(this.user && questionKeys.length)this.enqueue({type:'answer',category:'question',epoch:this.epoch('question'),keys:questionKeys,correct});}
- guestEntries(){
+ guestEntries(prefix=''){
   const entries={};
-  for(const key of keys(this.raw)){
-   const raw=this.raw.getItem(key);if(raw===null)continue;
+  for(const storedKey of keys(this.raw)){
+   if(prefix && !storedKey.startsWith(prefix))continue;
+   const key=prefix?storedKey.slice(prefix.length):storedKey,raw=this.raw.getItem(storedKey);if(raw===null)continue;
    if(categories.some(category=>key===epochKey(category))){if(raw.length<=120)entries[key]=raw;continue;}
    if(!studyCategory(key))continue;
    try{validateStudyEntry(key,JSON.parse(raw));entries[key]=raw;}catch{}
@@ -66,10 +67,35 @@ export class AccountClient {
   for(const [key,value] of Object.entries(entries))if(this.raw?.getItem(key)===value)this.raw.removeItem(key);
   if(token && this.guestProfile()?.token===token)this.raw.removeItem('wordnest-ranking-v1');
  }
+ guestSuccessor(id){try{return JSON.parse(this.raw?.getItem(`wordnest-user:${id}:guest-successor`) || 'null');}catch{return null;}}
+ convertDeletedAccount(id){
+  if(!id || this.user?.id!==id)return false;
+  this.ensureStorage();
+  const current=this.cachedUser();if(current && current.id!==id){this.setUser(current);return false;}
+  this.beforeSwitch();
+  const successor=this.guestSuccessor(id),accountEntries=this.guestEntries(this.dataPrefix()),guestEntries=this.guestEntries();
+  const study=importStudy(successor?guestEntries:accountEntries);
+  applyStudyOperation(study,{id:uid(),type:'import',category:'learning',epoch:study.epochs.learning,epochs:study.epochs,entries:successor?accountEntries:guestEntries});
+  let profile;try{profile=JSON.parse(this.storage.getItem('wordnest-ranking-v1') || 'null');}catch{}
+  const token=successor?.token || [...globalThis.crypto.getRandomValues(new Uint8Array(32))].map(value=>value.toString(16).padStart(2,'0')).join('');
+  const previous=this.guestProfile(),prefs=successor && previous?.token===token?previous:{token,name:profile?.name || previous?.name || `Learner ${token.slice(0,8)}`,choice:profile?.choice==='joined'?'joined':'declined',pending:uid()};
+  // Keep source caches until every guest write succeeds. A retry merges stable
+  // shards rather than counting the same study activity twice.
+  try{
+   for(const [key,value] of Object.entries(study.entries))this.raw.setItem(key,JSON.stringify(value));
+   for(const category of categories)this.raw.setItem(epochKey(category),study.epochs[category]);
+   this.raw.setItem('wordnest-ranking-v1',JSON.stringify(prefs));
+   this.raw.setItem(`wordnest-user:${id}:guest-successor`,JSON.stringify({token}));
+  }catch{throw new Error('accountStorageError');}
+  this.raw.removeItem('wordnest-account-signout');this.signoutPending=false;
+  this.setUser(null);this.lastSync=null;this.notice='accountConvertedGuest';
+  for(const key of keys(this.raw))if(key.startsWith(`wordnest-user:${id}:`) && !key.endsWith(':guest-successor'))this.raw.removeItem(key);
+  this.onSync();return true;
+ }
  async request(path,data,keepalive=false){
   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
   try{
-   const response=await this.fetch('/api/account/'+path,{method:data===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',signal:controller.signal,keepalive,headers:data===undefined?{}:{'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});
+   const response=await this.fetch('/api/account/'+path,{method:data===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',signal:controller.signal,keepalive,headers:{...(this.user?{'X-Wordnest-Account':this.user.id}:{}),...(data===undefined?{}:{'Content-Type':'application/json'})},...(data===undefined?{}:{body:JSON.stringify(data)})});
    const result=await response.json();if(!response.ok)throw new Error(result.error || 'serverError');return result;
   }catch(error){if(error.message?.startsWith('account') || ['tooLarge','jsonRequired','invalidImport'].includes(error.message) || error.message==='invalidRankingName' || error.message==='serverError')throw error;throw new Error('networkError');}
   finally{clearTimeout(timeout);}
@@ -82,6 +108,7 @@ export class AccountClient {
   try{
    if(this.signoutPending){try{await this.request('logout',{});}catch(error){if(error.message!=='accountUnauthorized')throw error;}this.raw?.removeItem('wordnest-account-signout');this.signoutPending=false;return;}
    const result=await this.request('session');
+   if(result.deletedAccountId && this.convertDeletedAccount(result.deletedAccountId))return;
    if(Object.hasOwn(result,'user')){
     if(result.user){if(this.user?.id!==result.user.id)this.setUser(result.user);await this.sync();}
     else if(this.user){this.expired=true;this.error='accountSessionExpired';}
@@ -92,9 +119,11 @@ export class AccountClient {
  ensureStorage(){try{if(!this.raw)throw new Error();const key='wordnest-storage-check:'+uid();this.raw.setItem(key,'1');this.raw.removeItem(key);}catch{throw new Error('accountStorageError');}}
  async register({loginId,password,name,enabled}){
   this.ensureStorage();
+  this.beforeSwitch();
   const entries=this.guestEntries(),legacy=this.guestProfile();
   const result=await this.request('register',{loginId,password,name,enabled,entries,legacyToken:legacy?.token,timezone:timezone()});
   this.setUser(result.user);this.apply(result.study,[],0);
+  this.storage.setItem('wordnest-ranking-v1',JSON.stringify({name,choice:enabled?'joined':'declined'}));
   this.retireGuest(entries,legacy?.token);this.lastSync=Date.now();this.onSync();return result;
  }
  async login(loginId,password){this.ensureStorage();const result=await this.request('login',{loginId,password});this.setUser(result.user);await this.sync();return result;}
@@ -146,7 +175,10 @@ export class AccountClient {
     if(!this.pending().length){this.onSync();return result;}
    }
    throw new Error('accountSyncPending');
-  }catch(error){this.error=error.message;if(error.message==='accountUnauthorized'){this.expired=true;this.error='accountSessionExpired';}this.onSync();throw error;}
+  }catch(error){
+   if(error.message==='accountDeleted' && this.convertDeletedAccount(id))return;
+   this.error=error.message;if(error.message==='accountUnauthorized'){this.expired=true;this.error='accountSessionExpired';}this.onSync();throw error;
+  }
  }
  flushOnExit(){
   if(!this.user || this.expired)return;

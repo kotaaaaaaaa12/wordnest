@@ -157,7 +157,7 @@ test('administrators identify private accounts, reset passwords, and delete acco
   assert.equal((await api(admin,base,'DELETE',{loginId:'hidden_login_id'},{'Sec-Fetch-Site':'cross-site'})).status,403);
   assert.equal((await api(admin,base,'DELETE',{loginId:'hidden_login_id'})).status,200);
   for(const [table,column] of [['accounts','id'],['account_sessions','account_id'],['account_ops','account_id'],['ranking_profiles','id'],['ranking_moderation','profile_id']])assert.equal((await db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${column}=?`).bind(id).first()).n,0,table);
-  assert.equal((await api(a.connection,'/api/account/session')).data.user,null);await assert.rejects(a.account.sync(),/accountUnauthorized/);
+  assert.equal((await api(a.connection,'/api/account/session')).data.user,null);await a.account.sync();assert.equal(a.account.user,null);assert.equal(a.tracker.snapshot().answered,2);assert.equal(a.ranking.preferences().name,'Visible only name');
   assert.equal((await api(anonymous,'/api/account/login','POST',{loginId:'hidden_login_id',password:'new administrator password'})).status,401);
   assert.equal((await api(admin,'/api/admin/rankings?q=hidden_login_id')).data.total,0);
   for(const token of [originalGuest.token,imported.token]){
@@ -167,6 +167,46 @@ test('administrators identify private accounts, reset passwords, and delete acco
   assert.equal((await api(admin,base+'/password','POST',{loginId:'hidden_login_id',password:'another password phrase'})).status,404);
   const fresh=await api(transport(mf),'/api/account/register','POST',{loginId:'hidden_login_id',password,name:'Fresh account',enabled:false,timezone:'UTC',entries:{}});assert.equal(fresh.status,201);assert.notEqual(fresh.data.user.id,id);assert.deepEqual(fresh.data.study.entries,{});
  }finally{await mf.dispose();}
+});
+test('deleted accounts become independent guests on reconnect or reload, preserving cached study data, private names, and offline activity',async()=>{
+ const mf=instance(),a=device(mf),b=device(mf),admin=transport(mf);
+ try{
+  a.tracker.answer(true);a.tracker.flip();a.tracker.addTime(Date.now()-10000,Date.now());
+  a.personal.answer([{key:'weak-word'}],false);a.personal.answer([{key:'weak-word'}],false);a.personal.toggleFavorite('favorite-word');
+  a.account.storage.setItem('wordnest-progress',JSON.stringify({seed:{key:'stable-set',scope:'all-first-pass','en-ja':true,'ja-en':false}}));
+  const base=[{front:'apple',back:'りんご'},{front:'book',back:'本'}],deck=a.cards.start('seed',base,'en-ja','original');deck.index=1;deck.flipped=true;a.cards.save(deck);
+  a.raw.setItem('wordnest-theme','dark');
+  await a.account.register({loginId:'become_guest',password,name:'名前そのまま',enabled:false});const id=a.account.user.id;await a.ranking.sync(true);
+  await b.account.login('become_guest',password);await b.ranking.sync(true);const shared=a.tracker.snapshot();
+  b.connection.offline=true;b.tracker.answer(false);b.tracker.flip();const offline=b.tracker.snapshot();
+  await api(admin,'/api/login','POST',{password:'a-long-admin-password'});assert.equal((await api(admin,'/api/admin/accounts/'+id,'DELETE',{loginId:'become_guest'})).status,200);
+  await assert.rejects(b.account.initialize().then(()=>{if(b.account.error)throw new Error(b.account.error);}),/networkError/);assert.equal(b.account.user.id,id);assert.equal(b.tracker.snapshot().answered,offline.answered);
+  await a.ranking.sync(true);assert.equal(a.account.user,null);assert.equal(a.account.expired,false);assert.equal(a.account.pending().length,0);assert.equal(a.tracker.snapshot().answered,shared.answered);assert.equal(a.tracker.snapshot().flips,shared.flips);assert.equal(a.tracker.snapshot().totalMs,shared.totalMs);assert.equal(a.tracker.snapshot().correct,shared.correct);
+  assert.equal(a.ranking.preferences().name,'名前そのまま');assert.equal(a.ranking.preferences().choice,'declined');assert.ok(a.ranking.preferences().token);assert.notEqual(a.ranking.preferences().id,id);assert.equal(a.personal.record('weak-word').weak,true);assert.equal(a.personal.favorite('favorite-word'),true);assert.equal(JSON.parse(a.account.storage.getItem('wordnest-progress')).seed['en-ja'],true);assert.equal(a.cards.restore('seed',base).index,1);assert.equal(a.raw.getItem('wordnest-theme'),'dark');
+  const guestToken=a.ranking.preferences().token;assert.equal(a.account.convertDeletedAccount(id),false);assert.equal(a.tracker.snapshot().answered,shared.answered);
+  b.connection.offline=false;await b.account.initialize();assert.equal(b.account.user,null);assert.equal(b.tracker.snapshot().answered,offline.answered);assert.equal(b.tracker.snapshot().flips,offline.flips);assert.equal(b.ranking.preferences().name,'名前そのまま');assert.notEqual(b.ranking.preferences().token,guestToken);await b.ranking.sync(true);
+  assert.equal((await a.ranking.list('answered')).rows.length,0,'opt-out remains private for both guests');
+  const db=await mf.getD1Database('DB');assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM accounts').first()).n,0);assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM ranking_profiles').first()).n,2);
+  const reloaded=new AccountClient({storage:a.raw,fetch:a.connection.fetch});await reloaded.initialize();assert.equal(reloaded.user,null);assert.equal(new LearningTracker({storage:reloaded.storage}).snapshot().answered,shared.answered);assert.equal(reloaded.guestProfile().token,guestToken);
+  await a.account.register({loginId:'become_guest',password,name:'名前そのまま',enabled:false});assert.notEqual(a.account.user.id,id);assert.equal(a.tracker.snapshot().answered,shared.answered);assert.equal(a.account.guestEntries()['wordnest-progress'],undefined);
+ }finally{await mf.dispose();}
+});
+test('repeated deletion handling in shared-storage tabs keeps one guest identity and does not duplicate the shared study shards',()=>{
+ const raw=memoryStorage(),id='d'.repeat(64);raw.setItem('wordnest-account-v1',JSON.stringify({id,loginId:'shared_tabs'}));
+ const first=new AccountClient({storage:raw}),other=new AccountClient({storage:raw});
+ let tracker=new LearningTracker({storage:first.storage,id:'shared-tab-shard'});tracker.answer(true);first.storage.setItem('wordnest-ranking-v1',JSON.stringify({name:'Preserved name',choice:'joined'}));
+ assert.equal(first.convertDeletedAccount(id),true);const token=first.guestProfile().token;
+ // A stale tab flushes its final activity after the first tab has converted.
+ tracker=new LearningTracker({storage:other.storage,id:'late-tab-shard'});tracker.answer(false);other.storage.setItem('wordnest-ranking-v1',JSON.stringify({name:'Preserved name',choice:'joined'}));
+ assert.equal(other.convertDeletedAccount(id),true);assert.equal(other.guestProfile().token,token);assert.equal(other.guestProfile().name,'Preserved name');assert.equal(other.guestProfile().choice,'joined');assert.equal(new LearningTracker({storage:other.storage}).snapshot().answered,2);
+ assert.equal(other.convertDeletedAccount(id),false);assert.equal(new LearningTracker({storage:other.storage}).snapshot().answered,2);
+});
+test('a failed guest conversion retains account caches and can retry without counting records twice',()=>{
+ const raw=memoryStorage(),id='f'.repeat(64);raw.setItem('wordnest-account-v1',JSON.stringify({id,loginId:'storage_retry'}));const account=new AccountClient({storage:raw});
+ new LearningTracker({storage:account.storage,id:'retry-shard'}).answer(true);account.storage.setItem('wordnest-ranking-v1',JSON.stringify({name:'Keep my name',choice:'declined'}));
+ const write=raw.setItem;raw.setItem=(key,value)=>{if(key==='wordnest-ranking-v1')throw new Error('Quota exceeded');write(key,value);};
+ assert.throws(()=>account.convertDeletedAccount(id),/accountStorageError/);assert.equal(account.user.id,id);assert.ok(raw.getItem(`wordnest-user:${id}:data:wordnest-learning-v1:retry-shard`));
+ raw.setItem=write;assert.equal(account.convertDeletedAccount(id),true);assert.equal(account.user,null);assert.equal(new LearningTracker({storage:account.storage}).snapshot().answered,1);assert.equal(account.guestProfile().name,'Keep my name');
 });
 test('upgrading a legacy database erases recovery hashes without changing passwords, sessions, or study records',async()=>{
  const mf=instance();

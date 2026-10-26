@@ -122,7 +122,7 @@ export const messages = {
     noticeUnread:"Not yet acknowledged",
     rankingNoticeRequired:"Acknowledge the removal notice before participating again.",
     rankingNameUnchanged:"Choose a different display name from the one that was removed. Changes only to spacing, letter case, or character width do not count.",
-    guideAdministration:"Administration is available after entering the administrator password in Settings. Search by display name or login ID, and filter registered accounts or guests. View synced statistics, charts, and calendars, including private learners. Ranking removal sends a private notice and permits rejoining after a name change. Account management offers password reset and permanent account deletion. Resetting a password signs out all devices; deletion requires typing the login ID and removes synced records. Recovery codes are no longer used.",
+    guideAdministration:"Administration is available after entering the administrator password in Settings. Search by display name or login ID, and filter registered accounts or guests. View synced statistics, charts, and calendars, including private learners. Ranking removal sends a private notice and permits rejoining after a name change. Account management offers password reset and permanent account deletion. Resetting a password signs out all devices; deletion requires typing the login ID. Each browser keeps its cached name and learning data as a guest on its next connection; cross-device sync ends. Recovery codes are no longer used.",
 
     rankings:"Rankings",
     rankingAs:"Listed as {name}",
@@ -404,7 +404,7 @@ export const messages = {
     noticeUnread:"未確認",
     rankingNoticeRequired:"削除通知を確認してから、再参加してください。",
     rankingNameUnchanged:"削除時とは異なる掲載名を入力してください。空白・大文字と小文字・全角と半角だけの変更は、名前の変更として扱いません。",
-    guideAdministration:"設定で管理者パスワードを入力すると、管理タブが表示されます。表示名・ログインIDで検索し、登録アカウントとゲストで絞り込めます。非公開の方も同期済みの学習記録・グラフ・カレンダーを確認できます。ランキングからの掲載削除では本人に通知し、名前を変更すると再参加できます。アカウント管理ではパスワードの再設定と完全削除ができます。再設定時はすべての端末をログアウトします。完全削除にはログインIDの入力が必要で、同期済みの記録も削除します。復旧コードは使用しません。",
+    guideAdministration:"設定で管理者パスワードを入力すると、管理タブが表示されます。表示名・ログインIDで検索し、登録アカウントとゲストで絞り込めます。非公開の方も同期済みの学習記録・グラフ・カレンダーを確認できます。ランキングからの掲載削除では本人に通知し、名前を変更すると再参加できます。アカウント管理ではパスワードの再設定と完全削除ができます。再設定時はすべての端末をログアウトします。完全削除にはログインIDの入力が必要です。各ブラウザは次に接続した際、端末内の名前・学習記録を引き継いだゲストに切り替わります。復旧コードは使用しません。",
 
     rankings:"ランキング",
     rankingAs:"掲載名：{name}",
@@ -566,18 +566,24 @@ export const messages = {
   }
 };
 Object.assign(messages.en,{
+  "accountStartTitle": "Use your learning records on another device",
+  "accountStartOtherDevice": "Already studied here? Create an account on the device that has your records, then log in with the same ID on this device to sync them.",
+  "accountStartHere": "You can also create an account here to transfer this browser’s guest records. Records from other browsers are not imported automatically.",
+  "accountConvertedGuest": "The account was deleted. You can continue as a guest with the name and records saved in this browser.",
+  "accountDeleted": "This login account was deleted. Records saved in this browser can continue as a guest.",
+
   "adminAccountType": "Account type",
   "adminRegistered": "Registered account",
   "adminGuest": "Guest",
   "adminAccountManage": "Manage account",
   "adminDeleteAccount": "Delete account",
   "adminDeleteAccountConfirm": "Permanently delete account",
-  "adminDeleteAccountHelp": "Delete this account, all its synced learning records, ranking entry, and active sessions. This cannot be undone. Enter the login ID shown above to confirm. This is separate from removing a public ranking entry.",
+  "adminDeleteAccountHelp": "Delete the login account and its server-side records. Signed-in browsers become separate guest profiles the next time they connect, keeping their cached name and learning data. Cross-device sync ends. Enter the login ID shown above to confirm.",
   "adminConfirmLoginId": "Enter the login ID to confirm",
   "accountConfirmId": "The login ID does not match. Enter the ID shown above.",
   "adminResetPasswordHelp": "Set a new password for this account. All signed-in devices will be signed out. Share the new password with the learner directly; they can change it after logging in.",
   "adminPasswordResetDone": "Password reset. All existing sessions have been signed out.",
-  "adminAccountDeleted": "Account and synced records deleted.",
+  "adminAccountDeleted": "Login account deleted. Cached records remain available as a guest.",
   "adminAccountCreated": "Registered: {date}",
   "accountAdminRecoveryHelp": "Ask the site administrator to reset your password and provide your login ID. Recovery codes are no longer used.",
   "accountRecoveryDisabled": "Recovery codes are no longer supported. Ask the site administrator to reset your password.",
@@ -632,18 +638,24 @@ Object.assign(messages.en,{
   "guideAccount": "An account is optional. Create one with a private login ID, password, and a separate ranking display name. Registration transfers existing browser records. Log in on another device to continue with the same data. Manage your account from the account button or Settings. Offline changes are queued locally; learning intervals are merged and repeated uploads are deduplicated. Difficult-word answers are processed in server receipt order. Language, appearance, sound, and administrator access remain device-specific."
 });
 Object.assign(messages.ja,{
+  "accountStartTitle": "別の端末でも学習記録を使うには",
+  "accountStartOtherDevice": "すでに学習したことがある場合は、記録のある端末でアカウントを作成してください。この端末では同じIDでログインすると同期できます。",
+  "accountStartHere": "この端末のゲスト記録を引き継いで登録することもできます。別のブラウザの記録は自動では取り込まれません。",
+  "accountConvertedGuest": "アカウントが削除されたため、端末内の名前・学習記録を引き継いでゲストに切り替えました。",
+  "accountDeleted": "ログイン用アカウントは削除されました。端末内の記録はゲストとして引き継げます。",
+
   "adminAccountType": "アカウント種別",
   "adminRegistered": "登録アカウント",
   "adminGuest": "ゲスト",
   "adminAccountManage": "アカウント管理",
   "adminDeleteAccount": "アカウントを削除",
   "adminDeleteAccountConfirm": "アカウントを完全に削除",
-  "adminDeleteAccountHelp": "アカウントと同期済みの学習データ、ランキング登録を削除し、ログイン中の端末をすべてログアウトします。この操作は取り消せません。確認のため、上に表示されたログインIDを入力してください。ランキングからの掲載削除とは異なります。",
+  "adminDeleteAccountHelp": "ログイン用アカウントとサーバー上の記録を削除します。ログインしていた各ブラウザは、次に接続した際、端末内に残る名前・学習記録を引き継いだゲストに切り替わります。端末間の同期は終了します。確認のため、上に表示されたログインIDを入力してください。",
   "adminConfirmLoginId": "確認用のログインID",
   "accountConfirmId": "ログインIDが一致しません。上に表示されたIDを入力してください。",
   "adminResetPasswordHelp": "新しいパスワードを設定します。ログイン中の端末はすべてログアウトします。設定したパスワードは本人に直接お伝えください。本人はログイン後に変更できます。",
   "adminPasswordResetDone": "パスワードを再設定し、すべての端末をログアウトしました。",
-  "adminAccountDeleted": "アカウントと同期済みの記録を削除しました。",
+  "adminAccountDeleted": "ログイン用アカウントを削除しました。端末内の記録はゲストとして引き継ぎます。",
   "adminAccountCreated": "登録日時：{date}",
   "accountAdminRecoveryHelp": "ログインIDをサイト管理者に伝え、パスワードの再設定を依頼してください。復旧コードは使用しません。",
   "accountRecoveryDisabled": "復旧コードは廃止されました。サイト管理者にパスワードの再設定を依頼してください。",

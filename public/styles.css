@@ -140,3 +140,5 @@ select:focus,select:focus-visible,select:active{border-color:var(--line);outline
 
 /* Account identity stays separate from the public ranking name. */
 .admin-account-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:7px 0;font-size:11px;line-height:1.8;overflow-wrap:anywhere}.account-type{display:inline-flex;align-items:center;font-size:10px;padding:4px 9px;border:1px solid var(--line);border-radius:999px;background:var(--paper);color:var(--muted);line-height:1.6}.admin-account-meta strong{font-family:ui-monospace,monospace;font-weight:500}.admin-person-actions>.admin-account-button{grid-column:1/-1;justify-self:stretch;justify-content:center}.admin-account-name{font-size:13px;line-height:1.8;overflow-wrap:anywhere;margin:8px 0 16px}
+
+.account-start-note{margin-top:18px;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--paper)}.account-start-note h3{font-size:14px;line-height:1.7;margin:0}.account-start-note p{font-size:12px;line-height:1.9;margin:9px 0 0}

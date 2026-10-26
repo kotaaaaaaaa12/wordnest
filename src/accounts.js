@@ -33,6 +33,10 @@ export async function accountSession(request,db){
  const token=sessionToken(request);if(!token || !/^[a-f0-9]{64}$/.test(token))return null;
  return db.prepare('SELECT a.id,a.login_id FROM account_sessions s JOIN accounts a ON a.id=s.account_id WHERE s.hash=? AND s.expires>? AND s.credential_hash=a.password_hash').bind(await tokenHash(token),Math.floor(Date.now()/1000)).first();
 }
+async function deletedAccount(db,id){
+ if(typeof id!=='string' || !/^[a-f0-9]{64}$/.test(id))return false;
+ return Boolean(await db.prepare('SELECT profile_id FROM account_aliases WHERE profile_id=? AND account_id=? AND NOT EXISTS(SELECT 1 FROM accounts WHERE id=?)').bind(id,id,id).first());
+}
 async function issueSession(request,db,id,expectedHash){
  const token=random(),now=Math.floor(Date.now()/1000);
  const result=await db.batch([db.prepare('DELETE FROM account_sessions WHERE expires<=?').bind(now),db.prepare('INSERT INTO account_sessions (hash,account_id,expires,credential_hash) SELECT ?,id,?,password_hash FROM accounts WHERE id=? AND password_hash=?').bind(await tokenHash(token),now+SESSION_SECONDS,id,expectedHash)]);
@@ -55,7 +59,11 @@ function updateRanking(db,id,study,timezone,marker){
 }
 export async function accountApi(request,db,readBody){
  const path=new URL(request.url).pathname,method=request.method;
- if(path==='/api/account/session' && method==='GET'){const session=await accountSession(request,db);return json({user:session?user(session):null});}
+ if(path==='/api/account/session' && method==='GET'){
+  const session=await accountSession(request,db),id=request.headers.get('X-Wordnest-Account');
+  if(!session && await deletedAccount(db,id))return json({user:null,deletedAccountId:id},200,{'Set-Cookie':cookie(request,'',0)});
+  return json({user:session?user(session):null});
+ }
  if(path==='/api/account/recover')return json({error:'accountRecoveryDisabled'},410);
  if(method!=='POST')return json({error:'notFound'},404);
  const data=await readBody(request);if(!data || typeof data!=='object' || Array.isArray(data))throw fail('accountInvalidData');
@@ -88,7 +96,11 @@ export async function accountApi(request,db,readBody){
   if(!row || !equal(hash,row.password_hash))throw fail('accountWrongCredentials',401);
   return json({user:user(row)},200,{'Set-Cookie':await issueSession(request,db,row.id,hash)});
  }
- const session=await accountSession(request,db);if(!session)throw fail('accountUnauthorized',401);
+ const session=await accountSession(request,db);
+ if(!session){
+  if(await deletedAccount(db,data.accountId || request.headers.get('X-Wordnest-Account')))return json({error:'accountDeleted'},410,{'Set-Cookie':cookie(request,'',0)});
+  throw fail('accountUnauthorized',401);
+ }
  if(path==='/api/account/logout'){
   await db.prepare('DELETE FROM account_sessions WHERE hash=?').bind(await tokenHash(sessionToken(request))).run();
   return json({ok:true},200,{'Set-Cookie':cookie(request,'',0)});
@@ -118,7 +130,7 @@ export async function accountApi(request,db,readBody){
   }
   for(let attempt=0;attempt<5;attempt++){
    const row=await db.prepare('SELECT study,sync_revision FROM accounts WHERE id=? AND password_hash=(SELECT credential_hash FROM account_sessions WHERE hash=?)').bind(session.id,await tokenHash(sessionToken(request))).first();
-   if(!row)throw fail('accountUnauthorized',401);
+   if(!row){if(await deletedAccount(db,session.id))throw fail('accountDeleted',410);throw fail('accountUnauthorized',401);}
    const study=JSON.parse(row.study);
    const known=data.operations.length?(await db.prepare('SELECT op_id,payload_hash FROM account_ops WHERE account_id=? AND op_id IN ('+data.operations.map(()=>'?').join(',')+')').bind(session.id,...data.operations.map(op=>op.id)).all()).results:[];
    const seen=new Map(known.map(op=>[op.op_id,op.payload_hash])),pending=[];

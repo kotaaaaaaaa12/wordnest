@@ -316,12 +316,12 @@ async function manageAdministratorAccount(button){
     if(!result)return;
     if(result.done){
       if(account.user?.id===person.id){
-        if(removing)await account.logout();
+        if(removing)account.convertDeletedAccount(person.id);
         else{account.expired=true;account.error='accountSessionExpired';accountSynced();}
       }
       toast(t(removing?'adminAccountDeleted':'adminPasswordResetDone'));
       if(removing && state.adminStatsId===person.id){administratorStatsRequest++;state.adminStatsId=null;state.adminStats=null;state.adminStatsBusy=false;}
-      await refreshAdministration();return;
+      await refreshAdministration();if(removing)ranking.sync(true).catch(()=>{});return;
     }
     mode=result.mode;
   }
@@ -995,6 +995,7 @@ function switchStudyAccount(){
 }
 function accountSynced(){
   personal.memory.clear();personal.syncResets();bookmarks.pending.clear();learning.syncReset();
+  if(account.notice==='accountConvertedGuest'){account.notice='';toast(t('accountConvertedGuest'));setTimeout(()=>ranking.sync(true).catch(()=>{}),0);}
   refreshAccountSettings();
   if(!learningScreen() && !$('#modal')?.open && (state.route==='stats' || state.route==='home' && state.screen==='home'))render();
 }
@@ -1005,12 +1006,16 @@ function accountSettingsContent(){
 function refreshAccountSettings(){const section=$('#account-settings');if(section)section.innerHTML=accountSettingsContent();}
 const accountClose=()=>`<button type="button" class="icon-btn modal-close" data-account-close aria-label="${t('close')}">${icon('close')}</button>`;
 async function accountDialog(initial){
+  if(account.user)await account.initialize();
   let mode=initial || (account.user && !account.expired?'manage':'login');
+  const showIntro=!account.user && storage.get('wordnest-account-intro-v1','')!=='seen';
+  if(showIntro)storage.set('wordnest-account-intro-v1','seen');
   for(;;){
+    if(mode==='manage' && !account.user)mode='login';
     const signed=!!account.user,register=mode==='register',help=mode==='help',change=mode==='password',manage=mode==='manage';
     const title=manage?'accountManage':register?'accountCreate':help?'accountForgotPassword':change?'accountChangePassword':'accountLogin';
     const input=(id,label,type='text',attributes='')=>`<label for="${id}">${t(label)}<input id="${id}" type="${type}" ${attributes} required></label>`;
-    const content=help?`${accountClose()}<h2 id="modal-title" tabindex="-1">${t('accountForgotPassword')}</h2><p>${t('accountAdminRecoveryHelp')}</p><div class="modal-actions"><button class="btn ghost" data-account-mode="login">${t('back')}</button></div>`:manage?`${accountClose()}<h2 id="modal-title" tabindex="-1">${t(title)}</h2><p class="account-id"><span>${t('accountLoginId')}</span><strong>${e(account.user.loginId)}</strong></p><p>${t('accountSignedInHelp')}</p><p>${e(account.error && messages.en[account.error]?t(account.error):t('accountSynced'))}</p><p class="error" id="account-error" role="alert" hidden></p><div class="account-actions"><button class="btn ghost" data-account-command="sync">${t('accountSyncNow')}</button><button class="btn ghost" data-account-mode="password">${t('accountChangePassword')}</button><button class="btn ghost" data-account-command="import" ${account.hasGuestRecords()?'':'disabled'}>${t('accountImportGuest')}</button><p>${t(account.hasGuestRecords()?'accountImportHelp':'accountNoGuestRecords')}</p><button class="btn ghost" data-account-command="logout">${t('accountLogout')}</button></div>`:`${accountClose()}<h2 id="modal-title" tabindex="-1">${t(title)}</h2><p>${t(register?'accountCreateHelp':change?'accountPasswordHelp':'accountLoginHelp')}</p><form id="account-form" class="account-form">${change?'':input('account-login-id','accountLoginId','text',`value="${e(account.user?.loginId || '')}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" minlength="3" maxlength="32" pattern="[a-zA-Z0-9_]{3,32}"`)}${register?`<small>${t('accountIdHelp')}</small>`:''}${change?input('account-current-password','accountCurrentPassword','password','autocomplete="current-password" maxlength="128"'):''}${input('account-password',change?'accountNewPassword':'accountPassword','password',`autocomplete="${register || change?'new-password':'current-password'}" maxlength="128" ${register || change?'minlength="15"':''}`)}${register || change?`<small>${t('accountPasswordRule')}</small>${input('account-confirm','accountConfirmPassword','password','autocomplete="new-password" minlength="15" maxlength="128"')}`:''}${register?`${input('account-display-name','profileName','text',`value="${e(ranking.preferences()?.name || '')}" autocomplete="nickname" maxlength="40"`)}<small>${t('accountDisplayNameHelp')}</small><label class="account-check"><input type="checkbox" id="account-listed" ${ranking.preferences()?.choice==='joined'?'checked':''}>${t('rankingParticipation')}</label>`:''}<p class="error" id="account-error" role="alert" hidden></p><div class="modal-actions"><button class="btn primary" type="submit">${t(register?'accountCreate':change?'save':'accountLogin')}</button></div></form><div class="account-links">${account.user && account.expired?`<button class="text-btn" data-account-command="logout">${t('accountLogout')}</button>`:''}${mode==='login'?`<button class="text-btn" data-account-mode="register">${t('accountCreate')}</button><button class="text-btn" data-account-mode="help">${t('accountForgotPassword')}</button>`:`<button class="text-btn" data-account-mode="${signed && !account.expired?'manage':'login'}">${t('back')}</button>`}</div>`;
+    const content=help?`${accountClose()}<h2 id="modal-title" tabindex="-1">${t('accountForgotPassword')}</h2><p>${t('accountAdminRecoveryHelp')}</p><div class="modal-actions"><button class="btn ghost" data-account-mode="login">${t('back')}</button></div>`:manage?`${accountClose()}<h2 id="modal-title" tabindex="-1">${t(title)}</h2><p class="account-id"><span>${t('accountLoginId')}</span><strong>${e(account.user.loginId)}</strong></p><p>${t('accountSignedInHelp')}</p><p>${e(account.error && messages.en[account.error]?t(account.error):t('accountSynced'))}</p><p class="error" id="account-error" role="alert" hidden></p><div class="account-actions"><button class="btn ghost" data-account-command="sync">${t('accountSyncNow')}</button><button class="btn ghost" data-account-mode="password">${t('accountChangePassword')}</button><button class="btn ghost" data-account-command="import" ${account.hasGuestRecords()?'':'disabled'}>${t('accountImportGuest')}</button><p>${t(account.hasGuestRecords()?'accountImportHelp':'accountNoGuestRecords')}</p><button class="btn ghost" data-account-command="logout">${t('accountLogout')}</button></div>`:`${accountClose()}<h2 id="modal-title" tabindex="-1">${t(title)}</h2>${showIntro && mode==='login'?`<section class="account-start-note" aria-labelledby="account-start-title"><h3 id="account-start-title">${t('accountStartTitle')}</h3><p>${t('accountStartOtherDevice')}</p><p>${t('accountStartHere')}</p></section>`:`<p>${t(register?'accountCreateHelp':change?'accountPasswordHelp':'accountLoginHelp')}</p>`}<form id="account-form" class="account-form">${change?'':input('account-login-id','accountLoginId','text',`value="${e(account.user?.loginId || '')}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" minlength="3" maxlength="32" pattern="[a-zA-Z0-9_]{3,32}"`)}${register?`<small>${t('accountIdHelp')}</small>`:''}${change?input('account-current-password','accountCurrentPassword','password','autocomplete="current-password" maxlength="128"'):''}${input('account-password',change?'accountNewPassword':'accountPassword','password',`autocomplete="${register || change?'new-password':'current-password'}" maxlength="128" ${register || change?'minlength="15"':''}`)}${register || change?`<small>${t('accountPasswordRule')}</small>${input('account-confirm','accountConfirmPassword','password','autocomplete="new-password" minlength="15" maxlength="128"')}`:''}${register?`${input('account-display-name','profileName','text',`value="${e(ranking.preferences()?.name || '')}" autocomplete="nickname" maxlength="40"`)}<small>${t('accountDisplayNameHelp')}</small><label class="account-check"><input type="checkbox" id="account-listed" ${ranking.preferences()?.choice==='joined'?'checked':''}>${t('rankingParticipation')}</label>`:''}<p class="error" id="account-error" role="alert" hidden></p><div class="modal-actions"><button class="btn primary" type="submit">${t(register?'accountCreate':change?'save':'accountLogin')}</button></div></form><div class="account-links">${account.user && account.expired?`<button class="text-btn" data-account-command="logout">${t('accountLogout')}</button>`:''}${mode==='login'?`<button class="text-btn" data-account-mode="register">${t('accountCreate')}</button><button class="text-btn" data-account-mode="help">${t('accountForgotPassword')}</button>`:`<button class="text-btn" data-account-mode="${signed && !account.expired?'manage':'login'}">${t('back')}</button>`}</div>`;
     const result=await dialog(content,finish=>{
       let busy=false;
       const run=async work=>{
@@ -1027,7 +1032,7 @@ async function accountDialog(initial){
           const value=command.dataset.accountCommand;
           if(value==='logout'){await account.logout();finish(false);return;}
           if(value==='import'){await account.importGuest();await ranking.sync(true);toast(t('accountImportDone'));}
-          else{await account.sync();await ranking.sync(true);toast(t('accountSynced'));}
+          else{await account.sync();await ranking.sync(true);if(!account.user){finish(false);return;}toast(t('accountSynced'));}
           finish({mode:'manage'});
         });
       };
@@ -1398,7 +1403,7 @@ window.addEventListener('storage',event=>{if((event.key?.startsWith('wordnest-ca
 
 window.addEventListener('storage',event=>{
   if(event.key==='wordnest-account-v1'){
-    const user=account.cachedUser();if(user?.id!==account.user?.id){learning.setActive(false);account.user=user;account.expired=false;switchStudyAccount();ranking.sync(true).catch(()=>{});}
+    const user=account.cachedUser();if(user?.id!==account.user?.id){if(!user && account.guestSuccessor(account.user?.id)){account.convertDeletedAccount(account.user.id);}else{learning.setActive(false);account.user=user;account.expired=false;switchStudyAccount();}ranking.sync(true).catch(()=>{});}
   }else if(account.user && event.key?.startsWith(`wordnest-user:${account.user.id}:data:`)){
     personal.memory.clear();personal.syncResets();learning.syncReset();bookmarks.pending.clear();
     if(!learningScreen() && !modal.open && ['home','stats'].includes(state.route))render();
