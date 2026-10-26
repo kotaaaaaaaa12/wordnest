@@ -1,12 +1,13 @@
-const APP_VERSION = '2.2.4';
-import { AccountClient } from './accounts.js?v=2.2.4-2aa08f72a0a3120f';
-import { RankingClient, rankingMetrics } from './rankings.js?v=2.2.4-2aa08f72a0a3120f';
-import { FlashcardBookmarks, PersonalWords, wordIdentity, catalogWord, findCatalogWord, sourceQuestions, collectionQuestions, canMultipleChoice, quizFromPool, collectionCards } from './personal.js?v=2.2.4-2aa08f72a0a3120f';
-import { LearningTracker, localDay, studyCalendar, recentStudyDays } from './stats.js?v=2.2.4-2aa08f72a0a3120f';
-import { icon } from './icons.js?v=2.2.4-2aa08f72a0a3120f';
-import { normalizeIpa, normalizeIpaData, ipaRuns, ipaRawRuns, limitIpaText, remapIpaItalic, normalize, studyKey, studyStatus, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, balanceAnswerPositions, isCorrect, portable, parseImport } from './core.js?v=2.2.4-2aa08f72a0a3120f';
-import { messages, translator } from './i18n.js?v=2.2.4-2aa08f72a0a3120f';
-import { zipSync, unzipSync, strToU8, strFromU8 } from './vendor/fflate.js?v=2.2.4-2aa08f72a0a3120f';
+const APP_VERSION = '2.3.0';
+import { releaseHistory } from './changelog.js?v=2.3.0-0e4d115fa4b3c712';
+import { AccountClient } from './accounts.js?v=2.3.0-0e4d115fa4b3c712';
+import { RankingClient, rankingMetrics } from './rankings.js?v=2.3.0-0e4d115fa4b3c712';
+import { FlashcardBookmarks, PersonalWords, wordIdentity, catalogWord, findCatalogWord, sourceQuestions, collectionQuestions, canMultipleChoice, quizFromPool, collectionCards } from './personal.js?v=2.3.0-0e4d115fa4b3c712';
+import { LearningTracker, localDay, studyCalendar, recentStudyDays } from './stats.js?v=2.3.0-0e4d115fa4b3c712';
+import { icon } from './icons.js?v=2.3.0-0e4d115fa4b3c712';
+import { normalizeIpa, normalizeIpaData, ipaRuns, ipaRawRuns, limitIpaText, remapIpaItalic, normalize, studyKey, studyStatus, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, balanceAnswerPositions, isCorrect, portable, parseImport } from './core.js?v=2.3.0-0e4d115fa4b3c712';
+import { messages, translator } from './i18n.js?v=2.3.0-0e4d115fa4b3c712';
+import { zipSync, unzipSync, strToU8, strFromU8 } from './vendor/fflate.js?v=2.3.0-0e4d115fa4b3c712';
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const e = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -143,10 +144,10 @@ async function load() {
   if(state.route==='admin' && state.authenticated)refreshAdministration();
   queueRankingNotice();setTimeout(maybeRankingOnboarding,0);
 }
-function routeFromHash() { return location.hash==='#/stats'?'stats':location.hash==='#/rankings'?'rankings':location.hash==='#/admin'?'admin':location.hash==='#/guide'?'guide':location.hash.startsWith('#/edit')?'edit':'home'; }
+function routeFromHash() { return location.hash==='#/stats'?'stats':location.hash==='#/rankings'?'rankings':location.hash==='#/admin'?'admin':location.hash==='#/guide'?'guide':location.hash==='#/history'?'history':location.hash.startsWith('#/edit')?'edit':'home'; }
 const routeHref=route=>route==='home'?'#/':`#/${route}`;
 function shell(content) {
-  return `<div class="app-shell ${learningScreen()?'is-practicing':''}"><aside class="sidebar"><a href="#/" data-nav="home" class="brand"><span class="brand-mark">${icon('book')}</span>wordnest<span style="color:var(--accent)">.</span></a><nav class="nav ${state.authenticated?'nav-admin':''}" style="--nav-count:${state.authenticated?6:4}" aria-label="${t('home')}"><a href="#/" data-nav="home" class="${state.route==='home'?'active':''}">${icon('book')}${t('home')}</a><a href="#/stats" data-nav="stats" class="${state.route==='stats'?'active':''}">${icon('stats')}${t('stats')}</a><a href="#/rankings" data-nav="rankings" class="${state.route==='rankings'?'active':''}">${icon('trophy')}${t('rankings')}</a><a href="#/guide" data-nav="guide" class="${state.route==='guide'?'active':''}">${icon('guide')}${t('guide')}</a>${state.authenticated?`<a href="#/edit" data-nav="edit" class="${state.route==='edit'?'active':''}">${icon('edit')}${t('edit')}</a><a href="#/admin" data-nav="admin" class="${state.route==='admin'?'active':''}">${icon('settings')}${t('admin')}</a>`:''}</nav><div class="sidebar-bottom"><button class="settings-trigger account-trigger" data-action="account" aria-label="${t('account')}">${icon('user')}${t('account')}</button><button class="settings-trigger" data-action="settings">${icon('settings')}${t('settings')}</button></div></aside><main class="main">${content}</main></div>`;
+  return `<div class="app-shell ${learningScreen()?'is-practicing':''}"><aside class="sidebar"><a href="#/" data-nav="home" class="brand"><span class="brand-mark">${icon('book')}</span>wordnest<span style="color:var(--accent)">.</span></a><nav class="nav ${state.authenticated?'nav-admin':''}" style="--nav-count:${state.authenticated?7:5}" aria-label="${t('home')}"><a href="#/" data-nav="home" class="${state.route==='home'?'active':''}">${icon('book')}${t('home')}</a><a href="#/stats" data-nav="stats" class="${state.route==='stats'?'active':''}">${icon('stats')}${t('stats')}</a><a href="#/rankings" data-nav="rankings" class="${state.route==='rankings'?'active':''}">${icon('trophy')}${t('rankings')}</a><a href="#/guide" data-nav="guide" class="${state.route==='guide'?'active':''}">${icon('guide')}${t('guide')}</a><a href="#/history" data-nav="history" class="${state.route==='history'?'active':''}">${icon('history')}${t('history')}</a>${state.authenticated?`<a href="#/edit" data-nav="edit" class="${state.route==='edit'?'active':''}">${icon('edit')}${t('edit')}</a><a href="#/admin" data-nav="admin" class="${state.route==='admin'?'active':''}">${icon('settings')}${t('admin')}</a>`:''}</nav><div class="sidebar-bottom"><button class="settings-trigger account-trigger" data-action="account" aria-label="${t('account')}">${icon('user')}${t('account')}</button><button class="settings-trigger" data-action="settings">${icon('settings')}${t('settings')}</button></div></aside><main class="main">${content}</main></div>`;
 }
 function isTextEntry(element) {
   return element?.matches('[contenteditable="true"]') || element?.tagName==='TEXTAREA' || (element?.tagName==='INPUT' && ['text','search','email','password','tel','url','number'].includes(element.type));
@@ -166,6 +167,7 @@ function render() {
   else if (state.route==='rankings') content=rankingsView();
   else if (state.route==='admin') content=state.sessionKnown?administrationView():loadingView('loadingAdmin');
   else if (state.route==='guide') content=guideView();
+  else if (state.route==='history') content=historyView();
   else if (state.loadError) content=`<div class="empty"><h2>${e(state.loadError)}</h2>${btn('retry','reload','primary')}</div>`;
   else if (!state.loaded) content=loadingView(state.route==='edit'?'loadingEditor':'loading');
   else if (state.route==='edit') content=editor();
@@ -183,6 +185,12 @@ function render() {
   refreshRankingSettings();
   if(state.screen!=='quiz' || state.route!=='home')stopQuizClock();
   if (focusId) { const el=document.getElementById(focusId); if(el && document.activeElement!==el){el.focus({preventScroll:true});if(selection){if(el.matches('[data-field="ipa"]'))selectIpa(el,...selection);else el.setSelectionRange?.(...selection);}} }
+}
+function historyView() {
+  return `<section class="history-view"><div class="history-heading"><h1>${t('history')}</h1><span class="history-version" dir="ltr">wordnest v${e(APP_VERSION)}</span></div><p class="history-note">${t('historyIntro')}</p><div class="history-list">${releaseHistory.map(release=>{
+    const note=release[lang] || release.en,current=release.version===APP_VERSION;
+    return `<details class="history-entry" ${current?'open':''}><summary><span class="history-entry-version" dir="ltr">v${e(release.version)}</span><span class="history-entry-title">${e(note.title)}</span>${current?`<span class="history-current">${t('historyCurrent')}</span>`:''}<span class="history-chevron">${icon('down')}</span></summary><ul>${note.changes.map(change=>`<li>${e(change)}</li>`).join('')}</ul></details>`;
+  }).join('')}</div></section>`;
 }
 function learningScreen() { return state.route==='home' && ['quiz','cards'].includes(state.screen); }
 function syncLearning() { learning.setActive(learningScreen() && document.visibilityState==='visible' && document.hasFocus() && !$('#modal')?.open); }

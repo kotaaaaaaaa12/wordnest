@@ -49,7 +49,7 @@ test('rankings show the same eight formatted values as Statistics and support re
   try{
     h=await harness(mf,{seed:true});const {w,find,click,name,tracker}=h;
     await waitFor(()=>find('#ranking-name-form'),'onboarding');name('<b>Chris</b>');await waitFor(()=>!find('#modal').open,'joined');
-    assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.dataset.nav),['home','stats','rankings','guide']);
+    assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.dataset.nav),['home','stats','rankings','guide','history']);
     await click('.nav [data-nav="stats"]');const values=Object.fromEntries(Object.values(rankingTools.rankingMetrics).map(key=>[key,find(`[data-stat="${key}"]`).textContent]));
     await click('.nav [data-nav="rankings"]');await waitFor(()=>!find('.ranking-loading'),'rankings loaded');assert.equal(w.document.title,'Wordnest — Rankings');assert.equal(find('.ranking-name').textContent,'<b>Chris</b>');assert.equal(find('.ranking-name b'),null);
     for(const [metric,key] of Object.entries(rankingTools.rankingMetrics)){

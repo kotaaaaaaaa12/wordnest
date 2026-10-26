@@ -254,6 +254,9 @@ export const messages = {
     guideStats:"Statistics shows study time, daily averages, question attempts, correct answers, accuracy, card flips, and current and longest streaks. A chart shows the last seven days, and a monthly calendar lets you inspect daily records. Records sync to the server for administrator access, including when public rankings are disabled. Guest records are separate for each browser; signing in syncs your account records.",
 
     clearAllOnly:'Only a perfect All round without retries counts toward clear status.',
+    history:"Changelog",
+    historyIntro:"Features and fixes, newest first.",
+    historyCurrent:"Current",
     guide:"Guide",
     guideTitle:"How to use Wordnest",
     guideQuizStart:"Choose a word set, select Quiz, then choose a direction and the number of questions: 5, 10, 15, All, or Custom.",
@@ -536,6 +539,9 @@ export const messages = {
     guideStats:"学習記録では、学習時間・1日平均・問題数・正解数・正答率・カードをめくった回数・連続日数と最長記録を確認できます。直近7日間のグラフと、日別の記録を確認できる月間カレンダーも表示します。ランキングへの掲載の有無にかかわらず、管理者向けに記録をサーバーへ同期します。ゲストの記録はブラウザごとに分かれ、ログインするとアカウントの記録を同期します。",
 
     clearAllOnly:'クリア記録は「すべて」を選択し、リトライせずに全問正解した場合のみ付きます。',
+    history:"更新履歴",
+    historyIntro:"機能の追加・修正を、新しい順に表示します。",
+    historyCurrent:"最新",
     guide:"説明",
     guideTitle:"使い方",
     guideQuizStart:"単語セットを選び、「クイズ」→出題方向→出題数の順に選びます。出題数は5・10・15・すべて・カスタムから選べます。",

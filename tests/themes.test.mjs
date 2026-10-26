@@ -38,7 +38,7 @@ test('settings save independent light/dark palettes, auto follows the system, an
   function select(selector,value){const picker=find(selector);picker.focus();picker.value=value;picker.dispatchEvent(new w.Event('change',{bubbles:true}));assert.notEqual(w.document.activeElement.tagName,'SELECT');}
   try{
     w.eval(boot);w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();
-    assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.dataset.nav),['home','stats','rankings','guide']);
+    assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.dataset.nav),['home','stats','rankings','guide','history']);
     await click('[data-action="settings"]');assert.equal(find('#light-palette').options.length,3);assert.equal(find('#dark-palette').options.length,3);
     select('#light-palette','ocean');assert.equal(w.document.documentElement.dataset.palette,'ocean');select('#dark-palette','midnight');assert.equal(w.document.documentElement.dataset.palette,'ocean');
     system.matches=true;listeners.forEach(callback=>callback({matches:true}));assert.equal(w.document.documentElement.dataset.theme,'dark');assert.equal(w.document.documentElement.dataset.palette,'midnight');assert.equal(find('meta[name="theme-color"]').content,'#111a27');
@@ -46,7 +46,7 @@ test('settings save independent light/dark palettes, auto follows the system, an
     select('#settings-language','ja');assert.equal(find('#light-palette').selectedOptions[0].textContent,'ラベンダー');assert.equal(find('#dark-palette').selectedOptions[0].textContent,'グラファイト');
     select('#theme-choice','auto');assert.equal(w.document.documentElement.dataset.palette,'graphite');system.matches=false;listeners.forEach(callback=>callback({matches:false}));assert.equal(w.document.documentElement.dataset.palette,'lavender');
     assert.equal(w.localStorage.getItem('wordnest-light-palette'),'lavender');assert.equal(w.localStorage.getItem('wordnest-dark-palette'),'graphite');assert.equal(w.localStorage.getItem('wordnest-theme'),'auto');
-    await click('[data-dialog="cancel"]');assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.textContent.trim()),['学習','学習記録','ランキング','説明']);
+    await click('[data-dialog="cancel"]');assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.textContent.trim()),['学習','学習記録','ランキング','説明','更新履歴']);
     const reopened=create({dark:true,prefs:{'wordnest-theme':'auto','wordnest-light-palette':w.localStorage.getItem('wordnest-light-palette'),'wordnest-dark-palette':w.localStorage.getItem('wordnest-dark-palette')}}).w;
     try{reopened.eval(boot);assert.equal(reopened.document.documentElement.dataset.palette,'graphite');}finally{reopened.close();}
   }finally{w.close();}
