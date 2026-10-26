@@ -11,7 +11,8 @@ export const accountSchema=[
  'CREATE TABLE IF NOT EXISTS account_aliases (profile_id TEXT PRIMARY KEY,account_id TEXT NOT NULL)',
  "CREATE TRIGGER IF NOT EXISTS account_claim_unique BEFORE INSERT ON accounts WHEN EXISTS(SELECT 1 FROM account_aliases WHERE profile_id=NEW.id) BEGIN SELECT RAISE(ABORT,'accountAlreadyLinked'); END",
  "CREATE TRIGGER IF NOT EXISTS account_alias_unique BEFORE INSERT ON account_aliases WHEN EXISTS(SELECT 1 FROM accounts WHERE id=NEW.profile_id AND id<>NEW.account_id) OR EXISTS(SELECT 1 FROM account_aliases WHERE profile_id=NEW.profile_id AND account_id<>NEW.account_id) BEGIN SELECT RAISE(ABORT,'accountAlreadyLinked'); END",
- 'CREATE TABLE IF NOT EXISTS account_ops (account_id TEXT NOT NULL,op_id TEXT NOT NULL,payload_hash TEXT NOT NULL,PRIMARY KEY(account_id,op_id))'
+ 'CREATE TABLE IF NOT EXISTS account_ops (account_id TEXT NOT NULL,op_id TEXT NOT NULL,payload_hash TEXT NOT NULL,PRIMARY KEY(account_id,op_id))',
+ "CREATE TRIGGER IF NOT EXISTS account_erasure_guard BEFORE INSERT ON accounts WHEN EXISTS(SELECT 1 FROM learner_deletions WHERE profile_id=NEW.id) BEGIN SELECT RAISE(ABORT,'learnerErased'); END"
 ];
 const hex=bytes=>[...bytes].map(byte=>byte.toString(16).padStart(2,'0')).join('');
 const random=()=>hex(crypto.getRandomValues(new Uint8Array(32)));
@@ -37,6 +38,7 @@ async function deletedAccount(db,id){
  if(typeof id!=='string' || !/^[a-f0-9]{64}$/.test(id))return false;
  return Boolean(await db.prepare('SELECT profile_id FROM account_aliases WHERE profile_id=? AND account_id=? AND NOT EXISTS(SELECT 1 FROM accounts WHERE id=?)').bind(id,id,id).first());
 }
+async function erasedLearner(db,id){return typeof id==='string' && /^[a-f0-9]{64}$/.test(id) && Boolean(await db.prepare('SELECT profile_id FROM learner_deletions WHERE profile_id=?').bind(id).first());}
 async function issueSession(request,db,id,expectedHash){
  const token=random(),now=Math.floor(Date.now()/1000);
  const result=await db.batch([db.prepare('DELETE FROM account_sessions WHERE expires<=?').bind(now),db.prepare('INSERT INTO account_sessions (hash,account_id,expires,credential_hash) SELECT ?,id,?,password_hash FROM accounts WHERE id=? AND password_hash=?').bind(await tokenHash(token),now+SESSION_SECONDS,id,expectedHash)]);
@@ -61,6 +63,7 @@ export async function accountApi(request,db,readBody){
  const path=new URL(request.url).pathname,method=request.method;
  if(path==='/api/account/session' && method==='GET'){
   const session=await accountSession(request,db),id=request.headers.get('X-Wordnest-Account');
+  if(!session && await erasedLearner(db,id))return json({user:null,erasedAccountId:id},200,{'Set-Cookie':cookie(request,'',0)});
   if(!session && await deletedAccount(db,id))return json({user:null,deletedAccountId:id},200,{'Set-Cookie':cookie(request,'',0)});
   return json({user:session?user(session):null});
  }
@@ -73,6 +76,7 @@ export async function accountApi(request,db,readBody){
   if(typeof data.enabled!=='boolean')throw fail('accountInvalidData');
   let study;try{study=data.entries?importStudy(data.entries):emptyStudy();}catch{throw fail('accountInvalidData');}
   const legacy=typeof data.legacyToken==='string' && /^[a-f0-9]{64}$/.test(data.legacyToken)?await tokenHash(data.legacyToken):null;
+  if(legacy && await erasedLearner(db,legacy))return json({error:'accountGuestErased'},410);
   if(legacy && await db.prepare('SELECT account_id FROM account_aliases WHERE profile_id=?').bind(legacy).first())throw fail('accountAlreadyLinked',409);
   if(encoder.encode(JSON.stringify(study)).length>1800000)throw fail('accountDataTooLarge',413);
   const accountId=legacy || random(),salt=random(),hash=await passwordHash(supplied,salt);
@@ -98,6 +102,7 @@ export async function accountApi(request,db,readBody){
  }
  const session=await accountSession(request,db);
  if(!session){
+  if(await erasedLearner(db,data.accountId || request.headers.get('X-Wordnest-Account')))return json({error:'accountErased'},410,{'Set-Cookie':cookie(request,'',0)});
   if(await deletedAccount(db,data.accountId || request.headers.get('X-Wordnest-Account')))return json({error:'accountDeleted'},410,{'Set-Cookie':cookie(request,'',0)});
   throw fail('accountUnauthorized',401);
  }
@@ -124,13 +129,16 @@ export async function accountApi(request,db,readBody){
   if(data.operations.some(op=>!op || typeof op.id!=='string' || !/^[a-zA-Z0-9-]{1,100}$/.test(op.id)))throw fail('accountInvalidData');
   const hashes=await Promise.all(data.operations.map(op=>tokenHash(JSON.stringify(op))));
   const legacyIds=await Promise.all(data.operations.filter(op=>op.type==='import' && typeof op.legacyToken==='string' && /^[a-f0-9]{64}$/.test(op.legacyToken)).map(op=>tokenHash(op.legacyToken)));
+  const erasedOperations=[];
+  for(const op of data.operations)if(op.type==='import' && typeof op.legacyToken==='string' && await erasedLearner(db,await tokenHash(op.legacyToken)))erasedOperations.push(op.id);
+  if(erasedOperations.length)return json({error:'accountGuestErased',erasedOperations},410);
   for(const id of legacyIds){
    const owner=await db.prepare('SELECT id AS account_id FROM accounts WHERE id=? UNION ALL SELECT account_id FROM account_aliases WHERE profile_id=?').bind(id,id).first();
    if(owner && owner.account_id!==session.id)throw fail('accountAlreadyLinked',409);
   }
   for(let attempt=0;attempt<5;attempt++){
    const row=await db.prepare('SELECT study,sync_revision FROM accounts WHERE id=? AND password_hash=(SELECT credential_hash FROM account_sessions WHERE hash=?)').bind(session.id,await tokenHash(sessionToken(request))).first();
-   if(!row){if(await deletedAccount(db,session.id))throw fail('accountDeleted',410);throw fail('accountUnauthorized',401);}
+   if(!row){if(await erasedLearner(db,session.id))throw fail('accountErased',410);if(await deletedAccount(db,session.id))throw fail('accountDeleted',410);throw fail('accountUnauthorized',401);}
    const study=JSON.parse(row.study);
    const known=data.operations.length?(await db.prepare('SELECT op_id,payload_hash FROM account_ops WHERE account_id=? AND op_id IN ('+data.operations.map(()=>'?').join(',')+')').bind(session.id,...data.operations.map(op=>op.id)).all()).results:[];
    const seen=new Map(known.map(op=>[op.op_id,op.payload_hash])),pending=[];

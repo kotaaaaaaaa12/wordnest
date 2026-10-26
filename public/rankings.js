@@ -1,3 +1,4 @@
+import { eraseGuestData } from './account-study.js?v=2.2.2-73cecc6809b407cb';
 export const RANKING_KEY='wordnest-ranking-v1';
 export const rankingMetrics={totalMs:'totalTime',averageMs:'averageTime',answered:'answeredQuestions',correct:'correctQuestions',accuracy:'accuracy',flips:'cardFlips',streak:'currentStreak',longest:'longestStreak'};
 export function rankingName(value){const name=String(value || '').trim().normalize('NFC');if([...name].length<1 || [...name].length>20 || /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/.test(name))throw new Error('invalidRankingName');return name;}
@@ -9,23 +10,29 @@ export class RankingClient {
   preferences(){try{const value=JSON.parse(this.storage?.getItem(RANKING_KEY) || 'null');return value && ['joined','declined'].includes(value.choice)?value:null;}catch{return null;}}
   save(value){try{if(!this.storage)throw new Error();this.storage.setItem(RANKING_KEY,JSON.stringify(value));}catch{throw new Error('rankingStorageError');}this.onChange();}
   token(){return [...this.crypto.getRandomValues(new Uint8Array(32))].map(byte=>byte.toString(16).padStart(2,'0')).join('');}
-  async join(value){const name=rankingName(value),previous=this.preferences();if(previous?.notice){if(!previous.notice.acknowledged)throw new Error('rankingNoticeRequired');if(rankingNameKey(name)===rankingNameKey(previous.notice.removedName))throw new Error('rankingNameUnchanged');}this.save({...previous,token:previous?.token || this.token(),name,choice:'joined',pending:this.token()});return this.sync(true);}
+  async join(value){const name=rankingName(value),previous=this.preferences();if(previous?.notice){if(!previous.notice.acknowledged)throw new Error('rankingNoticeRequired');if(rankingNameKey(name)===rankingNameKey(previous.notice.removedName))throw new Error('rankingNameUnchanged');}this.save({...previous,erased:false,token:previous?.token || this.token(),name,choice:'joined',pending:this.token()});return this.sync(true);}
   async decline(value){
     const previous=this.preferences(),token=previous?.token || this.token();
     const name=value?.trim()?rankingName(value):previous?.name || `Learner ${this.token().slice(0,8)}`;
-    this.save({...previous,token,name,choice:'declined',pending:this.token()});return this.sync(true);
+    this.save({...previous,erased:false,token,name,choice:'declined',pending:this.token()});return this.sync(true);
   }
   async rename(value){
     const name=rankingName(value),previous=this.preferences(),token=previous?.token || this.token();
-    this.save({...previous,token,name,choice:previous?.choice || 'declined',pending:this.token()});return this.sync(true);
+    this.save({...previous,erased:false,token,name,choice:previous?.choice || 'declined',pending:this.token()});return this.sync(true);
   }
   async request(path,method='GET',data,token,keepalive=false){
     if(this.account?.signoutPending && !path.startsWith('/api/rankings'))throw new Error('networkError');
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);
     try{
       const response=await this.fetch(path,{method,credentials:'same-origin',signal:controller.signal,keepalive,headers:{...(this.account?.user?{'X-Wordnest-Account':this.account.user.id}:{}),...(data?{'Content-Type':'application/json'}:{}),...(token?{Authorization:`Bearer ${token}`}:{})},...(data?{body:JSON.stringify(data)}:{})});
-      const result=await response.json();if(!response.ok)throw new Error(result.error || 'serverError');return result;
-    }catch(error){if(error?.message && ['accountSessionExpired','rankingConflict','rankingDisabled','rankingUnauthorized','rankingRateLimit','invalidRankingData','invalidRankingName','rankingStorageError','serverError','rankingNoticeRequired','rankingNameUnchanged'].includes(error.message))throw error;throw new Error('networkError');}
+      const result=await response.json();if(!response.ok){
+        if(result.error==='learnerErased' && token){
+          if(this.account)this.account.eraseGuestProfile(token);else if(this.preferences()?.token===token)eraseGuestData(this.storage);
+          this.profile=null;this.lastSent='';this.onChange();
+        }
+        throw new Error(result.error || 'serverError');
+      }return result;
+    }catch(error){if(error?.message && ['learnerErased','accountSessionExpired','rankingConflict','rankingDisabled','rankingUnauthorized','rankingRateLimit','invalidRankingData','invalidRankingName','rankingStorageError','serverError','rankingNoticeRequired','rankingNameUnchanged'].includes(error.message))throw error;throw new Error('networkError');}
     finally{clearTimeout(timeout);}
   }
   remember(profile){
@@ -52,7 +59,7 @@ export class RankingClient {
   async flush(force){
     if(this.account?.signoutPending)return;
     if(this.account?.user)return this.flushAccount();
-    let prefs=this.preferences();if(!prefs)return;
+    let prefs=this.preferences();if(!prefs || prefs.erased)return;
     // Upgrade browsers that previously declined before a server identity was created.
     if(!prefs.token || !prefs.name){const token=prefs.token || this.token();this.save({...prefs,token,name:prefs.name || `Learner ${this.token().slice(0,8)}`,pending:this.token()});prefs=this.preferences();}
     const fingerprint=JSON.stringify(this.snapshot());

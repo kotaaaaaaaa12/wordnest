@@ -54,3 +54,19 @@ test('administrators manage registered accounts by ID in both languages, confirm
   }
  }finally{browser?.close();await mf.dispose();}
 });
+test('permanent deletion is available for guests in both languages and requires a matching confirmation code',async()=>{
+ const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-10-16',d1Databases:['DB'],bindings:{ADMIN_PASSWORD:'administrator-password'}}));let browser;
+ try{
+  await mf.dispatchFetch('https://wordnest.example/api/sets');const db=await mf.getD1Database('DB');await db.prepare('INSERT INTO sets (id,title,words,updated_at) VALUES (?,?,?,?)').bind('seed',seed.title,JSON.stringify(seed.words),new Date().toISOString()).run();
+  for(const [index,lang] of ['ja','en'].entries()){
+   const token=(index?'b':'a').repeat(64),name='Guest <b>'+lang+'</b>',response=await mf.dispatchFetch('https://wordnest.example/api/ranking/profile',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({revision:0,name,enabled:false,timezone:'UTC',epoch:''})}),{profile}=await response.json();assert.ok(profile?.id);
+   browser=await harness(mf,lang);const {w,find,click,input,until}=browser;
+   await click('[data-action="settings"]');input('#admin-password','administrator-password');find('#admin-login-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await until(()=>find('[data-nav="admin"]'));await click('[data-dialog="cancel"]');await click('[data-nav="admin"]');await until(()=>find('[data-action="admin-erase"]'));
+   input('#admin-search',name);await until(()=>find('.admin-participant h2')?.textContent===name);assert.equal(find('.admin-participant b'),null);assert.equal(find('[data-action="admin-account"]'),null);assert.ok(find('.account-type').textContent.includes(messages[lang].adminGuest));
+   await click('[data-action="admin-erase"]');assert.equal(find('#modal-title').textContent,messages[lang].adminEraseLearner);assert.ok(find('#modal').textContent.includes(messages[lang].adminEraseLearnerHelp));assert.ok(find('#modal').textContent.includes(profile.id.slice(0,12)));assert.equal(find('[autofocus]'),null);await click('[data-learner-close]');assert.ok(await db.prepare('SELECT id FROM ranking_profiles WHERE id=?').bind(profile.id).first());
+   await click('[data-action="admin-erase"]');input('#erase-learner-confirm','wrong');const submit=()=>find('#erase-learner-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));submit();assert.equal(find('#erase-learner-error').textContent,messages[lang].learnerConfirmIdentity);assert.ok(await db.prepare('SELECT id FROM ranking_profiles WHERE id=?').bind(profile.id).first());
+   input('#erase-learner-confirm',profile.id.slice(0,12));submit();await until(()=>!find('#modal').open && find('.administration-view .empty'));assert.equal(await db.prepare('SELECT id FROM ranking_profiles WHERE id=?').bind(profile.id).first(),null);assert.equal((await mf.dispatchFetch('https://wordnest.example/api/ranking/profile',{headers:{Authorization:'Bearer '+token}})).status,410);
+   browser.close();browser=null;
+  }
+ }finally{browser?.close();await mf.dispose();}
+});

@@ -1,4 +1,4 @@
-import { mergeLearningIntervals, summarizeStudyDays } from './stats.js';
+import { mergeLearningIntervals, summarizeStudyDays } from './stats.js?v=2.2.2-73cecc6809b407cb';
 export const categories=['learning','question','favorite','progress','cards'];
 export function studyCategory(key){
   if(key==='wordnest-progress')return 'progress';
@@ -9,6 +9,13 @@ export function studyCategory(key){
   return null;
 }
 export const epochKey=category=>'wordnest-reset-'+category;
+export function eraseGuestData(storage){
+ const keys=Array.from({length:storage?.length || 0},(_,index)=>storage.key(index)).filter(Boolean);
+ for(const category of categories)storage.setItem(epochKey(category),globalThis.crypto.randomUUID());
+ for(const key of keys)if(studyCategory(key))storage.removeItem(key);
+ // Do not automatically create a replacement identity or republish old data.
+ storage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined',erased:true}));
+}
 export const emptyStudy=()=>({epochs:Object.fromEntries(categories.map(category=>[category,''])),entries:{}});
 const invalid=()=>{throw new Error('accountInvalidData');};
 const object=value=>value && typeof value==='object' && !Array.isArray(value);

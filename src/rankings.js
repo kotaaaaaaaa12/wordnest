@@ -6,7 +6,9 @@ const fail=(key,status=400)=>Object.assign(new Error(key),{status});
 export const rankingSchema=[
   `CREATE TABLE IF NOT EXISTS ranking_profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, revision INTEGER NOT NULL DEFAULT 1, epoch TEXT NOT NULL DEFAULT '', timezone TEXT NOT NULL, days TEXT NOT NULL DEFAULT '{}', total_ms INTEGER NOT NULL DEFAULT 0, average_ms REAL NOT NULL DEFAULT 0, answered INTEGER NOT NULL DEFAULT 0, correct INTEGER NOT NULL DEFAULT 0, accuracy REAL, flips INTEGER NOT NULL DEFAULT 0, streak INTEGER NOT NULL DEFAULT 0, longest INTEGER NOT NULL DEFAULT 0, last_study_day TEXT, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS ranking_moderation (profile_id TEXT PRIMARY KEY, notice_id TEXT NOT NULL, removed_name TEXT NOT NULL, removed_key TEXT NOT NULL, message_ja TEXT NOT NULL, message_en TEXT NOT NULL, removed_at TEXT NOT NULL, acknowledged INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1)`,
-  'CREATE TABLE IF NOT EXISTS ranking_limits (key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires INTEGER NOT NULL)'
+  'CREATE TABLE IF NOT EXISTS ranking_limits (key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires INTEGER NOT NULL)',
+  'CREATE TABLE IF NOT EXISTS learner_deletions (profile_id TEXT PRIMARY KEY,deleted_at TEXT NOT NULL,marker TEXT NOT NULL)',
+  "CREATE TRIGGER IF NOT EXISTS ranking_erasure_guard BEFORE INSERT ON ranking_profiles WHEN EXISTS(SELECT 1 FROM learner_deletions WHERE profile_id=NEW.id) BEGIN SELECT RAISE(ABORT,'learnerErased'); END"
 ];
 function dateInZone(timezone,now=Date.now()){
   const parts=new Intl.DateTimeFormat('en-US',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now);
@@ -70,6 +72,7 @@ export async function rankingApi(request,db,readBody,accountId){
   if(!['/api/ranking/profile','/api/ranking/stats','/api/ranking/notice'].includes(path))return json({error:'notFound'},404);
   if(accountId && request.headers.has('X-Wordnest-Account') && request.headers.get('X-Wordnest-Account')!==accountId)throw fail('rankingUnauthorized',401);
   const id=accountId || await identity(request);
+  if(await db.prepare('SELECT profile_id FROM learner_deletions WHERE profile_id=?').bind(id).first())return json({error:'learnerErased'},410);
   if(!accountId && await db.prepare('SELECT id FROM accounts WHERE id=? UNION ALL SELECT account_id AS id FROM account_aliases WHERE profile_id=?').bind(id,id).first())throw fail('rankingUnauthorized',401);
   if(path==='/api/ranking/profile' && method==='GET')return json({profile:await publicProfile(db,await db.prepare('SELECT * FROM ranking_profiles WHERE id=?').bind(id).first())});
   if(!['POST','PUT','DELETE'].includes(method))return json({error:'methodNotAllowed'},405);
@@ -125,6 +128,26 @@ function moderationMessage(value){
 }
 export async function rankingAdminApi(request,db,readBody){
   const url=new URL(request.url),path=url.pathname;
+  const eraseMatch=path.match(/^\/api\/admin\/rankings\/([a-f0-9]{64})$/);
+  if(eraseMatch && request.method==='DELETE'){
+    const data=await readBody(request),id=eraseMatch[1],row=await db.prepare('SELECT p.name,a.login_id AS loginId FROM ranking_profiles p LEFT JOIN accounts a ON a.id=p.id WHERE p.id=?').bind(id).first();
+    if(!row)return json({error:'notFound'},404);
+    if(!data || data.confirmation!==(row.loginId || id.slice(0,12)))throw fail('learnerConfirmIdentity');
+    if(data.name!==row.name || data.loginId!==row.loginId)throw fail('rankingConflict',409);
+    const marker=crypto.randomUUID(),now=new Date().toISOString(),guard='EXISTS(SELECT 1 FROM learner_deletions WHERE profile_id=? AND marker=?)';
+    const results=await db.batch([
+      db.prepare('INSERT OR IGNORE INTO learner_deletions (profile_id,deleted_at,marker) SELECT p.id,?,? FROM ranking_profiles p LEFT JOIN accounts a ON a.id=p.id WHERE p.id=? AND p.name=? AND a.login_id IS ? RETURNING profile_id').bind(now,marker,id,data.name,data.loginId),
+      db.prepare(`INSERT OR IGNORE INTO learner_deletions (profile_id,deleted_at,marker) SELECT profile_id,?,? FROM account_aliases WHERE account_id=? AND ${guard}`).bind(now,marker,id,id,marker),
+      db.prepare(`INSERT OR IGNORE INTO account_aliases (profile_id,account_id) SELECT id,id FROM accounts WHERE id=? AND ${guard}`).bind(id,id,marker),
+      db.prepare(`DELETE FROM account_sessions WHERE account_id=? AND ${guard}`).bind(id,id,marker),
+      db.prepare(`DELETE FROM account_ops WHERE account_id=? AND ${guard}`).bind(id,id,marker),
+      db.prepare(`DELETE FROM accounts WHERE id=? AND ${guard}`).bind(id,id,marker),
+      db.prepare(`DELETE FROM ranking_moderation WHERE profile_id IN (SELECT profile_id FROM learner_deletions WHERE marker=?) AND ${guard}`).bind(marker,id,marker),
+      db.prepare(`DELETE FROM ranking_profiles WHERE id IN (SELECT profile_id FROM learner_deletions WHERE marker=?) AND ${guard}`).bind(marker,id,marker)
+    ]);
+    if(!results[0].results.length)throw fail('rankingConflict',409);
+    return json({ok:true});
+  }
   const statsMatch=path.match(/^\/api\/admin\/rankings\/([a-f0-9]{64})\/stats$/);
   if(statsMatch && request.method==='GET'){
     const row=await db.prepare('SELECT p.id,p.name,p.enabled,p.timezone,p.days,p.updated_at,a.login_id AS loginId,a.created_at AS accountCreatedAt FROM ranking_profiles p LEFT JOIN accounts a ON a.id=p.id WHERE p.id=?').bind(statsMatch[1]).first();

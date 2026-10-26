@@ -220,6 +220,48 @@ test('upgrading a legacy database erases recovery hashes without changing passwo
   assert.equal((await api(transport(mf),'/api/account/recover','POST',{loginId:'legacy_login',recoveryCode:'a'.repeat(64),password})).status,410);
  }finally{await mf.dispose();}
 });
+test('permanent guest erasure blocks stale uploads and registration, clears local study data, and never automatically creates a replacement',async()=>{
+ const mf=instance(),guest=device(mf),admin=transport(mf),anonymous=transport(mf);
+ try{
+  guest.tracker.answer(true);guest.tracker.answer(false);guest.tracker.flip();guest.personal.toggleFavorite('old-favorite');guest.raw.setItem('wordnest-theme','dark');await guest.ranking.join('Guest to erase');
+  const prefs=guest.ranking.preferences(),id=prefs.id,payload={loginId:null,name:prefs.name,confirmation:id.slice(0,12)},path='/api/admin/rankings/'+id;
+  const saved=Object.fromEntries(Array.from({length:guest.raw.length},(_,i)=>{const k=guest.raw.key(i);return [k,guest.raw.getItem(k)];}));
+  assert.equal((await api(anonymous,path,'DELETE',payload)).status,401);await api(admin,'/api/login','POST',{password:'a-long-admin-password'});
+  assert.equal((await api(admin,path,'DELETE',{...payload,confirmation:'wrong'})).data.error,'learnerConfirmIdentity');assert.equal((await api(admin,path,'DELETE',{...payload,name:'Stale name'})).status,409);assert.equal((await api(admin,path,'DELETE',payload,{Origin:'https://attacker.example'})).status,403);
+  assert.equal((await api(admin,path,'DELETE',payload)).status,200);
+  for(const [endpoint,method,body] of [['/api/ranking/profile','GET',undefined],['/api/ranking/profile','POST',{revision:0,name:prefs.name,enabled:true,epoch:'',timezone:'UTC'}],['/api/ranking/stats','PUT',{revision:1,epoch:'',timezone:'UTC',days:{}}]])assert.equal((await api(anonymous,endpoint,method,body,{Authorization:'Bearer '+prefs.token})).status,410);
+  await assert.rejects(guest.ranking.sync(true),/learnerErased/);assert.equal(guest.tracker.snapshot().answered,0);assert.equal(guest.tracker.snapshot().flips,0);assert.equal(guest.personal.favorite('old-favorite'),false);assert.equal(guest.ranking.preferences().erased,true);assert.equal(guest.ranking.preferences().name,undefined);assert.equal(guest.ranking.preferences().token,undefined);assert.equal(guest.raw.getItem('wordnest-theme'),'dark');
+  const db=await mf.getD1Database('DB');for(let i=0;i<3;i++)await guest.ranking.sync(true);assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM ranking_profiles').first()).n,0);
+  await assert.rejects(db.prepare('INSERT INTO ranking_profiles (id,name,timezone,updated_at) VALUES (?,?,?,?)').bind(id,'Stale request','UTC',new Date().toISOString()).run(),/learnerErased/,'database guards reject in-flight profile creation after erasure');
+  const stale=device(mf);for(const [key,value] of Object.entries(saved))stale.raw.setItem(key,value);
+  await assert.rejects(stale.account.register({loginId:'erased_guest_restore',password,name:'Guest to erase',enabled:true}),/accountGuestErased/);assert.equal(stale.tracker.snapshot().answered,0);assert.equal(stale.account.user,null);assert.equal(stale.account.guestProfile(),null);
+  guest.tracker.answer(true);await guest.ranking.sync(true);assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM ranking_profiles').first()).n,0,'new practice remains local until explicit participation');
+  await guest.ranking.join('New participation');assert.notEqual(guest.ranking.preferences().id,id);assert.equal((await guest.ranking.list('answered')).mine.value,1);
+ }finally{await mf.dispose();}
+});
+test('permanent account erasure clears each device on reconnect instead of converting cached records into guests',async()=>{
+ const mf=instance(),a=device(mf),b=device(mf),admin=transport(mf);
+ try{
+  a.tracker.answer(true);await a.ranking.join('Account to erase');const claimed=a.ranking.preferences();await a.account.register({loginId:'erase_everything',password,name:'Account to erase',enabled:false});await a.ranking.sync(true);const id=a.account.user.id;
+  await b.account.login('erase_everything',password);await b.ranking.sync(true);b.connection.offline=true;b.tracker.answer(false);
+  await api(admin,'/api/login','POST',{password:'a-long-admin-password'});const path='/api/admin/rankings/'+id;
+  assert.equal((await api(admin,path,'DELETE',{name:'Account to erase',loginId:null,confirmation:'erase_everything'})).status,409);
+  assert.equal((await api(admin,path,'DELETE',{name:'Account to erase',loginId:'erase_everything',confirmation:'erase_everything'})).status,200);
+  await a.ranking.sync(true);assert.equal(a.account.user,null);assert.equal(a.tracker.snapshot().answered,0);assert.equal(a.ranking.preferences().erased,true);assert.equal(a.account.guestSuccessor(id).erased,true);assert.equal(a.account.guestProfile(),null);
+  assert.equal(b.account.user.id,id);assert.equal(b.tracker.snapshot().answered,2);b.connection.offline=false;await b.account.initialize();assert.equal(b.account.user,null);assert.equal(b.tracker.snapshot().answered,0);assert.equal(b.account.pending().length,0);assert.equal(b.account.guestProfile(),null);
+  const db=await mf.getD1Database('DB');for(const table of ['accounts','ranking_profiles','account_sessions','account_ops'])assert.equal((await db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first()).n,0,table);
+  assert.equal((await api(transport(mf),'/api/ranking/profile','GET',undefined,{Authorization:'Bearer '+claimed.token})).data.error,'learnerErased');
+  assert.equal((await api(transport(mf),'/api/account/session','GET',undefined,{'X-Wordnest-Account':id})).data.erasedAccountId,id);
+ }finally{await mf.dispose();}
+});
+test('an erased guest cannot be imported into a different account and does not erase that account’s valid records',async()=>{
+ const mf=instance(),a=device(mf),b=device(mf),admin=transport(mf);
+ try{
+  a.tracker.answer(true);await a.account.register({loginId:'keep_valid_account',password,name:'Keep me',enabled:false});b.tracker.answer(false);await b.ranking.join('Erased guest');const prefs=b.ranking.preferences();
+  await api(admin,'/api/login','POST',{password:'a-long-admin-password'});assert.equal((await api(admin,'/api/admin/rankings/'+prefs.id,'DELETE',{name:prefs.name,loginId:null,confirmation:prefs.id.slice(0,12)})).status,200);
+  await b.account.login('keep_valid_account',password);assert.equal(await b.account.importGuest(),false);assert.equal(b.account.user.id,a.account.user.id);assert.equal(b.tracker.snapshot().answered,1);assert.equal(b.tracker.snapshot().correct,1);assert.equal(b.account.pending().length,0);assert.equal(b.account.guestProfile(),null);await a.account.sync();assert.equal(a.tracker.snapshot().answered,1);
+ }finally{await mf.dispose();}
+});
 test('shared account reducers reject malformed records and merge overlapping intervals across timezones',()=>{
  const study=emptyStudy(),today=localDay(Date.now()),midnight=Date.parse(today+'T00:00:00Z'),key='wordnest-learning-v1:tokyo',op={id:crypto.randomUUID(),type:'set',category:'learning',epoch:'',key,value:{version:1,epoch:'',days:{[today]:{answered:1,correct:1,flips:2,intervals:[[midnight-9*3600000,midnight-9*3600000+10000]]}}}};
  applyStudyOperation(study,op);applyStudyOperation(study,{...op,id:crypto.randomUUID()});assert.equal(accountStudySummary(study,today).summary.totalMs,10000);assert.equal(accountStudySummary(study,today).summary.answered,1);

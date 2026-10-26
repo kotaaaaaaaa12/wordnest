@@ -108,7 +108,7 @@ select:focus,select:focus-visible,select:active{border-color:var(--line);outline
 .practice-counter{margin-bottom:16px}
 @media(max-width:760px){
   .is-practicing .sidebar{display:flex;flex-wrap:nowrap;justify-content:space-between;gap:12px;padding:8px 16px;min-height:52px}
-  .is-practicing .sidebar .nav,.is-practicing .account-trigger{display:none}
+  .is-practicing .sidebar .nav{display:none}
   .is-practicing .sidebar .brand{font-size:18px;gap:8px;min-width:0}
   .is-practicing .brand-mark{width:28px;height:28px;border-radius:9px}
   .is-practicing .brand-mark svg{width:21px;height:21px}
@@ -142,3 +142,11 @@ select:focus,select:focus-visible,select:active{border-color:var(--line);outline
 .admin-account-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:7px 0;font-size:11px;line-height:1.8;overflow-wrap:anywhere}.account-type{display:inline-flex;align-items:center;font-size:10px;padding:4px 9px;border:1px solid var(--line);border-radius:999px;background:var(--paper);color:var(--muted);line-height:1.6}.admin-account-meta strong{font-family:ui-monospace,monospace;font-weight:500}.admin-person-actions>.admin-account-button{grid-column:1/-1;justify-self:stretch;justify-content:center}.admin-account-name{font-size:13px;line-height:1.8;overflow-wrap:anywhere;margin:8px 0 16px}
 
 .account-start-note{margin-top:18px;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--paper)}.account-start-note h3{font-size:14px;line-height:1.7;margin:0}.account-start-note p{font-size:12px;line-height:1.9;margin:9px 0 0}
+
+.admin-person-actions>.admin-erase-button{grid-column:1/-1;justify-self:stretch;justify-content:center;white-space:normal;line-height:1.6}
+
+/* Keep account and settings available even with six tabs or a short viewport. */
+@media(min-width:761px){.sidebar{min-height:0;gap:clamp(14px,4vh,38px)}.sidebar .brand,.sidebar-bottom{flex-shrink:0}.sidebar .nav{min-height:0;overflow-y:auto;overscroll-behavior:contain}}
+@media(max-width:760px){.is-practicing .sidebar-bottom{display:flex;align-items:center;gap:6px}.is-practicing .account-trigger{display:inline-flex;align-items:center;justify-content:center}}
+
+.app-version{margin:22px 0 0;text-align:center;font-size:11px;line-height:1.7;color:var(--muted);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}

@@ -100,7 +100,7 @@ export const messages = {
     adminListed:"Listed",
     adminRemoved:"Removed",
     adminUpdated:"Last updated: {date}",
-    adminRemove:"Remove",
+    adminRemove:"Remove listing",
     adminEmpty:"No matching participants.",
     adminMore:"Load more",
     moderationMessageJa:"Message in Japanese",
@@ -122,7 +122,7 @@ export const messages = {
     noticeUnread:"Not yet acknowledged",
     rankingNoticeRequired:"Acknowledge the removal notice before participating again.",
     rankingNameUnchanged:"Choose a different display name from the one that was removed. Changes only to spacing, letter case, or character width do not count.",
-    guideAdministration:"Administration is available after entering the administrator password in Settings. Search by display name or login ID, and filter registered accounts or guests. View synced statistics, charts, and calendars, including private learners. Ranking removal sends a private notice and permits rejoining after a name change. Account management offers password reset and permanent account deletion. Resetting a password signs out all devices; deletion requires typing the login ID. Each browser keeps its cached name and learning data as a guest on its next connection; cross-device sync ends. Recovery codes are no longer used.",
+    guideAdministration:"Administration is available after entering the administrator password in Settings. Search by display name or login ID, and filter registered accounts or guests. View synced statistics, charts, and calendars, including private learners. Ranking removal sends a private notice and permits rejoining after a name change. Account management offers password reset and permanent account deletion. Resetting a password signs out all devices; deletion requires typing the login ID. Each browser keeps its cached name and learning data as a guest on its next connection; cross-device sync ends. Recovery codes are no longer used. Permanently delete learner also removes guests and their records; this does not create a guest successor.",
 
     rankings:"Rankings",
     rankingAs:"Listed as {name}",
@@ -382,7 +382,7 @@ export const messages = {
     adminListed:"掲載中",
     adminRemoved:"削除済み",
     adminUpdated:"最終更新：{date}",
-    adminRemove:"削除",
+    adminRemove:"掲載を削除",
     adminEmpty:"該当する参加者はありません。",
     adminMore:"さらに表示",
     moderationMessageJa:"通知文（日本語）",
@@ -404,7 +404,7 @@ export const messages = {
     noticeUnread:"未確認",
     rankingNoticeRequired:"削除通知を確認してから、再参加してください。",
     rankingNameUnchanged:"削除時とは異なる掲載名を入力してください。空白・大文字と小文字・全角と半角だけの変更は、名前の変更として扱いません。",
-    guideAdministration:"設定で管理者パスワードを入力すると、管理タブが表示されます。表示名・ログインIDで検索し、登録アカウントとゲストで絞り込めます。非公開の方も同期済みの学習記録・グラフ・カレンダーを確認できます。ランキングからの掲載削除では本人に通知し、名前を変更すると再参加できます。アカウント管理ではパスワードの再設定と完全削除ができます。再設定時はすべての端末をログアウトします。完全削除にはログインIDの入力が必要です。各ブラウザは次に接続した際、端末内の名前・学習記録を引き継いだゲストに切り替わります。復旧コードは使用しません。",
+    guideAdministration:"設定で管理者パスワードを入力すると、管理タブが表示されます。表示名・ログインIDで検索し、登録アカウントとゲストで絞り込めます。非公開の方も同期済みの学習記録・グラフ・カレンダーを確認できます。ランキングからの掲載削除では本人に通知し、名前を変更すると再参加できます。アカウント管理ではパスワードの再設定と完全削除ができます。再設定時はすべての端末をログアウトします。完全削除にはログインIDの入力が必要です。各ブラウザは次に接続した際、端末内の名前・学習記録を引き継いだゲストに切り替わります。復旧コードは使用しません。「学習者を完全に削除」ではゲストも含めて記録を削除し、ゲストへの引き継ぎは行いません。",
 
     rankings:"ランキング",
     rankingAs:"掲載名：{name}",
@@ -566,6 +566,17 @@ export const messages = {
   }
 };
 Object.assign(messages.en,{
+  "adminEraseLearner": "Permanently delete learner",
+  "adminEraseLearnerHelp": "Delete this learner’s name, statistics, learning data, ranking profile, and login account, if any. Their browsers will erase the affected local records when they next connect. This cannot be undone. No replacement guest profile will be created automatically.",
+  "learnerConfirmHint": "Enter “{value}” to confirm the learner.",
+  "learnerConfirmationCode": "Confirmation code",
+  "learnerConfirmIdentity": "The confirmation does not match. Enter the value shown above.",
+  "adminLearnerErased": "Learner and associated records permanently deleted.",
+  "learnerErased": "The administrator deleted this learner profile. Its local learning records have been cleared and ranking uploads have stopped.",
+  "accountErased": "The administrator permanently deleted this account and its learning records.",
+  "accountGuestErased": "The administrator deleted those guest records. They cannot be transferred.",
+  "adminDeleteAccount": "Delete login account",
+
   "accountStartTitle": "Use your learning records on another device",
   "accountStartOtherDevice": "Already studied here? Create an account on the device that has your records, then log in with the same ID on this device to sync them.",
   "accountStartHere": "You can also create an account here to transfer this browser’s guest records. Records from other browsers are not imported automatically.",
@@ -576,7 +587,6 @@ Object.assign(messages.en,{
   "adminRegistered": "Registered account",
   "adminGuest": "Guest",
   "adminAccountManage": "Manage account",
-  "adminDeleteAccount": "Delete account",
   "adminDeleteAccountConfirm": "Permanently delete account",
   "adminDeleteAccountHelp": "Delete the login account and its server-side records. Signed-in browsers become separate guest profiles the next time they connect, keeping their cached name and learning data. Cross-device sync ends. Enter the login ID shown above to confirm.",
   "adminConfirmLoginId": "Enter the login ID to confirm",
@@ -638,6 +648,17 @@ Object.assign(messages.en,{
   "guideAccount": "An account is optional. Create one with a private login ID, password, and a separate ranking display name. Registration transfers existing browser records. Log in on another device to continue with the same data. Manage your account from the account button or Settings. Offline changes are queued locally; learning intervals are merged and repeated uploads are deduplicated. Difficult-word answers are processed in server receipt order. Language, appearance, sound, and administrator access remain device-specific."
 });
 Object.assign(messages.ja,{
+  "adminEraseLearner": "学習者を完全に削除",
+  "adminEraseLearnerHelp": "この学習者の名前・学習記録・学習データ・ランキング登録と、登録済みの場合はログイン用アカウントも削除します。対象のブラウザも次に接続した際に該当する端末内データを削除します。この操作は取り消せません。代わりのゲストは自動作成しません。",
+  "learnerConfirmHint": "対象者の確認のため「{value}」を入力してください。",
+  "learnerConfirmationCode": "確認コード",
+  "learnerConfirmIdentity": "確認内容が一致しません。上に表示された値を入力してください。",
+  "adminLearnerErased": "学習者と関連する記録を完全に削除しました。",
+  "learnerErased": "管理者により学習者の登録が削除されました。該当する端末内の学習データを削除し、ランキングへの送信を停止しました。",
+  "accountErased": "管理者によりアカウントと学習データが完全に削除されました。",
+  "accountGuestErased": "管理者により削除されたゲストの記録は引き継げません。",
+  "adminDeleteAccount": "ログイン用アカウントを削除",
+
   "accountStartTitle": "別の端末でも学習記録を使うには",
   "accountStartOtherDevice": "すでに学習したことがある場合は、記録のある端末でアカウントを作成してください。この端末では同じIDでログインすると同期できます。",
   "accountStartHere": "この端末のゲスト記録を引き継いで登録することもできます。別のブラウザの記録は自動では取り込まれません。",
@@ -648,7 +669,6 @@ Object.assign(messages.ja,{
   "adminRegistered": "登録アカウント",
   "adminGuest": "ゲスト",
   "adminAccountManage": "アカウント管理",
-  "adminDeleteAccount": "アカウントを削除",
   "adminDeleteAccountConfirm": "アカウントを完全に削除",
   "adminDeleteAccountHelp": "ログイン用アカウントとサーバー上の記録を削除します。ログインしていた各ブラウザは、次に接続した際、端末内に残る名前・学習記録を引き継いだゲストに切り替わります。端末間の同期は終了します。確認のため、上に表示されたログインIDを入力してください。",
   "adminConfirmLoginId": "確認用のログインID",

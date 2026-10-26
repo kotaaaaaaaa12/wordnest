@@ -58,3 +58,16 @@ test('opening a deleted account switches the interface to a guest while preservi
   await a.click('[data-action="account"]');await a.click('[data-account-mode="register"]');assert.equal(a.find('#account-display-name').value,'元の名前');
  }finally{a?.close();await mf.dispose();}
 });
+test('a permanently erased guest loses local statistics and name on reconnect without an automatic replacement or signup modal',async()=>{
+ const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-10-16',d1Databases:['DB'],bindings:{ADMIN_PASSWORD:'administrator-password'}}));let a;
+ try{
+  await mf.dispatchFetch('https://wordnest.example/api/sets');const db=await mf.getD1Database('DB');await db.prepare('INSERT INTO sets (id,title,words,updated_at) VALUES (?,?,?,?)').bind('seed',seed.title,JSON.stringify(seed.words),new Date().toISOString()).run();
+  a=await harness(mf,'ja');const tracker=new statistics.LearningTracker({storage:a.w.localStorage,id:'erased-ui-guest'});tracker.answer(true);tracker.flip();
+  const client=new rankingTools.RankingClient({storage:a.w.localStorage,fetch:a.w.fetch,snapshot:()=>({epoch:tracker.epoch,timezone:'UTC',days:tracker.snapshot().days})});await client.join('消すゲスト');const prefs=client.preferences();
+  await a.click('[data-nav="stats"]');assert.equal(a.find('[data-stat="answeredQuestions"]').textContent,'1');await a.click('[data-action="settings"]');assert.ok(a.find('#modal').open);
+  const login=await mf.dispatchFetch('https://wordnest.example/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:'administrator-password'})}),cookie=login.headers.get('Set-Cookie').split(';')[0];
+  const response=await mf.dispatchFetch('https://wordnest.example/api/admin/rankings/'+prefs.id,{method:'DELETE',headers:{'Content-Type':'application/json',Cookie:cookie},body:JSON.stringify({name:prefs.name,loginId:null,confirmation:prefs.id.slice(0,12)})});assert.equal(response.status,200);
+  a.w.dispatchEvent(new a.w.Event('online'));await a.until(()=>JSON.parse(a.w.localStorage.getItem('wordnest-ranking-v1'))?.erased);await a.until(()=>!a.find('#modal').open);assert.equal(a.find('[data-stat="answeredQuestions"]').textContent,'0');assert.equal(a.find('[data-stat="cardFlips"]').textContent,'0');assert.equal(JSON.parse(a.w.localStorage.getItem('wordnest-ranking-v1')).name,undefined);
+  a.w.dispatchEvent(new a.w.Event('online'));await new Promise(resolve=>setTimeout(resolve,50));assert.equal(a.find('#modal').open,false);assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM ranking_profiles').first()).n,0);
+ }finally{a?.close();await mf.dispose();}
+});

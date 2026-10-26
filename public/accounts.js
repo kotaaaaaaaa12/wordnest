@@ -1,4 +1,4 @@
-import { categories, studyCategory, epochKey, validateStudyEntry, importStudy, applyStudyOperation } from './account-study.js';
+import { categories, studyCategory, epochKey, validateStudyEntry, importStudy, applyStudyOperation, eraseGuestData } from './account-study.js?v=2.2.2-73cecc6809b407cb';
 const CURRENT='wordnest-account-v1';
 const uid=()=>globalThis.crypto.randomUUID();
 const timezone=()=>Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -68,8 +68,35 @@ export class AccountClient {
   if(token && this.guestProfile()?.token===token)this.raw.removeItem('wordnest-ranking-v1');
  }
  guestSuccessor(id){try{return JSON.parse(this.raw?.getItem(`wordnest-user:${id}:guest-successor`) || 'null');}catch{return null;}}
+ clearErasedGuestTab(){
+  if(this.user)return;
+  this.beforeSwitch();
+  for(const key of keys(this.raw))if(studyCategory(key))this.raw.removeItem(key);
+  this.onSwitch();
+ }
+ eraseGuestProfile(token){
+  if(!token || this.guestProfile()?.token!==token)return false;
+  if(!this.user)this.beforeSwitch();
+  eraseGuestData(this.raw);
+  this.lastGuestErased=token;
+  for(const key of keys(this.raw))if(key.endsWith(':guest-successor')){
+   try{if(JSON.parse(this.raw.getItem(key))?.token===token)this.raw.setItem(key,JSON.stringify({erased:true}));}catch{}
+  }
+  this.notice='learnerErased';if(!this.user)this.onSwitch();this.onSync();return true;
+ }
+ eraseAccount(id){
+  if(!id)return false;
+  if(this.user?.id===id){
+   const current=this.cachedUser();this.setUser(current && current.id!==id?current:null);
+  }
+  for(const key of keys(this.raw))if(key.startsWith(`wordnest-user:${id}:`))this.raw.removeItem(key);
+  this.raw.setItem(`wordnest-user:${id}:guest-successor`,JSON.stringify({erased:true}));
+  if(!this.user && !this.guestProfile())this.raw.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined',erased:true}));
+  this.lastSync=null;this.notice='learnerErased';this.onSync();return true;
+ }
  convertDeletedAccount(id){
   if(!id || this.user?.id!==id)return false;
+  if(this.guestSuccessor(id)?.erased)return this.eraseAccount(id);
   this.ensureStorage();
   const current=this.cachedUser();if(current && current.id!==id){this.setUser(current);return false;}
   this.beforeSwitch();
@@ -96,8 +123,8 @@ export class AccountClient {
   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
   try{
    const response=await this.fetch('/api/account/'+path,{method:data===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',signal:controller.signal,keepalive,headers:{...(this.user?{'X-Wordnest-Account':this.user.id}:{}),...(data===undefined?{}:{'Content-Type':'application/json'})},...(data===undefined?{}:{body:JSON.stringify(data)})});
-   const result=await response.json();if(!response.ok)throw new Error(result.error || 'serverError');return result;
-  }catch(error){if(error.message?.startsWith('account') || ['tooLarge','jsonRequired','invalidImport'].includes(error.message) || error.message==='invalidRankingName' || error.message==='serverError')throw error;throw new Error('networkError');}
+   const result=await response.json();if(!response.ok)throw Object.assign(new Error(result.error || 'serverError'),{erasedOperations:result.erasedOperations});return result;
+  }catch(error){if(error.message?.startsWith('account') || ['learnerErased','tooLarge','jsonRequired','invalidImport'].includes(error.message) || error.message==='invalidRankingName' || error.message==='serverError')throw error;throw new Error('networkError');}
   finally{clearTimeout(timeout);}
  }
  setUser(user){
@@ -108,6 +135,7 @@ export class AccountClient {
   try{
    if(this.signoutPending){try{await this.request('logout',{});}catch(error){if(error.message!=='accountUnauthorized')throw error;}this.raw?.removeItem('wordnest-account-signout');this.signoutPending=false;return;}
    const result=await this.request('session');
+   if(result.erasedAccountId && this.eraseAccount(result.erasedAccountId))return;
    if(result.deletedAccountId && this.convertDeletedAccount(result.deletedAccountId))return;
    if(Object.hasOwn(result,'user')){
     if(result.user){if(this.user?.id!==result.user.id)this.setUser(result.user);await this.sync();}
@@ -121,7 +149,9 @@ export class AccountClient {
   this.ensureStorage();
   this.beforeSwitch();
   const entries=this.guestEntries(),legacy=this.guestProfile();
-  const result=await this.request('register',{loginId,password,name,enabled,entries,legacyToken:legacy?.token,timezone:timezone()});
+  let result;
+  try{result=await this.request('register',{loginId,password,name,enabled,entries,legacyToken:legacy?.token,timezone:timezone()});}
+  catch(error){if(['accountGuestErased','learnerErased'].includes(error.message))this.eraseGuestProfile(legacy?.token);throw error;}
   this.setUser(result.user);this.apply(result.study,[],0);
   this.storage.setItem('wordnest-ranking-v1',JSON.stringify({name,choice:enabled?'joined':'declined'}));
   this.retireGuest(entries,legacy?.token);this.lastSync=Date.now();this.onSync();return result;
@@ -132,6 +162,7 @@ export class AccountClient {
   if(!this.hasGuestRecords())return;
   this.enqueue({type:'import',category:'learning',epoch:this.epoch('learning'),epochs:Object.fromEntries(categories.map(category=>[category,this.epoch(category)])),entries,legacyToken:legacy?.token});
   await this.sync();
+  return !legacy?.token || this.lastGuestErased!==legacy.token;
  }
  async logout(){
   await this.sync().catch(()=>{});
@@ -176,6 +207,11 @@ export class AccountClient {
    }
    throw new Error('accountSyncPending');
   }catch(error){
+   if(error.message==='accountErased'){this.eraseAccount(id);return;}
+   if(error.message==='accountGuestErased' && error.erasedOperations?.length){
+    for(const entry of this.pending())if(error.erasedOperations.includes(entry.op.id) && entry.op.type==='import'){this.eraseGuestProfile(entry.op.legacyToken);this.raw.removeItem(entry.key);}
+    return this.flush();
+   }
    if(error.message==='accountDeleted' && this.convertDeletedAccount(id))return;
    this.error=error.message;if(error.message==='accountUnauthorized'){this.expired=true;this.error='accountSessionExpired';}this.onSync();throw error;
   }

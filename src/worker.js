@@ -165,9 +165,10 @@ export default {
     if (!new URL(request.url).pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     try { return await api(request, env); }
     catch (error) {
+      if(error.message?.includes('learnerErased'))return reply({error:'learnerErased'},410);
       if(error.message?.includes('accountAlreadyLinked'))return reply({error:'accountAlreadyLinked'},409);
       if(error.message?.startsWith('account'))return reply({error:error.message},error.status || 400);
-      const known = ['invalidTitle', 'invalidWords', 'invalidIpa', 'invalidIpaStyle', 'invalidVisibility', 'duplicateWord', 'invalidImport', 'jsonRequired', 'tooLarge'];
+      const known = ['learnerConfirmIdentity', 'invalidTitle', 'invalidWords', 'invalidIpa', 'invalidIpaStyle', 'invalidVisibility', 'duplicateWord', 'invalidImport', 'jsonRequired', 'tooLarge'];
       if((error.status && error.message.startsWith('ranking')) || ['invalidRankingData','invalidRankingName','invalidRankingMessage'].includes(error.message))return reply({error:error.message},error.status || 400);
       if (known.includes(error.message)) return reply({ error: error.message }, error.status || 400);
       console.error('API request failed', error.message);

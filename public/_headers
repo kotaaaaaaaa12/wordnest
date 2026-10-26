@@ -3,5 +3,33 @@
   Referrer-Policy: same-origin
   X-Frame-Options: DENY
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+/
+  Cache-Control: no-store
+/index.html
+  Cache-Control: no-store
 /assets/audio/*
   Cache-Control: public, max-age=3600
+/account-study.js
+  Cache-Control: no-cache, max-age=0, must-revalidate
+/accounts.js
+  Cache-Control: no-cache, max-age=0, must-revalidate
+/app.js
+  Cache-Control: no-cache, max-age=0, must-revalidate
+/core.js
+  Cache-Control: no-cache, max-age=0, must-revalidate
+/i18n.js
+  Cache-Control: no-cache, max-age=0, must-revalidate
+/icons.js
+  Cache-Control: no-cache, max-age=0, must-revalidate
+/personal.js
+  Cache-Control: no-cache, max-age=0, must-revalidate
+/rankings.js
+  Cache-Control: no-cache, max-age=0, must-revalidate
+/stats.js
+  Cache-Control: no-cache, max-age=0, must-revalidate
+/theme.js
+  Cache-Control: no-cache, max-age=0, must-revalidate
+/styles.css
+  Cache-Control: no-cache, max-age=0, must-revalidate
+/vendor/fflate.js
+  Cache-Control: no-cache, max-age=0, must-revalidate
