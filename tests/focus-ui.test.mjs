@@ -16,7 +16,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 async function harness(){
   const dom=new JSDOM('<div id="app"></div><div id="toast"></div><dialog id="modal"></dialog><canvas id="confetti"></canvas>',{url:'https://wordnest.example/#/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
   Object.assign(w,core,statistics,personalTools,rankingTools,accountTools,{icon,messages,translator,...zip,structuredClone,TextEncoder,TextDecoder,Blob,scrollTo(){},matchMedia:()=>({matches:false})});w.document.hasFocus=()=>true;
-  w.Audio=class{play(){return Promise.resolve();}};w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
+  w.Audio=class{play(){return Promise.resolve();}};w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');(this.querySelector('[autofocus]') || this.querySelector('button'))?.focus();};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
   const sets=['first','second'].map(id=>({...structuredClone(seed),id,title:id,revision:1}));
   let finish;
   w.fetch=async(path)=>{
@@ -48,7 +48,7 @@ test('asynchronous ranking renders never refocus selects, while password input k
   const {w,find,click,finish}=await harness();
   try{
     await click('.nav [data-nav="rankings"]');assert.ok(find('.ranking-loading'));
-    const picker=find('#ranking-metric');picker.focus();let selectFocus=0;const focus=w.HTMLSelectElement.prototype.focus;w.HTMLSelectElement.prototype.focus=function(...args){selectFocus++;return focus.apply(this,args);};await click('[data-action="ranking-category"]');assert.equal(find('#ranking-metric').getAttribute('aria-expanded'),'true');assert.equal(find('[data-ranking-category][aria-pressed="true"]').dataset.rankingCategory,'totalMs');
+    const picker=find('#ranking-metric');picker.focus();let selectFocus=0;const focus=w.HTMLSelectElement.prototype.focus;w.HTMLSelectElement.prototype.focus=function(...args){selectFocus++;return focus.apply(this,args);};await click('[data-action="ranking-category"]');assert.equal(find('#ranking-metric').getAttribute('aria-expanded'),'true');assert.equal(find('[data-ranking-category][aria-pressed="true"]').dataset.rankingCategory,'totalMs');assert.equal(w.document.activeElement,find('#modal-title'),'initial focus stays on the dialog title rather than a category');assert.equal(find('[data-ranking-category]:focus'),null);
     finish();await tick();await tick();assert.equal(selectFocus,0);assert.notEqual(w.document.activeElement.tagName,'SELECT');assert.ok(find('#modal').open,'background ranking completion keeps the category dialog open');assert.equal(find('#ranking-metric').getAttribute('aria-expanded'),'true');find('#modal').dispatchEvent(new w.Event('cancel',{cancelable:true}));await tick();assert.equal(find('#modal').open,false);assert.equal(find('#ranking-metric').getAttribute('aria-expanded'),'false');
     // Closing a modal must not restore focus to its previously focused picker.
     find('#ranking-metric').focus();const count=selectFocus;await click('[data-action="settings"]');await click('[data-dialog="cancel"]');assert.equal(selectFocus,count);assert.notEqual(w.document.activeElement.tagName,'SELECT');

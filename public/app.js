@@ -1,13 +1,13 @@
-const APP_VERSION = '2.3.0';
-import { releaseHistory } from './changelog.js?v=2.3.0-0e4d115fa4b3c712';
-import { AccountClient } from './accounts.js?v=2.3.0-0e4d115fa4b3c712';
-import { RankingClient, rankingMetrics } from './rankings.js?v=2.3.0-0e4d115fa4b3c712';
-import { FlashcardBookmarks, PersonalWords, wordIdentity, catalogWord, findCatalogWord, sourceQuestions, collectionQuestions, canMultipleChoice, quizFromPool, collectionCards } from './personal.js?v=2.3.0-0e4d115fa4b3c712';
-import { LearningTracker, localDay, studyCalendar, recentStudyDays } from './stats.js?v=2.3.0-0e4d115fa4b3c712';
-import { icon } from './icons.js?v=2.3.0-0e4d115fa4b3c712';
-import { normalizeIpa, normalizeIpaData, ipaRuns, ipaRawRuns, limitIpaText, remapIpaItalic, normalize, studyKey, studyStatus, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, balanceAnswerPositions, isCorrect, portable, parseImport } from './core.js?v=2.3.0-0e4d115fa4b3c712';
-import { messages, translator } from './i18n.js?v=2.3.0-0e4d115fa4b3c712';
-import { zipSync, unzipSync, strToU8, strFromU8 } from './vendor/fflate.js?v=2.3.0-0e4d115fa4b3c712';
+const APP_VERSION = '2.3.1';
+import { releaseHistory } from './changelog.js?v=2.3.1-63bdb72444e14e9a';
+import { AccountClient } from './accounts.js?v=2.3.1-63bdb72444e14e9a';
+import { RankingClient, rankingMetrics } from './rankings.js?v=2.3.1-63bdb72444e14e9a';
+import { FlashcardBookmarks, PersonalWords, wordIdentity, catalogWord, findCatalogWord, sourceQuestions, collectionQuestions, canMultipleChoice, quizFromPool, collectionCards } from './personal.js?v=2.3.1-63bdb72444e14e9a';
+import { LearningTracker, localDay, studyCalendar, recentStudyDays } from './stats.js?v=2.3.1-63bdb72444e14e9a';
+import { icon } from './icons.js?v=2.3.1-63bdb72444e14e9a';
+import { normalizeIpa, normalizeIpaData, ipaRuns, ipaRawRuns, limitIpaText, remapIpaItalic, normalize, studyKey, studyStatus, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, balanceAnswerPositions, isCorrect, portable, parseImport } from './core.js?v=2.3.1-63bdb72444e14e9a';
+import { messages, translator } from './i18n.js?v=2.3.1-63bdb72444e14e9a';
+import { zipSync, unzipSync, strToU8, strFromU8 } from './vendor/fflate.js?v=2.3.1-63bdb72444e14e9a';
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const e = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -216,7 +216,7 @@ function rankingsView() {
 async function rankingCategoryDialog() {
   if(modal.open || state.route!=='rankings')return;
   $('#ranking-metric')?.setAttribute('aria-expanded','true');
-  const selected=await dialog(`<button type="button" class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t('rankingMetric')}</h2><div class="ranking-category-options" id="ranking-category-options" role="group" aria-labelledby="modal-title">${Object.entries(rankingMetrics).map(([value,key])=>`<button type="button" class="ranking-category-option" data-ranking-category="${value}" aria-pressed="${state.rankingMetric===value}"><span class="ranking-category-icon">${icon(studyMetricIcons[value])}</span><span>${t(key)}</span><span class="ranking-category-check">${icon('check')}</span></button>`).join('')}</div>`,finish=>{
+  const selected=await dialog(`<button type="button" class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1" autofocus>${t('rankingMetric')}</h2><div class="ranking-category-options" id="ranking-category-options" role="group" aria-labelledby="modal-title">${Object.entries(rankingMetrics).map(([value,key])=>`<button type="button" class="ranking-category-option" data-ranking-category="${value}" aria-pressed="${state.rankingMetric===value}"><span class="ranking-category-icon">${icon(studyMetricIcons[value])}</span><span>${t(key)}</span><span class="ranking-category-check">${icon('check')}</span></button>`).join('')}</div>`,finish=>{
     modal.onclick=event=>{
       if(event.target.closest('[data-dialog]')){finish(false);return;}
       const button=event.target.closest('[data-ranking-category]');
@@ -1108,7 +1108,7 @@ async function accountDialog(initial){
 }
 
 function settingsContent() {
-  return `<button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t('settings')}</h2><section class="settings-section" id="account-settings">${accountSettingsContent()}</section><div class="settings-section"><label for="theme-choice">${t('appearance')}<select id="theme-choice">${['auto','light','dark'].map(value=>`<option value="${value}" ${themeChoice===value?'selected':''}>${t(value)}</option>`).join('')}</select></label>${['light','dark'].map(mode=>`<label for="${mode}-palette">${t(mode==='light'?'lightTheme':'darkTheme')}<select id="${mode}-palette">${paletteChoices[mode].map(value=>`<option value="${value}" ${(mode==='light'?lightPalette:darkPalette)===value?'selected':''}>${t('palette_'+value)}</option>`).join('')}</select></label>`).join('')}<label for="settings-language">${t('language')}<select id="settings-language"><option value="auto" ${languageChoice==='auto'?'selected':''}>${t('auto')}</option><option value="en" ${languageChoice==='en'?'selected':''}>English</option><option value="ja" ${languageChoice==='ja'?'selected':''}>日本語</option></select></label><button class="btn ghost" data-settings-sound aria-pressed="${soundEnabled}">${icon(soundEnabled?'sound':'mute')}${t(soundEnabled?'soundOn':'soundOff')}</button></div><section class="settings-section" id="ranking-settings" aria-labelledby="ranking-settings-title" data-state="${e(rankingSettingsSignature())}">${rankingSettingsContent()}</section>${settingsDataContent()}<section class="settings-section settings-admin" id="admin-controls" aria-labelledby="admin-settings-title" data-state="${e(adminSignature())}">${adminSettingsContent()}</section><div class="modal-actions"><button class="btn primary" data-dialog="cancel">${t('close')}</button></div><p class="app-version" dir="ltr">wordnest v${e(APP_VERSION)}</p>`;
+  return `<header class="settings-modal-header"><h2 id="modal-title" tabindex="-1">${t('settings')}</h2><button type="button" class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button></header><section class="settings-section" id="account-settings">${accountSettingsContent()}</section><div class="settings-section"><label for="theme-choice">${t('appearance')}<select id="theme-choice">${['auto','light','dark'].map(value=>`<option value="${value}" ${themeChoice===value?'selected':''}>${t(value)}</option>`).join('')}</select></label>${['light','dark'].map(mode=>`<label for="${mode}-palette">${t(mode==='light'?'lightTheme':'darkTheme')}<select id="${mode}-palette">${paletteChoices[mode].map(value=>`<option value="${value}" ${(mode==='light'?lightPalette:darkPalette)===value?'selected':''}>${t('palette_'+value)}</option>`).join('')}</select></label>`).join('')}<label for="settings-language">${t('language')}<select id="settings-language"><option value="auto" ${languageChoice==='auto'?'selected':''}>${t('auto')}</option><option value="en" ${languageChoice==='en'?'selected':''}>English</option><option value="ja" ${languageChoice==='ja'?'selected':''}>日本語</option></select></label><button class="btn ghost" data-settings-sound aria-pressed="${soundEnabled}">${icon(soundEnabled?'sound':'mute')}${t(soundEnabled?'soundOn':'soundOff')}</button></div><section class="settings-section" id="ranking-settings" aria-labelledby="ranking-settings-title" data-state="${e(rankingSettingsSignature())}">${rankingSettingsContent()}</section>${settingsDataContent()}<section class="settings-section settings-admin" id="admin-controls" aria-labelledby="admin-settings-title" data-state="${e(adminSignature())}">${adminSettingsContent()}</section><p class="app-version" dir="ltr">wordnest v${e(APP_VERSION)}</p>`;
 }
 async function settingsDialog() {
   let scroll=0;

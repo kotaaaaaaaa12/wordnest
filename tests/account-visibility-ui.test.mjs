@@ -40,7 +40,8 @@ test('account access remains available during quizzes and flashcards, and closin
    await click('.sidebar [data-action="account"]');await until(()=>find('#account-form'));assert.equal(find('#modal-title').textContent,messages.en.accountLogin);await click('[data-account-close]');
    assert.ok(find('.app-shell.is-practicing'));assert.equal(find(activity==='quiz'?'.question-card':'.flashcard').textContent,practice);
    await click('[data-action="settings"]');const {version}=JSON.parse(await readFile('package.json','utf8'));assert.equal(find('#modal').lastElementChild.className,'app-version');assert.equal(find('.app-version').textContent,'wordnest v'+version);
-   const language=find('#settings-language');language.value='ja';language.dispatchEvent(new browser.w.Event('change',{bubbles:true}));assert.equal(find('#modal').lastElementChild.textContent,'wordnest v'+version);await click('[data-dialog="cancel"]');
+   assert.equal(find('#modal').querySelectorAll('[data-dialog="cancel"]').length,1,'Settings has only its header close button');assert.ok(find('.settings-modal-header .modal-close'));assert.equal(find('#modal > .modal-actions'),null);find('#modal').scrollTop=800;
+   const language=find('#settings-language');language.value='ja';language.dispatchEvent(new browser.w.Event('change',{bubbles:true}));assert.equal(find('#modal').lastElementChild.textContent,'wordnest v'+version);assert.ok(find('.settings-modal-header .modal-close'));await click('.settings-modal-header .modal-close');assert.equal(find('#modal').open,false);
    browser.close();browser=null;
   }
  }finally{browser?.close();await mf.dispose();}

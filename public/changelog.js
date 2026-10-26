@@ -1,6 +1,21 @@
 // Release notes are listed newest first. Add each release in both UI languages.
 export const releaseHistory = [
   {
+    "version": "2.3.1",
+    "en": {
+      "title": "Sticky Settings close button and calmer category selection",
+      "changes": [
+        "The Settings close button stays at the top while scrolling; the bottom Close button was removed. Ranking categories use a check mark instead of a filled selection, avoid touch hover highlights, and open without focusing an option."
+      ]
+    },
+    "ja": {
+      "title": "設定の閉じるボタンとランキング項目の表示",
+      "changes": [
+        "設定をスクロールしても右上の閉じるボタンを表示し、最下部の閉じるボタンは削除しました。ランキングの選択中項目は塗りつぶさずチェックで示し、タッチ時のホバー表示と項目への初期フォーカスを抑えました。"
+      ]
+    }
+  },
+  {
     "version": "2.3.0",
     "en": {
       "title": "Changelog tab",
