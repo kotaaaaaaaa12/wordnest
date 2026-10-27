@@ -1,3 +1,4 @@
+import {completeDeletionHold} from './management-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -228,7 +229,7 @@ test('permanent guest erasure blocks stale uploads and registration, clears loca
   const saved=Object.fromEntries(Array.from({length:guest.raw.length},(_,i)=>{const k=guest.raw.key(i);return [k,guest.raw.getItem(k)];}));
   assert.equal((await api(anonymous,path,'DELETE',payload)).status,401);await api(admin,'/api/login','POST',{password:'a-long-admin-password'});
   assert.equal((await api(admin,path,'DELETE',{...payload,confirmation:'wrong'})).data.error,'learnerConfirmIdentity');assert.equal((await api(admin,path,'DELETE',{...payload,name:'Stale name'})).status,409);assert.equal((await api(admin,path,'DELETE',payload,{Origin:'https://attacker.example'})).status,403);
-  assert.equal((await api(admin,path,'DELETE',payload)).status,200);
+  assert.equal((await api(admin,path,'DELETE',payload)).status,200);await completeDeletionHold(mf,id);
   for(const [endpoint,method,body] of [['/api/ranking/profile','GET',undefined],['/api/ranking/profile','POST',{revision:0,name:prefs.name,enabled:true,epoch:'',timezone:'UTC'}],['/api/ranking/stats','PUT',{revision:1,epoch:'',timezone:'UTC',days:{}}]])assert.equal((await api(anonymous,endpoint,method,body,{Authorization:'Bearer '+prefs.token})).status,410);
   await assert.rejects(guest.ranking.sync(true),/learnerErased/);assert.equal(guest.tracker.snapshot().answered,0);assert.equal(guest.tracker.snapshot().flips,0);assert.equal(guest.personal.favorite('old-favorite'),false);assert.equal(guest.ranking.preferences().erased,true);assert.equal(guest.ranking.preferences().name,undefined);assert.equal(guest.ranking.preferences().token,undefined);assert.equal(guest.raw.getItem('wordnest-theme'),'dark');
   const db=await mf.getD1Database('DB');for(let i=0;i<3;i++)await guest.ranking.sync(true);assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM ranking_profiles').first()).n,0);
@@ -246,7 +247,7 @@ test('permanent account erasure clears each device on reconnect instead of conve
   await b.account.login('erase_everything',password);await b.ranking.sync(true);b.connection.offline=true;b.tracker.answer(false);
   await api(admin,'/api/login','POST',{password:'a-long-admin-password'});const path='/api/admin/rankings/'+id;
   assert.equal((await api(admin,path,'DELETE',{name:'Account to erase',loginId:null,confirmation:'erase_everything'})).status,409);
-  assert.equal((await api(admin,path,'DELETE',{name:'Account to erase',loginId:'erase_everything',confirmation:'erase_everything'})).status,200);
+  assert.equal((await api(admin,path,'DELETE',{name:'Account to erase',loginId:'erase_everything',confirmation:'erase_everything'})).status,200);await completeDeletionHold(mf,id);
   await a.ranking.sync(true);assert.equal(a.account.user,null);assert.equal(a.tracker.snapshot().answered,0);assert.equal(a.ranking.preferences().erased,true);assert.equal(a.account.guestSuccessor(id).erased,true);assert.equal(a.account.guestProfile(),null);
   assert.equal(b.account.user.id,id);assert.equal(b.tracker.snapshot().answered,2);b.connection.offline=false;await b.account.initialize();assert.equal(b.account.user,null);assert.equal(b.tracker.snapshot().answered,0);assert.equal(b.account.pending().length,0);assert.equal(b.account.guestProfile(),null);
   const db=await mf.getD1Database('DB');for(const table of ['accounts','ranking_profiles','account_sessions','account_ops'])assert.equal((await db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first()).n,0,table);
@@ -258,7 +259,7 @@ test('an erased guest cannot be imported into a different account and does not e
  const mf=instance(),a=device(mf),b=device(mf),admin=transport(mf);
  try{
   a.tracker.answer(true);await a.account.register({loginId:'keep_valid_account',password,name:'Keep me',enabled:false});b.tracker.answer(false);await b.ranking.join('Erased guest');const prefs=b.ranking.preferences();
-  await api(admin,'/api/login','POST',{password:'a-long-admin-password'});assert.equal((await api(admin,'/api/admin/rankings/'+prefs.id,'DELETE',{name:prefs.name,loginId:null,confirmation:prefs.id.slice(0,12)})).status,200);
+  await api(admin,'/api/login','POST',{password:'a-long-admin-password'});assert.equal((await api(admin,'/api/admin/rankings/'+prefs.id,'DELETE',{name:prefs.name,loginId:null,confirmation:prefs.id.slice(0,12)})).status,200);await completeDeletionHold(mf,prefs.id);
   await b.account.login('keep_valid_account',password);assert.equal(await b.account.importGuest(),false);assert.equal(b.account.user.id,a.account.user.id);assert.equal(b.tracker.snapshot().answered,1);assert.equal(b.tracker.snapshot().correct,1);assert.equal(b.account.pending().length,0);assert.equal(b.account.guestProfile(),null);await a.account.sync();assert.equal(a.tracker.snapshot().answered,1);
  }finally{await mf.dispose();}
 });

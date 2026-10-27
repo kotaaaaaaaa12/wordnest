@@ -1,3 +1,4 @@
+import {completeDeletionHold} from './management-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -66,7 +67,7 @@ test('a permanently erased guest loses local statistics and name on reconnect wi
   const client=new rankingTools.RankingClient({storage:a.w.localStorage,fetch:a.w.fetch,snapshot:()=>({epoch:tracker.epoch,timezone:'UTC',days:tracker.snapshot().days})});await client.join('消すゲスト');const prefs=client.preferences();
   await a.click('[data-nav="stats"]');assert.equal(a.find('[data-stat="answeredQuestions"]').textContent,'1');await a.click('[data-action="settings"]');assert.ok(a.find('#modal').open);
   const login=await mf.dispatchFetch('https://wordnest.example/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:'administrator-password'})}),cookie=login.headers.get('Set-Cookie').split(';')[0];
-  const response=await mf.dispatchFetch('https://wordnest.example/api/admin/rankings/'+prefs.id,{method:'DELETE',headers:{'Content-Type':'application/json',Cookie:cookie},body:JSON.stringify({name:prefs.name,loginId:null,confirmation:prefs.id.slice(0,12)})});assert.equal(response.status,200);
+  const response=await mf.dispatchFetch('https://wordnest.example/api/admin/rankings/'+prefs.id,{method:'DELETE',headers:{'Content-Type':'application/json',Cookie:cookie},body:JSON.stringify({name:prefs.name,loginId:null,confirmation:prefs.id.slice(0,12)})});assert.equal(response.status,200);await completeDeletionHold(mf,prefs.id);
   a.w.dispatchEvent(new a.w.Event('online'));await a.until(()=>JSON.parse(a.w.localStorage.getItem('wordnest-ranking-v1'))?.erased);await a.until(()=>!a.find('#modal').open);assert.equal(a.find('[data-stat="answeredQuestions"]').textContent,'0');assert.equal(a.find('[data-stat="cardFlips"]').textContent,'0');assert.equal(JSON.parse(a.w.localStorage.getItem('wordnest-ranking-v1')).name,undefined);
   a.w.dispatchEvent(new a.w.Event('online'));await new Promise(resolve=>setTimeout(resolve,50));assert.equal(a.find('#modal').open,false);assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM ranking_profiles').first()).n,0);
  }finally{a?.close();await mf.dispose();}

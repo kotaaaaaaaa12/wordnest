@@ -1,13 +1,13 @@
-const APP_VERSION = '2.3.1';
-import { releaseHistory } from './changelog.js?v=2.3.1-63bdb72444e14e9a';
-import { AccountClient } from './accounts.js?v=2.3.1-63bdb72444e14e9a';
-import { RankingClient, rankingMetrics } from './rankings.js?v=2.3.1-63bdb72444e14e9a';
-import { FlashcardBookmarks, PersonalWords, wordIdentity, catalogWord, findCatalogWord, sourceQuestions, collectionQuestions, canMultipleChoice, quizFromPool, collectionCards } from './personal.js?v=2.3.1-63bdb72444e14e9a';
-import { LearningTracker, localDay, studyCalendar, recentStudyDays } from './stats.js?v=2.3.1-63bdb72444e14e9a';
-import { icon } from './icons.js?v=2.3.1-63bdb72444e14e9a';
-import { normalizeIpa, normalizeIpaData, ipaRuns, ipaRawRuns, limitIpaText, remapIpaItalic, normalize, studyKey, studyStatus, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, balanceAnswerPositions, isCorrect, portable, parseImport } from './core.js?v=2.3.1-63bdb72444e14e9a';
-import { messages, translator } from './i18n.js?v=2.3.1-63bdb72444e14e9a';
-import { zipSync, unzipSync, strToU8, strFromU8 } from './vendor/fflate.js?v=2.3.1-63bdb72444e14e9a';
+const APP_VERSION = '2.6.0';
+import { releaseHistory } from './changelog.js?v=2.6.0-f986a3a587463845';
+import { AccountClient } from './accounts.js?v=2.6.0-f986a3a587463845';
+import { RankingClient, rankingMetrics } from './rankings.js?v=2.6.0-f986a3a587463845';
+import { FlashcardBookmarks, PersonalWords, wordIdentity, catalogWord, findCatalogWord, sourceQuestions, collectionQuestions, canMultipleChoice, quizFromPool, collectionCards } from './personal.js?v=2.6.0-f986a3a587463845';
+import { LearningTracker, localDay, studyCalendar, recentStudyDays } from './stats.js?v=2.6.0-f986a3a587463845';
+import { icon } from './icons.js?v=2.6.0-f986a3a587463845';
+import { normalizeIpa, normalizeIpaData, ipaRuns, ipaRawRuns, limitIpaText, remapIpaItalic, normalize, studyKey, studyStatus, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, balanceAnswerPositions, isCorrect, portable, parseImport } from './core.js?v=2.6.0-f986a3a587463845';
+import { messages, translator } from './i18n.js?v=2.6.0-f986a3a587463845';
+import { zipSync, unzipSync, strToU8, strFromU8 } from './vendor/fflate.js?v=2.6.0-f986a3a587463845';
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const e = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -25,7 +25,7 @@ function setLanguage() { lang = languageChoice === 'auto' ? (navigator.language.
 setLanguage();
 let themeChoice = storage.get('wordnest-theme', 'auto');
 if (!['auto', 'light', 'dark'].includes(themeChoice)) themeChoice = 'auto';
-const paletteChoices={light:['default','ocean','lavender'],dark:['default','midnight','graphite']};
+const paletteChoices={light:['default','ocean','lavender','apricot','sage'],dark:['default','midnight','graphite','ember','plum']};
 let lightPalette=storage.get('wordnest-light-palette','default'),darkPalette=storage.get('wordnest-dark-palette','default');
 if(!paletteChoices.light.includes(lightPalette))lightPalette='default';
 if(!paletteChoices.dark.includes(darkPalette))darkPalette='default';
@@ -35,12 +35,12 @@ function applyTheme() {
   const palette=theme==='dark'?darkPalette:lightPalette;
   document.documentElement.dataset.theme = theme;
   document.documentElement.dataset.palette=palette;
-  const backgrounds={light:{default:'#f6f5f0',ocean:'#eef5fa',lavender:'#f5f2fa'},dark:{default:'#171d1a',midnight:'#111a27',graphite:'#1b1b1e'}};
+  const backgrounds={light:{default:'#f6f5f0',ocean:'#eef5fa',lavender:'#f5f2fa',apricot:'#fff4e8',sage:'#f0f5ec'},dark:{default:'#171d1a',midnight:'#111a27',graphite:'#1b1b1e',ember:'#211913',plum:'#211927'}};
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', backgrounds[theme][palette]);
 }
 applyTheme();
 systemTheme.addEventListener?.('change', () => { if (themeChoice === 'auto') applyTheme(); });
-const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, sessionKnown:false, adminBusy:false, adminError:'', configured:true, rankingMetric:'totalMs', rankingData:null, rankingBusy:false, rankingError:'', adminData:null, adminStats:null, adminStatsId:null, adminStatsBusy:false, adminStatsError:'', adminSearch:'', adminStatus:'all', adminKind:'all', adminBusyList:false, adminListError:'', route:routeFromHash(), screen:'home', calendars:{self:{month:null,date:null},admin:{month:null,date:null}}, libraryTab:'sets', collection:null, weakScope:'single', weakMode:'en-ja', weakSetId:null, weakIds:null, weakPickerOpen:false, favoriteSet:'all', wordSearch:'', listLimit:100, selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
+const state = { sets: [], orderRevision:0, loaded:false, loadError:'', authenticated:false, adminRole:null, administratorId:null, adminAccessList:null, learnerSuspension:null, sessionKnown:false, adminBusy:false, adminError:'', configured:true, rankingMetric:'totalMs', rankingData:null, rankingBusy:false, rankingError:'', adminData:null, adminStats:null, adminStatsId:null, adminStatsBusy:false, adminStatsError:'', adminSearch:'', adminStatus:'all', adminKind:'all', adminBusyList:false, adminListError:'', route:routeFromHash(), screen:'home', calendars:{self:{month:null,date:null},admin:{month:null,date:null}}, libraryTab:'sets', collection:null, weakScope:'single', weakMode:'en-ja', weakSetId:null, weakIds:null, weakPickerOpen:false, favoriteSet:'all', wordSearch:'', listLimit:100, selected:new Set(), search:'', setId:null, activity:'quiz', mode:null, order:'original', cards:null, count:5, countChoice:5, custom:false, customValue:'5', quiz:null, draft:null, dirty:false, error:'', saving:false };
 const ranking=new RankingClient({account,storage:learningStorage,fetch:(...args)=>fetch(...args),snapshot:()=>{
   const snapshot=learning.snapshot();return {epoch:learning.epoch,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',days:snapshot.days};
 },onChange:()=>{refreshRankingSettings();queueRankingNotice();if(state.route==='rankings')render();}});
@@ -132,15 +132,15 @@ async function api(path, options={}) {
   let response;
   try { response=await fetch(path,{cache:'no-store',credentials:'same-origin',...options,headers:{...(options.body?{'Content-Type':'application/json'}:{}),...options.headers}}); } catch { throw new Error('networkError'); }
   let data; try { data=await response.json(); } catch { throw new Error('serverError'); }
-  if (!response.ok) { if (response.status===401) { state.authenticated=false;state.adminData=null;state.adminStats=null;state.adminStatsId=null;state.sessionKnown=true;restrictSetsToPublic();render(); } throw new Error(data.error || 'serverError'); }
+  if (!response.ok) { if (response.status===401 && path!=='/api/login') { state.authenticated=false;state.adminRole=null;state.administratorId=null;state.adminAccessList=null;state.adminData=null;state.adminStats=null;state.adminStatsId=null;state.sessionKnown=true;restrictSetsToPublic();dismissDialog?.(false);render(); } throw new Error(data.error || 'serverError'); }
   return data;
 }
 async function load() {
   state.loadError=''; render();
-  try { await account.initialize();const [data, session]=await Promise.all([api('/api/sets'),api('/api/session')]); state.sets=data.sets; state.orderRevision=data.orderRevision; state.authenticated=session.authenticated; state.sessionKnown=true; state.configured=session.configured; if(!state.authenticated)restrictSetsToPublic();state.loaded=true; }
+  try { await account.initialize();const [data, session]=await Promise.all([api('/api/sets'),api('/api/session')]); state.sets=data.sets; state.orderRevision=data.orderRevision; state.authenticated=session.authenticated;state.adminRole=session.authenticated?(session.role || 'admin'):null;state.administratorId=session.administratorId || null; state.sessionKnown=true; state.configured=session.configured; if(!state.authenticated)restrictSetsToPublic();state.loaded=true; }
   catch(error) { state.sessionKnown=true;state.loadError=message(error); }
   render();
-  if(state.route==='rankings')refreshRankings();else ranking.sync(true).catch(()=>{});
+  if(state.route==='rankings')refreshRankings().finally(checkLearnerManagement);else ranking.sync(true).then(checkLearnerManagement).catch(checkLearnerManagement);
   if(state.route==='admin' && state.authenticated)refreshAdministration();
   queueRankingNotice();setTimeout(maybeRankingOnboarding,0);
 }
@@ -163,7 +163,8 @@ function render() {
   const focusId = isTextEntry(active) ? active.id : null;
   const selection = active?.matches('[data-field="ipa"]')?ipaSelection(active):active && typeof active.selectionStart==='number' ? [active.selectionStart,active.selectionEnd] : null;
   let content;
-  if (state.route==='stats') content=statsView();
+  if(state.learnerSuspension && !['guide','history'].includes(state.route))content=suspensionView();
+  else if (state.route==='stats') content=statsView();
   else if (state.route==='rankings') content=rankingsView();
   else if (state.route==='admin') content=state.sessionKnown?administrationView():loadingView('loadingAdmin');
   else if (state.route==='guide') content=guideView();
@@ -192,7 +193,7 @@ function historyView() {
     return `<details class="history-entry" ${current?'open':''}><summary><span class="history-entry-version" dir="ltr">v${e(release.version)}</span><span class="history-entry-title">${e(note.title)}</span>${current?`<span class="history-current">${t('historyCurrent')}</span>`:''}<span class="history-chevron">${icon('down')}</span></summary><ul>${note.changes.map(change=>`<li>${e(change)}</li>`).join('')}</ul></details>`;
   }).join('')}</div></section>`;
 }
-function learningScreen() { return state.route==='home' && ['quiz','cards'].includes(state.screen); }
+function learningScreen() { return !state.learnerSuspension && state.route==='home' && ['quiz','cards'].includes(state.screen); }
 function syncLearning() { learning.setActive(learningScreen() && document.visibilityState==='visible' && document.hasFocus() && !$('#modal')?.open); }
 function formatDuration(milliseconds) {
   const seconds=Math.floor(milliseconds/1000),hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60),rest=seconds%60;
@@ -267,12 +268,137 @@ async function showRankingNotice(){
     });
   }finally{showingRankingNotice=false;queueRankingNotice();}
 }
+function administratorBadge(person){return person.administratorRole?`<span class="account-type administrator-badge">${t(person.administratorRole==='super'?'adminRoleSuper':'adminRoleAdmin')}</span>`:'';}
+function administratorAccessView(){
+  if(state.adminRole!=='super')return '';
+  return `<section class="administrator-access"><div class="actions"><button class="btn ghost small" data-action="admin-audit">${t('auditTitle')}</button><button class="btn ghost small" data-action="admin-deletions">${t('pendingDeletions')}</button></div><h2>${t('adminAccessHeading')}</h2>${(state.adminAccessList || []).map(person=>`<div class="administrator-access-row"><div><strong>${e(person.name || t('adminAnonymous'))}</strong><small>${e(person.id.slice(0,12))} · ${t(person.role==='super'?'adminRoleSuper':person.revoked?'adminRoleRevoked':person.approved===0?'adminApprovalPending':'adminRoleAdmin')}</small></div>${person.role==='admin' && person.approved===0 && !person.revoked?`<button class="btn primary small" data-action="admin-approve" data-id="${e(person.id)}">${t('adminApprove')}</button>`:''}${person.role==='admin'?`<button class="btn ${person.revoked?'ghost':'danger'} small" data-action="admin-permission" data-id="${e(person.id)}">${t(person.revoked?'adminRestore':'adminRevoke')}</button>`:''}</div>`).join('')}</section>`;
+}
+async function changeAdministratorPermission(button){
+  if(state.adminRole!=='super')return;
+  const person=state.adminAccessList?.find(row=>row.id===button.dataset.id);if(!person || person.role!=='admin')return;
+  const revoke=!person.revoked,name=person.name || person.id.slice(0,12);
+  if(!await confirmDialog(revoke?'adminRevoke':'adminRestore',t(revoke?'adminRevokeHelp':'adminRestoreHelp',{name}),revoke?'adminRevoke':'adminRestore',revoke))return;
+  await api('/api/admin/administrators/'+person.id,{method:'POST',body:JSON.stringify({revoked:revoke,revision:person.revision})});
+  await refreshAdministration();
+}
+async function elevateAdministrator(){
+  await dialog(`<button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t('adminElevate')}</h2><form id="elevate-admin-form"><label>${t('adminSuperPassword')}<input name="password" type="password" autocomplete="current-password" minlength="12" maxlength="512" required></label><p class="error" id="elevate-error" hidden></p><button class="btn primary" type="submit">${t('adminUnlock')}</button></form>`,finish=>{
+    modal.onsubmit=async event=>{event.preventDefault();event.stopPropagation();if(state.adminBusy)return;await submitAdmin(event.target);if(state.adminRole==='super'){finish(true);if(state.route==='admin')refreshAdministration();}else{const error=$('#elevate-error');if(!error)return;error.hidden=false;error.textContent=t(state.adminError || 'wrongPassword');}};
+  });
+}
+let checkingAdministrator=false;
+async function checkAdministratorAccess(){
+  if(!state.authenticated || checkingAdministrator)return;checkingAdministrator=true;const identity=state.administratorId;
+  try{
+    const session=await api('/api/session');
+    if(!state.authenticated || state.administratorId!==identity)return;
+    if(!session.authenticated){state.authenticated=false;state.adminRole=null;state.administratorId=null;state.adminAccessList=null;state.adminData=null;state.adminStats=null;state.adminStatsId=null;restrictSetsToPublic();dismissDialog?.(false);render();toast(t('adminAccessEnded'));}
+    else if(session.role && session.role!==state.adminRole){state.adminRole=session.role;state.adminAccessList=null;render();}
+  }catch{}finally{checkingAdministrator=false;}
+}
+function managementDate(value){return new Intl.DateTimeFormat(lang,{dateStyle:'medium',timeStyle:'short'}).format(new Date(value));}
+const managementClose=()=>`<header class="settings-modal-header"><h2 id="modal-title" tabindex="-1">${t('sessionsTitle')}</h2><button class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button></header>`;
+async function learnerManagementRequest(path,options={}){
+  const token=!account.user?ranking.preferences()?.token:null;
+  const response=await fetch(path,{credentials:'same-origin',cache:'no-store',...options,headers:{...(token?{Authorization:'Bearer '+token}:{}),...(account.user?{'X-Wordnest-Account':account.user.id}:{}),...(options.body?{'Content-Type':'application/json'}:{}),...options.headers}});
+  const data=await response.json();if(!response.ok)throw Object.assign(new Error(data.error || 'serverError'),{deleteAfter:data.deleteAfter,status:response.status});return data;
+}
+function suspensionView(){return `<section class="suspension-view"><h1>${t('suspensionTitle')}</h1><p>${e(t('suspensionHelp',{date:managementDate(state.learnerSuspension.deleteAfter)}))}</p><p class="muted">${t('suspensionLocal')}</p><button class="btn ghost" data-action="check-management">${icon('refresh')}${t('refresh')}</button></section>`;}
+let checkingLearner=false,showingLearnerMessage=false,learnerMessageTimer;
+const deferredLearnerMessages=new Set();
+async function checkLearnerManagement(){
+  if(checkingLearner)return;
+  if(!account.user && (!ranking.preferences()?.token || ranking.preferences()?.erased)){if(state.learnerSuspension){state.learnerSuspension=null;render();}return;}
+  checkingLearner=true;const owner=account.user?.id || ranking.preferences()?.token;
+  try{
+    const status=await learnerManagementRequest('/api/learner/status');if(owner!==(account.user?.id || ranking.preferences()?.token))return;const changed=JSON.stringify(state.learnerSuspension)!==JSON.stringify(status.suspension || null);
+    state.learnerSuspension=status.suspension || null;
+    if(changed){if(state.learnerSuspension){stopQuizClock();state.quiz=null;state.cards=null;state.screen='home';dismissDialog?.(false);}render();}
+    if(!showingLearnerMessage){const result=await learnerManagementRequest('/api/learner/notifications');const next=result.notifications?.find(note=>!deferredLearnerMessages.has(note.id));if(next && owner===(account.user?.id || ranking.preferences()?.token))queueLearnerMessage({...next,owner});}
+  }catch(error){
+    if(error.message==='learnerErased'){state.learnerSuspension=null;if(!account.user)account.eraseGuestProfile(ranking.preferences()?.token);else await account.initialize();render();}
+    else if(error.status===401 && account.user)await account.initialize();
+  }finally{checkingLearner=false;}
+}
+function queueLearnerMessage(note){
+  if(note.owner!==(account.user?.id || ranking.preferences()?.token) || (!account.user && ranking.preferences()?.erased))return;
+  if(showingLearnerMessage)return;
+  if(modal.open){clearTimeout(learnerMessageTimer);learnerMessageTimer=setTimeout(()=>queueLearnerMessage(note),500);return;}
+  showingLearnerMessage=true;
+  dialog(`<button class="icon-btn modal-close" data-learner-note-later aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t('notificationTitle')}</h2><p class="management-message" lang="${note[lang==='ja'?'messageJa':'messageEn']?lang:note.messageJa?'ja':'en'}">${e((lang==='ja'?note.messageJa:note.messageEn) || note.messageJa || note.messageEn)}</p><p class="error" id="learner-note-error" hidden></p><div class="modal-actions"><button class="btn ghost" data-learner-note-later>${t('noticeLater')}</button><button class="btn primary" data-learner-note-ack>${t('noticeConfirm')}</button></div>`,finish=>{
+    let busy=false;
+    const later=()=>{deferredLearnerMessages.add(note.id);finish(false);};
+    modal.oncancel=event=>{event.preventDefault();if(!busy)later();};
+    modal.onclick=async event=>{
+      if(busy)return;if(event.target.closest('[data-learner-note-later]')){later();return;}
+      if(!event.target.closest('[data-learner-note-ack]'))return;busy=true;
+      try{await learnerManagementRequest('/api/learner/notifications/'+note.id+'/ack',{method:'POST',body:'{}'});deferredLearnerMessages.add(note.id);finish(true);}
+      catch(error){const alert=$('#learner-note-error');alert.hidden=false;alert.textContent=message(error);}
+      finally{busy=false;}
+    };
+  }).finally(()=>{showingLearnerMessage=false;checkLearnerManagement();});
+}
+async function approveAdministrator(button){
+  const person=state.adminAccessList?.find(row=>row.id===button.dataset.id);if(state.adminRole!=='super' || !person)return;
+  if(!await confirmDialog('adminApprove',t('adminApproveHelp',{name:person.name || person.id.slice(0,12)}),'adminApprove'))return;
+  await api('/api/admin/administrators/'+person.id,{method:'POST',body:JSON.stringify({approved:true,revision:person.revision})});await refreshAdministration();
+}
+async function auditDialog(){
+  if(state.adminRole!=='super')return;
+  let data=await api('/api/admin/audit');if(modal.open)return;let entries=data.entries,next=data.nextBefore,busy=false;
+  const rows=()=>entries.map(row=>`<li><small>${e(managementDate(row.createdAt))}</small><strong>${e(t('audit_'+row.action.replaceAll('.','_')))}</strong><span>${e(row.actorName || row.actorId?.slice(0,12) || t('auditSystem'))}${row.targetId?' → '+e(row.targetName || row.targetId.slice(0,12)):''}</span></li>`).join('');
+  await dialog(`${managementClose().replace(t('sessionsTitle'),t('auditTitle'))}<ol class="management-list" id="audit-list">${rows() || `<li>${t('managementEmpty')}</li>`}</ol><p class="error" id="audit-error" hidden></p><button class="btn ghost" data-audit-more ${next?'':'hidden'}>${t('adminMore')}</button>`,finish=>{
+    modal.onclick=async event=>{
+      if(event.target.closest('[data-dialog]')){finish(false);return;}if(!event.target.closest('[data-audit-more]') || busy)return;busy=true;const more=$('[data-audit-more]');more.disabled=true;
+      try{const list=$('#audit-list');data=await api('/api/admin/audit?before='+next);if(!modal.open || !list?.isConnected)return;entries.push(...data.entries);next=data.nextBefore;$('#audit-list').innerHTML=rows();more.hidden=!next;}
+      catch(error){const alert=$('#audit-error');if(alert){alert.hidden=false;alert.textContent=message(error);}}
+      finally{busy=false;if(more.isConnected)more.disabled=false;}
+    };
+  });
+}
+async function pendingDeletionsDialog(){
+  if(state.adminRole!=='super')return;
+  for(;;){
+    const data=await api('/api/admin/deletions');if(modal.open)return;
+    const selected=await dialog(`${managementClose().replace(t('sessionsTitle'),t('pendingDeletions'))}<p>${t('deletionQueueHelp')}</p><div class="management-list">${data.deletions.map(person=>`<article><strong>${e(person.name)}</strong><small>${e(managementDate(person.deleteAfter))}</small><button class="btn ghost small" data-cancel-deletion="${e(person.id)}">${t('cancelDeletion')}</button></article>`).join('') || `<p>${t('managementEmpty')}</p>`}</div>`,finish=>{modal.onclick=event=>{if(event.target.closest('[data-dialog]'))finish(false);const button=event.target.closest('[data-cancel-deletion]');if(button)finish(data.deletions.find(person=>person.id===button.dataset.cancelDeletion));};});
+    if(!selected)return;
+    if(await confirmDialog('cancelDeletion',t('cancelDeletionHelp',{name:selected.name}),'cancelDeletion')){await api('/api/admin/deletions/'+selected.id+'/cancel',{method:'POST',body:JSON.stringify({nonce:selected.nonce})});toast(t('deletionCancelled'));await refreshAdministration();}
+  }
+}
+async function sessionsDialog(owner){
+  const admin=!!owner,path=admin?'/api/admin/rankings/'+owner+'/sessions':'/api/account/sessions',request=admin?api:learnerManagementRequest;
+  for(;;){
+    const data=await request(path);if(modal.open)return;
+    const action=await dialog(`${managementClose()}<p>${t(admin?'adminSessionsHelp':'ownSessionsHelp')}</p><div class="management-list">${data.sessions.map(session=>`<article><strong>${e(session.label || t('sessionUnknown'))}${session.current?' · '+t('sessionCurrent'):''}</strong><small>${e(t('sessionLastSeen',{date:managementDate(session.lastSeen)}))}</small><small>${t(session.kind==='administrator'?'adminRoleAdmin':'account')}</small>${!admin && !session.current?`<button class="btn ghost small" data-revoke-session="${e(session.id)}">${t('sessionLogout')}</button>`:''}</article>`).join('') || `<p>${t('managementEmpty')}</p>`}</div><button class="btn danger" data-revoke-sessions ${data.sessions.some(session=>admin || !session.current)?'':'disabled'}>${t(admin?'sessionLogoutAll':'sessionLogoutOthers')}</button>`,finish=>{
+      modal.onclick=event=>{if(event.target.closest('[data-dialog]'))finish(false);if(event.target.closest('[data-revoke-sessions]'))finish({all:true});const single=event.target.closest('[data-revoke-session]');if(single)finish({id:single.dataset.revokeSession});};
+    });
+    if(!action)return;
+    if(!await confirmDialog('sessionLogout',t('sessionLogoutHelp'),'sessionLogout',true))continue;
+    if(admin)await request(path,{method:'DELETE'});
+    else await request(action.id?path+'/'+action.id:path+'/others',{method:action.id?'DELETE':'POST',body:action.id?undefined:'{}'});
+    toast(t('sessionsEnded'));
+  }
+}
+async function notifyLearnerDialog(button){
+  const path='/api/admin/rankings/'+button.dataset.id+'/notifications';let receipts=await api(path);if(modal.open)return;
+  const receiptRows=()=>receipts.notifications.map(note=>`<li><small>${e(managementDate(note.createdAt))} · ${t(note.acknowledgedAt?'notificationRead':'notificationUnread')}</small><p>${e(note.messageJa || note.messageEn)}</p></li>`).join('');
+  await dialog(`${managementClose().replace(t('sessionsTitle'),t('sendNotification'))}<form id="notification-form" class="management-form"><label>${t('moderationMessageJa')}<textarea name="messageJa" maxlength="1000" lang="ja"></textarea></label><label>${t('moderationMessageEn')}<textarea name="messageEn" maxlength="1000" lang="en"></textarea></label><p>${t('notificationHelp')}</p><p id="notification-result" role="status"></p><button class="btn primary" type="submit">${t('sendNotification')}</button></form><h3 class="management-subheading">${t('notificationHistory')}</h3><ol class="management-list" id="notification-receipts">${receiptRows()}</ol>`,finish=>{
+    let busy=false;modal.onclick=event=>{if(event.target.closest('[data-dialog]'))finish(false);};
+    modal.onsubmit=async event=>{
+      if(event.target.id!=='notification-form')return;event.preventDefault();if(busy)return;busy=true;const form=event.target,submit=$('[type="submit"]',form);submit.disabled=true;
+      try{const data=new FormData(form);await api(path,{method:'POST',body:JSON.stringify({messageJa:data.get('messageJa'),messageEn:data.get('messageEn')})});receipts=await api(path);if(form.isConnected){$('#notification-result').textContent=t('notificationSent');$('#notification-receipts').innerHTML=receiptRows();}}
+      catch(error){if(form.isConnected)$('#notification-result').textContent=message(error);}
+      finally{busy=false;if(submit.isConnected)submit.disabled=false;}
+    };
+  });
+}
+
 function administrationView(){
   if(!state.authenticated)return '';
   if(state.adminStatsId)return administratorStatsView();
   const data=state.adminData,participants=state.adminData?.participants || [],busy=state.adminBusyList || (!state.adminData && !state.adminListError);
   const date=value=>value?new Intl.DateTimeFormat(lang==='ja'?'ja-JP':'en-US',{dateStyle:'short',timeStyle:'short'}).format(new Date(value)):'—';
-  return `<section class="administration-view"><h1>${t('admin')}</h1><p class="ranking-note">${t('adminHelp')}</p><div class="admin-controls"><label for="admin-search">${t('adminSearch')}<input id="admin-search" type="search" maxlength="100" value="${e(state.adminSearch)}"></label><label for="admin-status">${t('adminStatus')}<select id="admin-status">${['all','listed','private','removed'].map(status=>`<option value="${status}" ${state.adminStatus===status?'selected':''}>${t({all:'adminAll',listed:'adminListed',private:'adminPrivate',removed:'adminRemoved'}[status])}</option>`).join('')}</select></label><label for="admin-kind">${t('adminAccountType')}<select id="admin-kind">${['all','accounts','guests'].map(kind=>`<option value="${kind}" ${state.adminKind===kind?'selected':''}>${t({all:'adminAll',accounts:'adminRegistered',guests:'adminGuest'}[kind])}</option>`).join('')}</select></label><button class="btn ghost small" data-action="admin-refresh" ${busy?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div>${state.adminListError?`<p class="error" role="alert">${e(t(state.adminListError))}</p>`:''}${busy?`<p class="ranking-note" role="status">${t('loadingLearners')}</p>`:''}<div class="admin-participants">${participants.map(person=>`<article class="admin-participant"><div class="admin-person-head"><div><h2>${e(person.name)}</h2><p class="admin-account-meta"><span class="account-type">${t(person.loginId?'adminRegistered':'adminGuest')}</span>${person.loginId?`<span>${t('accountLoginId')}: <strong>${e(person.loginId)}</strong></span>`:''}</p><small>${e(t('adminUpdated',{date:date(person.updatedAt)}))}</small><small class="admin-person-id">${e(person.id.slice(0,12))}</small></div><div class="admin-person-actions"><button class="btn ghost small" data-action="admin-stats" data-id="${e(person.id)}">${icon('stats')}${t('adminViewStats')}</button>${person.removed?`<span class="pill">${t(person.acknowledged?'noticeRead':'noticeUnread')}</span>`:person.enabled?`<button class="btn danger small" data-action="admin-remove" data-id="${e(person.id)}">${icon('trash')}${t('adminRemove')}</button>`: `<span class="pill">${t('adminPrivate')}</span>`}${person.loginId?`<button class="btn ghost small admin-account-button" data-action="admin-account" data-id="${e(person.id)}">${icon('user')}${t('adminAccountManage')}</button>`:''}<button class="btn danger small admin-erase-button" data-action="admin-erase" data-id="${e(person.id)}">${icon('trash')}${t('adminEraseLearner')}</button></div></div>${person.removed?`<dl class="admin-messages">${person.messageJa?`<dt>${t('moderationMessageJa')}</dt><dd lang="ja">${e(person.messageJa)}</dd>`:''}${person.messageEn?`<dt>${t('moderationMessageEn')}</dt><dd lang="en">${e(person.messageEn)}</dd>`:''}</dl>`:''}</article>`).join('') || (!busy?`<div class="empty"><p>${t('adminEmpty')}</p></div>`:'')}</div>${data && participants.length<data.total?`<button class="btn ghost" data-action="admin-more" ${busy?'disabled':''}>${t('adminMore')}</button>`:''}</section>`;
+  return `<section class="administration-view"><h1>${t('admin')}</h1><p class="ranking-note">${t('adminHelp')}</p>${administratorAccessView()}<div class="admin-controls"><label for="admin-search">${t('adminSearch')}<input id="admin-search" type="search" maxlength="100" value="${e(state.adminSearch)}"></label><label for="admin-status">${t('adminStatus')}<select id="admin-status">${['all','listed','private','removed'].map(status=>`<option value="${status}" ${state.adminStatus===status?'selected':''}>${t({all:'adminAll',listed:'adminListed',private:'adminPrivate',removed:'adminRemoved'}[status])}</option>`).join('')}</select></label><label for="admin-kind">${t('adminAccountType')}<select id="admin-kind">${['all','accounts','guests'].map(kind=>`<option value="${kind}" ${state.adminKind===kind?'selected':''}>${t({all:'adminAll',accounts:'adminRegistered',guests:'adminGuest'}[kind])}</option>`).join('')}</select></label><button class="btn ghost small" data-action="admin-refresh" ${busy?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div>${state.adminListError?`<p class="error" role="alert">${e(t(state.adminListError))}</p>`:''}${busy?`<p class="ranking-note" role="status">${t('loadingLearners')}</p>`:''}<div class="admin-participants">${participants.map(person=>`<article class="admin-participant"><div class="admin-person-head"><div><h2>${e(person.name)}</h2><p class="admin-account-meta">${administratorBadge(person)}${person.deleteAfter?`<span class="account-type">${t('deletionPending')}</span>`:''}<span class="account-type">${t(person.loginId?'adminRegistered':'adminGuest')}</span>${person.loginId?`<span>${t('accountLoginId')}: <strong>${e(person.loginId)}</strong></span>`:''}</p><small>${e(t('adminUpdated',{date:date(person.updatedAt)}))}</small><small class="admin-person-id">${e(person.id.slice(0,12))}</small></div><div class="admin-person-actions"><button class="btn ghost small" data-action="admin-stats" data-id="${e(person.id)}">${icon('stats')}${t('adminViewStats')}</button>${person.removed?`<span class="pill">${t(person.acknowledged?'noticeRead':'noticeUnread')}</span>`:person.enabled?`<button class="btn danger small" data-action="admin-remove" data-id="${e(person.id)}">${icon('trash')}${t('adminRemove')}</button>`: `<span class="pill">${t('adminPrivate')}</span>`}${person.loginId?`<button class="btn ghost small admin-account-button" data-action="admin-account" data-id="${e(person.id)}">${icon('user')}${t('adminAccountManage')}</button>`:''}<button class="btn ghost small" data-action="admin-notify" data-id="${e(person.id)}">${t('sendNotification')}</button><button class="btn ghost small" data-action="admin-sessions" data-id="${e(person.id)}">${t('sessionsTitle')}</button><button class="btn danger small admin-erase-button" data-action="admin-erase" data-id="${e(person.id)}">${icon('trash')}${t('adminEraseLearner')}</button></div></div>${person.removed?`<dl class="admin-messages">${person.messageJa?`<dt>${t('moderationMessageJa')}</dt><dd lang="ja">${e(person.messageJa)}</dd>`:''}${person.messageEn?`<dt>${t('moderationMessageEn')}</dt><dd lang="en">${e(person.messageEn)}</dd>`:''}</dl>`:''}</article>`).join('') || (!busy?`<div class="empty"><p>${t('adminEmpty')}</p></div>`:'')}</div>${data && participants.length<data.total?`<button class="btn ghost" data-action="admin-more" ${busy?'disabled':''}>${t('adminMore')}</button>`:''}</section>`;
 }
 function studyMetricCards(data){
   return `<div class="stats-grid">${Object.entries(rankingMetrics).map(([metric,key])=>`<article class="stat-card"><h2>${icon(studyMetricIcons[metric])}${t(key)}</h2><p data-stat="${key}">${e(formatStudyMetric(metric,data[metric]))}</p>${key==='averageTime'?`<small>${t(data.activeDays===1?'averageOneDay':'averageDays',{n:new Intl.NumberFormat(lang).format(data.activeDays)})}</small>`:''}</article>`).join('')}</div>`;
@@ -280,7 +406,7 @@ function studyMetricCards(data){
 function administratorStatsView(){
   const data=state.adminStats,person=data?.participant;
   const date=person?new Intl.DateTimeFormat(lang,{dateStyle:'medium',timeStyle:'short',timeZone:person.timezone}).format(new Date(person.updatedAt)):'';
-  return `<section class="administration-view admin-stats-view stats-view"><div class="actions"><button class="btn ghost small" data-action="admin-stats-back">${icon('back')}${t('adminBack')}</button><button class="btn ghost small" data-action="admin-stats-refresh" ${state.adminStatsBusy?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div><h1>${t('stats')}</h1>${person?`<h2 class="admin-stats-name">${e(person.name)}</h2><p class="admin-account-meta"><span class="account-type">${t(person.loginId?'adminRegistered':'adminGuest')}</span>${person.loginId?`<span>${t('accountLoginId')}: <strong>${e(person.loginId)}</strong></span><button class="btn ghost small" data-action="admin-account" data-id="${e(person.id)}">${t('adminAccountManage')}</button>`:''}<button class="btn danger small" data-action="admin-erase" data-id="${e(person.id)}">${t('adminEraseLearner')}</button></p><p class="ranking-note">${e(t('adminUpdated',{date}))}<br>${e(t('adminStatsTimezone',{timezone:person.timezone}))}</p>`:''}<p class="ranking-note">${t('adminStatsScope')}</p>${state.adminStatsBusy?`<p role="status">${t('loadingStats')}</p>`:''}${state.adminStatsError?`<p class="error" role="alert">${e(t(state.adminStatsError))}</p>`:''}${data?studyMetricCards(data.summary)+studyCharts(data.days,data.today,'admin'):''}</section>`;
+  return `<section class="administration-view admin-stats-view stats-view"><div class="actions"><button class="btn ghost small" data-action="admin-stats-back">${icon('back')}${t('adminBack')}</button><button class="btn ghost small" data-action="admin-stats-refresh" ${state.adminStatsBusy?'disabled':''}>${icon('refresh')}${t('refreshRankings')}</button></div><h1>${t('stats')}</h1>${person?`<h2 class="admin-stats-name">${e(person.name)}</h2><p class="admin-account-meta">${administratorBadge(person)}${person.deleteAfter?`<span class="account-type">${t('deletionPending')}</span>`:''}<span class="account-type">${t(person.loginId?'adminRegistered':'adminGuest')}</span>${person.loginId?`<span>${t('accountLoginId')}: <strong>${e(person.loginId)}</strong></span><button class="btn ghost small" data-action="admin-account" data-id="${e(person.id)}">${t('adminAccountManage')}</button>`:''}<button class="btn danger small" data-action="admin-erase" data-id="${e(person.id)}">${t('adminEraseLearner')}</button></p><p class="ranking-note">${e(t('adminUpdated',{date}))}<br>${e(t('adminStatsTimezone',{timezone:person.timezone}))}</p>`:''}<p class="ranking-note">${t('adminStatsScope')}</p>${state.adminStatsBusy?`<p role="status">${t('loadingStats')}</p>`:''}${state.adminStatsError?`<p class="error" role="alert">${e(t(state.adminStatsError))}</p>`:''}${data?studyMetricCards(data.summary)+studyCharts(data.days,data.today,'admin'):''}</section>`;
 }
 let administratorStatsRequest=0;
 async function refreshAdministratorStats(){
@@ -299,7 +425,7 @@ async function refreshAdministration(append=false){
   const request=++administrationRequest,previous=append?state.adminData?.participants || []:[];
   state.adminBusyList=true;state.adminListError='';if(!append)state.adminData=null;if(state.route==='admin')render();
   try{
-    const query=new URLSearchParams({status:state.adminStatus,kind:state.adminKind,q:state.adminSearch,offset:String(previous.length)}),data=await api('/api/admin/rankings?'+query);
+    const query=new URLSearchParams({status:state.adminStatus,kind:state.adminKind,q:state.adminSearch,offset:String(previous.length)});const [data,access]=await Promise.all([api('/api/admin/rankings?'+query),state.adminRole==='super'?api('/api/admin/administrators'):null]);if(request===administrationRequest && state.authenticated)state.adminAccessList=access?.administrators || null;
     if(request===administrationRequest && state.authenticated)state.adminData={...data,participants:[...previous,...data.participants]};
   }catch(error){if(request===administrationRequest)state.adminListError=messages.en[error.message]?error.message:'networkError';}
   finally{if(request===administrationRequest){state.adminBusyList=false;if(state.route==='admin')render();}}
@@ -317,16 +443,13 @@ async function eraseLearner(button){
       const input=$('#erase-learner-confirm',modal),error=$('#erase-learner-error',modal);error.hidden=true;
       if(input.value!==confirmation){error.textContent=t('learnerConfirmIdentity');error.hidden=false;return;}
       busy=true;const controls=$$('button,input',modal);controls.forEach(control=>control.disabled=true);
-      try{await api('/api/admin/rankings/'+person.id,{method:'DELETE',body:JSON.stringify({name:person.name,loginId:person.loginId || null,confirmation:input.value})});finish(true);}
+      try{const result=await api('/api/admin/rankings/'+person.id,{method:'DELETE',body:JSON.stringify({name:person.name,loginId:person.loginId || null,confirmation:input.value})});finish(result);}
       catch(err){error.textContent=message(err);error.hidden=false;}
       finally{busy=false;controls.filter(control=>control.isConnected).forEach(control=>control.disabled=false);}
     };
   });
   if(!erased)return;
-  if(account.user?.id===person.id)account.eraseAccount(person.id);
-  else if(!account.user && ranking.preferences()?.id===person.id)account.eraseGuestProfile(ranking.preferences().token);
-  if(state.adminStatsId===person.id){administratorStatsRequest++;state.adminStatsId=null;state.adminStats=null;state.adminStatsBusy=false;}
-  toast(t('adminLearnerErased'));await refreshAdministration();
+  toast(t('deletionScheduled'));await refreshAdministration();checkLearnerManagement();
 }
 async function manageAdministratorAccount(button){
   if(!state.authenticated || state.route!=='admin')return;
@@ -993,10 +1116,10 @@ async function manageSetsDialog() {
   render();
 }
 
-function adminSignature() { return JSON.stringify([state.authenticated,state.configured,state.adminBusy,state.adminError,lang]); }
+function adminSignature() { return JSON.stringify([state.authenticated,state.configured,state.adminBusy,state.adminError,state.adminRole,lang]); }
 function adminSettingsContent() {
   const heading=`<h3 id="admin-settings-title">${t('adminAccess')}</h3>`;
-  if(state.authenticated)return `${heading}<p class="admin-status" role="status">${icon('check')}${t('unlocked')}</p><small>${t('sessionNote')}</small><div class="settings-buttons"><button class="btn ghost" data-admin-lock>${icon('lock')}${t('logout')}</button></div>`;
+  if(state.authenticated)return `${heading}<p class="admin-status" role="status">${icon('check')}${t(state.adminRole==='super'?'adminRoleSuper':'adminRoleAdmin')}</p><small>${t('sessionNote')}</small><div class="settings-buttons">${state.adminRole!=='super'?`<button class="btn ghost" data-admin-elevate>${t('adminElevate')}</button>`:''}<button class="btn ghost" data-admin-lock>${icon('lock')}${t('logout')}</button></div>`;
   if(!state.configured)return `${heading}<p>${t('adminUnavailable')}</p>`;
   return `${heading}<form id="admin-login-form"><label for="admin-password">${t('adminPassword')}<input type="password" id="admin-password" name="password" autocomplete="current-password" required minlength="12" maxlength="512" ${state.adminBusy?'disabled':''}></label>${state.adminError?`<p class="error" role="alert">${e(t(state.adminError))}</p>`:''}<button class="btn primary" type="submit" ${state.adminBusy?'disabled':''}>${icon('lock')}${t(state.adminBusy?'adminChecking':'adminUnlock')}</button></form>`;
 }
@@ -1005,10 +1128,10 @@ function refreshAdminSettings() {
   if(controls && controls.dataset.state!==adminSignature()){controls.innerHTML=adminSettingsContent();controls.dataset.state=adminSignature();}
 }
 async function submitAdmin(form) {
-  if(state.adminBusy || state.authenticated || !state.configured)return;
+  if(state.adminBusy || state.adminRole==='super' || !state.configured)return;
   const password=new FormData(form).get('password');
   form.reset();state.adminBusy=true;state.adminError='';refreshAdminSettings();
-  try { await api('/api/login',{method:'POST',body:JSON.stringify({password})});const data=await api('/api/sets');state.sets=data.sets;state.orderRevision=data.orderRevision;state.authenticated=true;state.sessionKnown=true; }
+  try { try{await ranking.sync(true);}catch{}const access=await api('/api/login',{method:'POST',body:JSON.stringify({password,...(!account.user && ranking.preferences()?.token?{guestToken:ranking.preferences().token}:{})})});if(access.pending){state.adminError='adminApprovalPending';state.authenticated=false;refreshAdminSettings();return;}state.adminRole=access.role || 'admin';state.administratorId=access.administratorId || null;const data=await api('/api/sets');state.sets=data.sets;state.orderRevision=data.orderRevision;state.authenticated=true;state.sessionKnown=true; }
   catch(error) { state.adminError=messages.en[error.message]?error.message:'networkError'; }
   finally { state.adminBusy=false;render(); }
 }
@@ -1037,6 +1160,7 @@ async function deleteLearningData(type) {
   } catch {render();toast(t('deleteDataError'));}
 }
 function switchStudyAccount(){
+  state.learnerSuspension=null;
   learning.setActive(false);
   personal=new PersonalWords(learningStorage);bookmarks=new FlashcardBookmarks(learningStorage);learning=new LearningTracker({storage:learningStorage,now:()=>Date.now()});
   ranking.profile=null;ranking.lastSent='';ranking.error='';state.rankingData=null;state.adminStats=null;
@@ -1066,7 +1190,7 @@ async function accountDialog(initial){
     const signed=!!account.user,register=mode==='register',help=mode==='help',change=mode==='password',manage=mode==='manage';
     const title=manage?'accountManage':register?'accountCreate':help?'accountForgotPassword':change?'accountChangePassword':'accountLogin';
     const input=(id,label,type='text',attributes='')=>`<label for="${id}">${t(label)}<input id="${id}" type="${type}" ${attributes} required></label>`;
-    const content=help?`${accountClose()}<h2 id="modal-title" tabindex="-1">${t('accountForgotPassword')}</h2><p>${t('accountAdminRecoveryHelp')}</p><div class="modal-actions"><button class="btn ghost" data-account-mode="login">${t('back')}</button></div>`:manage?`${accountClose()}<h2 id="modal-title" tabindex="-1">${t(title)}</h2><p class="account-id"><span>${t('accountLoginId')}</span><strong>${e(account.user.loginId)}</strong></p><p>${t('accountSignedInHelp')}</p><p>${e(account.error && messages.en[account.error]?t(account.error):t('accountSynced'))}</p><p class="error" id="account-error" role="alert" hidden></p><div class="account-actions"><button class="btn ghost" data-account-command="sync">${t('accountSyncNow')}</button><button class="btn ghost" data-account-mode="password">${t('accountChangePassword')}</button><button class="btn ghost" data-account-command="import" ${account.hasGuestRecords()?'':'disabled'}>${t('accountImportGuest')}</button><p>${t(account.hasGuestRecords()?'accountImportHelp':'accountNoGuestRecords')}</p><button class="btn ghost" data-account-command="logout">${t('accountLogout')}</button></div>`:`${accountClose()}<h2 id="modal-title" tabindex="-1">${t(title)}</h2>${showIntro && mode==='login'?`<section class="account-start-note" aria-labelledby="account-start-title"><h3 id="account-start-title">${t('accountStartTitle')}</h3><p>${t('accountStartOtherDevice')}</p><p>${t('accountStartHere')}</p></section>`:`<p>${t(register?'accountCreateHelp':change?'accountPasswordHelp':'accountLoginHelp')}</p>`}<form id="account-form" class="account-form">${change?'':input('account-login-id','accountLoginId','text',`value="${e(account.user?.loginId || '')}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" minlength="3" maxlength="32" pattern="[a-zA-Z0-9_]{3,32}"`)}${register?`<small>${t('accountIdHelp')}</small>`:''}${change?input('account-current-password','accountCurrentPassword','password','autocomplete="current-password" maxlength="128"'):''}${input('account-password',change?'accountNewPassword':'accountPassword','password',`autocomplete="${register || change?'new-password':'current-password'}" maxlength="128" ${register || change?'minlength="15"':''}`)}${register || change?`<small>${t('accountPasswordRule')}</small>${input('account-confirm','accountConfirmPassword','password','autocomplete="new-password" minlength="15" maxlength="128"')}`:''}${register?`${input('account-display-name','profileName','text',`value="${e(ranking.preferences()?.name || '')}" autocomplete="nickname" maxlength="40"`)}<small>${t('accountDisplayNameHelp')}</small><label class="account-check"><input type="checkbox" id="account-listed" ${ranking.preferences()?.choice==='joined'?'checked':''}>${t('rankingParticipation')}</label>`:''}<p class="error" id="account-error" role="alert" hidden></p><div class="modal-actions"><button class="btn primary" type="submit">${t(register?'accountCreate':change?'save':'accountLogin')}</button></div></form><div class="account-links">${account.user && account.expired?`<button class="text-btn" data-account-command="logout">${t('accountLogout')}</button>`:''}${mode==='login'?`<button class="text-btn" data-account-mode="register">${t('accountCreate')}</button><button class="text-btn" data-account-mode="help">${t('accountForgotPassword')}</button>`:`<button class="text-btn" data-account-mode="${signed && !account.expired?'manage':'login'}">${t('back')}</button>`}</div>`;
+    const content=help?`${accountClose()}<h2 id="modal-title" tabindex="-1">${t('accountForgotPassword')}</h2><p>${t('accountAdminRecoveryHelp')}</p><div class="modal-actions"><button class="btn ghost" data-account-mode="login">${t('back')}</button></div>`:manage?`${accountClose()}<h2 id="modal-title" tabindex="-1">${t(title)}</h2><p class="account-id"><span>${t('accountLoginId')}</span><strong>${e(account.user.loginId)}</strong></p><p>${t('accountSignedInHelp')}</p><p>${e(account.error && messages.en[account.error]?t(account.error):t('accountSynced'))}</p><p class="error" id="account-error" role="alert" hidden></p><div class="account-actions"><button class="btn ghost" data-account-command="sessions">${t('sessionsTitle')}</button><button class="btn ghost" data-account-command="sync">${t('accountSyncNow')}</button><button class="btn ghost" data-account-mode="password">${t('accountChangePassword')}</button><button class="btn ghost" data-account-command="import" ${account.hasGuestRecords()?'':'disabled'}>${t('accountImportGuest')}</button><p>${t(account.hasGuestRecords()?'accountImportHelp':'accountNoGuestRecords')}</p><button class="btn ghost" data-account-command="logout">${t('accountLogout')}</button></div>`:`${accountClose()}<h2 id="modal-title" tabindex="-1">${t(title)}</h2>${showIntro && mode==='login'?`<section class="account-start-note" aria-labelledby="account-start-title"><h3 id="account-start-title">${t('accountStartTitle')}</h3><p>${t('accountStartOtherDevice')}</p><p>${t('accountStartHere')}</p></section>`:`<p>${t(register?'accountCreateHelp':change?'accountPasswordHelp':'accountLoginHelp')}</p>`}<form id="account-form" class="account-form">${change?'':input('account-login-id','accountLoginId','text',`value="${e(account.user?.loginId || '')}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" minlength="3" maxlength="32" pattern="[a-zA-Z0-9_]{3,32}"`)}${register?`<small>${t('accountIdHelp')}</small>`:''}${change?input('account-current-password','accountCurrentPassword','password','autocomplete="current-password" maxlength="128"'):''}${input('account-password',change?'accountNewPassword':'accountPassword','password',`autocomplete="${register || change?'new-password':'current-password'}" maxlength="128" ${register || change?'minlength="15"':''}`)}${register || change?`<small>${t('accountPasswordRule')}</small>${input('account-confirm','accountConfirmPassword','password','autocomplete="new-password" minlength="15" maxlength="128"')}`:''}${register?`${input('account-display-name','profileName','text',`value="${e(ranking.preferences()?.name || '')}" autocomplete="nickname" maxlength="40"`)}<small>${t('accountDisplayNameHelp')}</small><label class="account-check"><input type="checkbox" id="account-listed" ${ranking.preferences()?.choice==='joined'?'checked':''}>${t('rankingParticipation')}</label>`:''}<p class="error" id="account-error" role="alert" hidden></p><div class="modal-actions"><button class="btn primary" type="submit">${t(register?'accountCreate':change?'save':'accountLogin')}</button></div></form><div class="account-links">${account.user && account.expired?`<button class="text-btn" data-account-command="logout">${t('accountLogout')}</button>`:''}${mode==='login'?`<button class="text-btn" data-account-mode="register">${t('accountCreate')}</button><button class="text-btn" data-account-mode="help">${t('accountForgotPassword')}</button>`:`<button class="text-btn" data-account-mode="${signed && !account.expired?'manage':'login'}">${t('back')}</button>`}</div>`;
     const result=await dialog(content,finish=>{
       let busy=false;
       const run=async work=>{
@@ -1080,7 +1204,7 @@ async function accountDialog(initial){
         if(event.target.closest('[data-account-close]')){finish(false);return;}
         if(navigation){finish({mode:navigation.dataset.accountMode});return;}
         if(command)run(async()=>{
-          const value=command.dataset.accountCommand;
+          const value=command.dataset.accountCommand;if(value==='sessions'){finish({mode:'sessions'});return;}
           if(value==='logout'){await account.logout();finish(false);return;}
           if(value==='import'){const transferred=await account.importGuest();await ranking.sync(true);if(transferred!==false)toast(t('accountImportDone'));}
           else{await account.sync();await ranking.sync(true);if(!account.user){finish(false);return;}toast(t('accountSynced'));}
@@ -1103,12 +1227,13 @@ async function accountDialog(initial){
       };
     });
     if(!result)return;
+    if(result.mode==='sessions'){await sessionsDialog();mode='manage';continue;}
     mode=result.mode;
   }
 }
 
 function settingsContent() {
-  return `<header class="settings-modal-header"><h2 id="modal-title" tabindex="-1">${t('settings')}</h2><button type="button" class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button></header><section class="settings-section" id="account-settings">${accountSettingsContent()}</section><div class="settings-section"><label for="theme-choice">${t('appearance')}<select id="theme-choice">${['auto','light','dark'].map(value=>`<option value="${value}" ${themeChoice===value?'selected':''}>${t(value)}</option>`).join('')}</select></label>${['light','dark'].map(mode=>`<label for="${mode}-palette">${t(mode==='light'?'lightTheme':'darkTheme')}<select id="${mode}-palette">${paletteChoices[mode].map(value=>`<option value="${value}" ${(mode==='light'?lightPalette:darkPalette)===value?'selected':''}>${t('palette_'+value)}</option>`).join('')}</select></label>`).join('')}<label for="settings-language">${t('language')}<select id="settings-language"><option value="auto" ${languageChoice==='auto'?'selected':''}>${t('auto')}</option><option value="en" ${languageChoice==='en'?'selected':''}>English</option><option value="ja" ${languageChoice==='ja'?'selected':''}>日本語</option></select></label><button class="btn ghost" data-settings-sound aria-pressed="${soundEnabled}">${icon(soundEnabled?'sound':'mute')}${t(soundEnabled?'soundOn':'soundOff')}</button></div><section class="settings-section" id="ranking-settings" aria-labelledby="ranking-settings-title" data-state="${e(rankingSettingsSignature())}">${rankingSettingsContent()}</section>${settingsDataContent()}<section class="settings-section settings-admin" id="admin-controls" aria-labelledby="admin-settings-title" data-state="${e(adminSignature())}">${adminSettingsContent()}</section><p class="app-version" dir="ltr">wordnest v${e(APP_VERSION)}</p>`;
+  return `<header class="settings-modal-header"><h2 id="modal-title" tabindex="-1">${t('settings')}</h2><button type="button" class="icon-btn modal-close" data-dialog="cancel" aria-label="${t('close')}">${icon('close')}</button></header><section class="settings-section" id="account-settings">${accountSettingsContent()}</section><div class="settings-section"><label for="theme-choice">${t('appearance')}<select id="theme-choice">${['auto','light','dark'].map(value=>`<option value="${value}" ${themeChoice===value?'selected':''}>${t(value)}</option>`).join('')}</select></label>${['light','dark'].map(mode=>`<label for="${mode}-palette">${t(mode==='light'?'lightTheme':'darkTheme')}<select id="${mode}-palette">${paletteChoices[mode].map(value=>`<option value="${value}" ${(mode==='light'?lightPalette:darkPalette)===value?'selected':''}>${t('palette_'+(value==='default'?mode+'_default':value))}</option>`).join('')}</select></label>`).join('')}<label for="settings-language">${t('language')}<select id="settings-language"><option value="auto" ${languageChoice==='auto'?'selected':''}>${t('auto')}</option><option value="en" ${languageChoice==='en'?'selected':''}>English</option><option value="ja" ${languageChoice==='ja'?'selected':''}>日本語</option></select></label><button class="btn ghost" data-settings-sound aria-pressed="${soundEnabled}">${icon(soundEnabled?'sound':'mute')}${t(soundEnabled?'soundOn':'soundOff')}</button></div><section class="settings-section" id="ranking-settings" aria-labelledby="ranking-settings-title" data-state="${e(rankingSettingsSignature())}">${rankingSettingsContent()}</section>${settingsDataContent()}<section class="settings-section settings-admin" id="admin-controls" aria-labelledby="admin-settings-title" data-state="${e(adminSignature())}">${adminSettingsContent()}</section><p class="app-version" dir="ltr">wordnest v${e(APP_VERSION)}</p>`;
 }
 async function settingsDialog() {
   let scroll=0;
@@ -1129,11 +1254,13 @@ async function settingsDialog() {
         if(event.target.closest('[data-ranking-private-name]')){finish('private-name');return;}
         if(event.target.closest('[data-ranking-settings]')){finish(ranking.preferences()?.choice==='joined'?'ranking-off':'ranking-name');return;}
         if(deletion){finish({deleteData:deletion.dataset.deleteLearning,scroll:modal.scrollTop});return;}
+        if(event.target.closest('[data-admin-elevate]')){finish('elevate');return;}
         if(event.target.closest('[data-admin-lock]')){finish('lock');return;}
         if(event.target.closest('[data-dialog]')){finish(false);return;}
         if(event.target.closest('[data-settings-sound]')){toggleSound();modal.innerHTML=settingsContent();$('#modal-title',modal)?.focus({preventScroll:true});return;}
       };
     });
+    if(action==='elevate'){await elevateAdministrator();continue;}
     if(action==='account'){await accountDialog();continue;}
     if(action==='private-name'){await rankingNameDialog(false,true);continue;}
     if(action==='ranking-name'){await rankingNameDialog();continue;}
@@ -1243,6 +1370,13 @@ const actions={
   settings:settingsDialog,
   'ranking-name':()=>rankingNameDialog(),
   'ranking-category':rankingCategoryDialog,
+  'check-management':checkLearnerManagement,
+  'admin-approve':approveAdministrator,
+  'admin-audit':auditDialog,
+  'admin-deletions':pendingDeletionsDialog,
+  'admin-notify':notifyLearnerDialog,
+  'admin-sessions':button=>sessionsDialog(button.dataset.id),
+  'admin-permission':changeAdministratorPermission,
   'admin-refresh':()=>refreshAdministration(),
   'admin-more':()=>refreshAdministration(true),
   'admin-remove':removeRankingParticipant,
@@ -1310,7 +1444,7 @@ const actions={
   async 'remove-word'(button){if(!await confirmDialog('removeTitle',t('removeHelp'),'remove',true))return;state.draft.words.splice(Number(button.dataset.index),1);markDirty();render();},
   async save(){if(state.saving)return;try{const data={...validateSet(state.draft),published:state.draft.published!==false},typingModes=state.draft.words.map(word=>ipaTypingModes.get(word)||false);state.saving=true;state.error='';render();let saved;if(state.draft.id){saved=(await api(`/api/sets/${state.draft.id}`,{method:'PUT',body:JSON.stringify({...data,revision:state.draft.revision})})).set;state.sets=state.sets.map(s=>s.id===saved.id?saved:s);}else{const response=await api('/api/sets',{method:'POST',body:JSON.stringify(data)});saved=response.sets[0];state.sets.unshift(saved);synchronizeSetOrder(response);}state.draft=structuredClone(saved);state.draft.words.forEach((word,index)=>ipaTypingModes.set(word,typingModes[index]));state.dirty=false;toast(t('saved'));}catch(err){state.error=message(err);}finally{state.saving=false;render();}},
   async delete(){const draft=state.draft;if(!await confirmDialog('deleteTitle',t('deleteHelp',{title:draft.title}),'delete',true))return;state.saving=true;render();try{await deleteSavedSet(draft);}catch(err){state.error=message(err);}finally{state.saving=false;render();}},
-  async logout(){if(!await discardGuard())return;try{await api('/api/logout',{method:'POST'});state.authenticated=false;state.adminData=null;state.adminStats=null;state.adminStatsId=null;restrictSetsToPublic();state.draft=null;state.dirty=false;state.error='';render();}catch(err){toast(message(err));}},
+  async logout(){if(!await discardGuard())return;try{await api('/api/logout',{method:'POST'});state.authenticated=false;state.adminRole=null;state.administratorId=null;state.adminAccessList=null;state.adminData=null;state.adminStats=null;state.adminStatsId=null;restrictSetsToPublic();state.draft=null;state.dirty=false;state.error='';render();}catch(err){toast(message(err));}},
   import:importDialog,
   export:exportDialog,
 };
@@ -1434,7 +1568,7 @@ window.addEventListener('blur',()=>{stopSpeech();closeIpaVariants();learning.set
 window.addEventListener('focus',()=>{syncLearning();if(account.user)ranking.sync(true).catch(()=>{});});
 for(const type of ['pointerdown','click','keydown','input','scroll'])document.addEventListener(type,()=>{if(learning.active)learning.touch();},{capture:true,passive:true});
 let rankingHeartbeatAt=0;
-function learningHeartbeat(){learning.tick();learning.persist();if(Date.now()-rankingHeartbeatAt>=30000){rankingHeartbeatAt=Date.now();ranking.sync().then(()=>{if(state.route==='rankings')refreshRankings(false);}).catch(()=>{});}if(state.route==='stats' && statsRenderedDay!==localDay(Date.now()))render();setTimeout(learningHeartbeat,1000);}
+function learningHeartbeat(){learning.tick();learning.persist();if(Date.now()-rankingHeartbeatAt>=30000){rankingHeartbeatAt=Date.now();checkAdministratorAccess();checkLearnerManagement();ranking.sync().then(()=>{if(state.route==='rankings')refreshRankings(false);}).catch(()=>{});}if(state.route==='stats' && statsRenderedDay!==localDay(Date.now()))render();setTimeout(learningHeartbeat,1000);}
 setTimeout(learningHeartbeat,1000);
 window.addEventListener('storage',event=>{if((event.key?.startsWith('wordnest-learning-v1:') || event.key==='wordnest-reset-learning' || event.key===null) && state.route==='stats')render();});
 window.addEventListener('storage',event=>{if(event.key==='wordnest-progress' && state.route==='home' && state.screen==='home')render();});
@@ -1462,3 +1596,9 @@ window.addEventListener('storage',event=>{
     if(!learningScreen() && !modal.open && ['home','stats'].includes(state.route))render();
   }
 });
+
+window.addEventListener('online',checkAdministratorAccess);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkAdministratorAccess();});
+
+window.addEventListener('online',checkLearnerManagement);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkLearnerManagement();});

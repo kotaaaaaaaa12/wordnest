@@ -24,7 +24,7 @@ function create({dark=false,prefs={}}={}) {
   return {w,system,listeners};
 }
 test('saved palettes apply before app startup, preserve both defaults, and reject invalid stored choices',()=>{
-  const cases=[['light','default','#f6f5f0'],['light','ocean','#eef5fa'],['light','lavender','#f5f2fa'],['dark','default','#171d1a'],['dark','midnight','#111a27'],['dark','graphite','#1b1b1e']];
+  const cases=[['light','default','#f6f5f0'],['light','ocean','#eef5fa'],['light','lavender','#f5f2fa'],['dark','default','#171d1a'],['dark','midnight','#111a27'],['dark','graphite','#1b1b1e'],['light','apricot','#fff4e8'],['light','sage','#f0f5ec'],['dark','ember','#211913'],['dark','plum','#211927']];
   for(const [mode,palette,background] of cases){
     const {w}=create({prefs:{'wordnest-theme':mode,[`wordnest-${mode}-palette`]:palette}});
     try{w.eval(boot);assert.equal(w.document.documentElement.dataset.theme,mode);assert.equal(w.document.documentElement.dataset.palette,palette);assert.equal(w.document.querySelector('meta[name="theme-color"]').content,background);assert.equal(w.getComputedStyle(w.document.documentElement).getPropertyValue('--paper'),background);}finally{w.close();}
@@ -39,7 +39,7 @@ test('settings save independent light/dark palettes, auto follows the system, an
   try{
     w.eval(boot);w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(source);await tick();await tick();
     assert.deepEqual([...w.document.querySelectorAll('.nav [data-nav]')].map(link=>link.dataset.nav),['home','stats','rankings','guide','history']);
-    await click('[data-action="settings"]');assert.equal(find('#light-palette').options.length,3);assert.equal(find('#dark-palette').options.length,3);
+    await click('[data-action="settings"]');assert.equal(find('#light-palette').options.length,5);assert.equal(find('#dark-palette').options.length,5);
     select('#light-palette','ocean');assert.equal(w.document.documentElement.dataset.palette,'ocean');select('#dark-palette','midnight');assert.equal(w.document.documentElement.dataset.palette,'ocean');
     system.matches=true;listeners.forEach(callback=>callback({matches:true}));assert.equal(w.document.documentElement.dataset.theme,'dark');assert.equal(w.document.documentElement.dataset.palette,'midnight');assert.equal(find('meta[name="theme-color"]').content,'#111a27');
     select('#dark-palette','graphite');assert.equal(w.document.documentElement.dataset.palette,'graphite');select('#theme-choice','light');assert.equal(w.document.documentElement.dataset.palette,'ocean');select('#light-palette','lavender');assert.equal(w.document.documentElement.dataset.palette,'lavender');
@@ -84,7 +84,7 @@ test('Graphite selections match the gold brand accent across navigation and prac
 });
 test('completion books, badges, and Guide legend have distinct semantic colors with readable contrast in every palette',async()=>{
   const semantic={none:'none','en-ja':'en','ja-en':'ja',both:'both'},seen={light:null,dark:null};
-  for(const [mode,palettes] of Object.entries({light:['default','ocean','lavender'],dark:['default','midnight','graphite']}))for(const palette of palettes){
+  for(const [mode,palettes] of Object.entries({light:['default','ocean','lavender','apricot','sage'],dark:['default','midnight','graphite','ember','plum']}))for(const palette of palettes){
     const sets=Object.keys(semantic).map(id=>({id,title:id,words:[{english:'apple',meaning:'りんご'}]}));
     const progress=Object.fromEntries(sets.map(set=>[set.id,{key:core.studyKey(set),scope:'all-first-pass','en-ja':['en-ja','both'].includes(set.id),'ja-en':['ja-en','both'].includes(set.id)}]));
     const {w}=create({prefs:{'wordnest-theme':mode,[`wordnest-${mode}-palette`]:palette,'wordnest-progress':JSON.stringify(progress)}});
@@ -108,7 +108,7 @@ test('completion books, badges, and Guide legend have distinct semantic colors w
   }
 });
 test('modal backgrounds stay neutral and the active palette persists through modal switches and closing',async()=>{
-  for(const [mode,palettes] of Object.entries({light:['default','ocean','lavender'],dark:['default','midnight','graphite']}))for(const palette of palettes){
+  for(const [mode,palettes] of Object.entries({light:['default','ocean','lavender','apricot','sage'],dark:['default','midnight','graphite','ember','plum']}))for(const palette of palettes){
     const {w}=create({prefs:{'wordnest-theme':mode,[`wordnest-${mode}-palette`]:palette}}),find=s=>w.document.querySelector(s);
     async function click(s){find(s).click();await tick();await tick();}
     try{
@@ -125,8 +125,8 @@ test('modal backgrounds stay neutral and the active palette persists through mod
     }finally{w.close();}
   }
 });
-test('flashcard backs have a subtle accent overlay with readable ink in all six palettes; only IPA candidates use solid accents',()=>{
-  for(const [mode,palettes] of Object.entries({light:['default','ocean','lavender'],dark:['default','midnight','graphite']}))for(const palette of palettes){
+test('flashcard backs have a subtle accent overlay with readable ink in all ten palettes; only IPA candidates use solid accents',()=>{
+  for(const [mode,palettes] of Object.entries({light:['default','ocean','lavender','apricot','sage'],dark:['default','midnight','graphite','ember','plum']}))for(const palette of palettes){
     const {w}=create({prefs:{'wordnest-theme':mode,[`wordnest-${mode}-palette`]:palette}});
     try{
       w.eval(boot);const root=w.document.documentElement,accent=resolveToken(w,root,'--accent'),surface=resolveToken(w,root,'--surface'),ink=resolveToken(w,root,'--ink');
@@ -137,4 +137,30 @@ test('flashcard backs have a subtle accent overlay with readable ink in all six 
     }
     finally{w.close();}
   }
+});
+
+test('new palettes keep readable text, selection, primary actions, and the brand',()=>{
+  for(const [mode,palettes] of Object.entries({light:['apricot','sage'],dark:['ember','plum']}))for(const palette of palettes){
+    const {w}=create({prefs:{'wordnest-theme':mode,[`wordnest-${mode}-palette`]:palette}});
+    try{
+      w.eval(boot);const root=w.document.documentElement,token=name=>resolveToken(w,root,name);
+      for(const [foreground,background] of [['--ink','--surface'],['--muted','--surface'],['--selection-text','--selection-bg'],['--brand-ink','--accent'],['--green','--sage'],['--red','--danger-bg']])assert.ok(contrast(token(foreground),token(background))>=4.5,`${mode}/${palette} ${foreground} on ${background}`);
+      assert.ok(contrast('#ffffff',token('--action-accent'))>=4.5,`${mode}/${palette} primary action text`);
+      assert.notEqual(token('--paper'),token('--surface'));
+    }finally{w.close();}
+  }
+});
+test('new theme choices persist through language changes and name the unchanged defaults in each mode',async()=>{
+  const {w}=create(),find=s=>w.document.querySelector(s);
+  const select=(s,value)=>{find(s).value=value;find(s).dispatchEvent(new w.Event('change',{bubbles:true}));};
+  try{
+    w.localStorage.setItem('wordnest-language','en');w.localStorage.setItem('wordnest-ranking-v1',JSON.stringify({choice:'declined'}));w.eval(boot);w.eval(source);await tick();await tick();find('[data-action="settings"]').click();await tick();
+    assert.equal(find('#light-palette').options[0].textContent,'Linen (Default)');assert.equal(find('#dark-palette').options[0].textContent,'Forest (Default)');
+    for(const [mode,palettes] of Object.entries({light:['apricot','sage'],dark:['ember','plum']})){
+      select('#theme-choice',mode);
+      for(const palette of palettes){select(`#${mode}-palette`,palette);assert.equal(w.document.documentElement.dataset.palette,palette);assert.equal(w.localStorage.getItem(`wordnest-${mode}-palette`),palette);assert.equal(find('meta[name="theme-color"]').content,resolveToken(w,w.document.documentElement,'--paper'));}
+    }
+    select('#settings-language','ja');assert.equal(find('#light-palette').options[0].textContent,'リネン（Default）');assert.equal(find('#dark-palette').options[0].textContent,'フォレスト（Default）');assert.equal(find('#light-palette').selectedOptions[0].textContent,'セージ');assert.equal(find('#dark-palette').selectedOptions[0].textContent,'プラム');
+    assert.ok(find('.settings-modal-header .modal-close'));select('#theme-choice','light');assert.equal(w.document.documentElement.dataset.palette,'sage');select('#theme-choice','dark');assert.equal(w.document.documentElement.dataset.palette,'plum');
+  }finally{w.close();}
 });

@@ -55,7 +55,7 @@ Keep the same binding/database for later deployments to preserve word sets. If a
 - Flashcards support both directions, taps, swipes, original/reverse/random order, saved positions, optional IPA, and device speech.
 - Difficult words, Favorites, and Word search are available in Practice. Two consecutive misses register a difficult question; three consecutive correct answers remove it.
 - Statistics includes eight measures, a seven-day chart, and a monthly calendar. Daily averages divide by study days. Accuracy rankings require at least 30 attempts.
-- Language: Auto / English / Japanese. Appearance: Auto / Light / Dark, with Default, Ocean, Lavender, Midnight, and Graphite palettes. Preferences are saved in each browser.
+- Language: Auto / English / Japanese. Appearance: Auto / Light / Dark, with five palettes per mode: Linen (Default), Ocean, Lavender, Apricot, and Sage in Light; Forest (Default), Midnight, Graphite, Ember, and Plum in Dark. Preferences are saved in each browser.
 
 ## Accounts and data
 
@@ -81,9 +81,33 @@ Three separate removal actions are available:
 | --- | --- |
 | Remove listing | Hides the public entry and sends your moderation message. Records remain; rejoining requires acknowledging the notice and changing the name. |
 | Delete login account | Permanently deletes the server account and its synced data. Each device keeps its cached name and records as an independent guest when it reconnects. |
-| Permanently delete learner | Deletes a guest or account and its records. Updated clients clear affected local data on reconnection, without automatically creating a replacement guest. |
+| Schedule learner deletion | Suspends learning, synchronization, and public ranking listing for seven days. A super administrator can cancel before the deadline. After the hold, the learner and records are permanently deleted; updated devices clear affected local data on reconnection. |
 
 Deletion requires confirming the selected login ID or guest code. Offline devices are affected on their next updated-app connection. Permanent deletion is not a device ban; a learner can explicitly start a fresh identity later.
+
+## Super administrator access
+
+Set an additional Worker runtime secret named `SUPER_ADMIN_PASSWORD` with at least 12 characters, different from `ADMIN_PASSWORD`. For CLI setup, run `npx wrangler secret put SUPER_ADMIN_PASSWORD`. The ordinary secret keeps working if no super secret is configured. Enter either password in the Administrator mode field in Settings; ordinary administrators can also use **Use super administrator mode** there to elevate with the separate password.
+
+Access is linked to the current guest identity or authenticated learner account. Accounts are not required. With `SUPER_ADMIN_PASSWORD` configured, new ordinary administrator identities must be approved by a super administrator after requesting access with the ordinary password. They enter the password again after approval; the pending cookie never gains access automatically. Existing approved identities and sessions survive this upgrade. Without a super secret, legacy password-only access remains enabled. Administration marks privileged learners; super administrators also see an access list with confirmed **Revoke administrator access** and **Restore administrator access** actions. Revocation invalidates existing sessions and blocks ordinary-password re-entry for that identity, including linked guest/account records. Restoration requires entering the password again. Active pages check for revocation about every 30 seconds and on return/reconnect; protected API calls always check the server immediately.
+
+Ordinary administrators cannot delete or reset another active administrator, and super administrators are protected from those administrative operations. Administrator privileges are not part of public ranking responses. Logging out revokes the current server session. Password rotation invalidates sessions issued with that role's previous password. Old stateless administrator cookies from earlier app versions require entering a password again after upgrading; study records are unchanged. Database tables are created automatically.
+
+This is identity-based access control, not a hardware ban. Clearing browser data or using another browser creates a fresh guest identity; a new identity can request access but still needs approval when the super secret is configured. Rotate a shared password if it must no longer be known to a former administrator. Older API clients without learner credentials receive a separate anonymous administrator identity, also visible in the super administrator's access list.
+
+## Notifications, sessions, and operation history
+
+Administration offers **Send notification** for each learner. Provide Japanese and/or English text; the available language is used as fallback. Notices appear on a later connected visit without replacing another dialog, and learners can acknowledge or defer them. Recent notifications show acknowledgement status. Notices are separate from ranking-removal messages and are rendered as plain text. Sending preserves the editor text.
+
+Registered learners open **Account → Signed-in devices** to review account sessions and sign out other sessions individually or together. Administrators can review a learner's account/administrator sessions and sign them all out, subject to role protections. Browser/device labels are approximate and each sign-in is a separate session. No raw session credentials or IP addresses are shown. Signing out retains cached learning records and does not revoke an approved administrator grant.
+
+Super administrators open **Operation history** in Administration for paginated records of access requests/approvals, permission changes, set changes, account management, notifications, session revocation, and deletion scheduling/cancellation/finalization. Passwords, session credentials, and notification contents are never copied into the audit log. Names are resolved from current profiles rather than retained as snapshots after learner deletion.
+
+## Seven-day learner deletion hold
+
+**Schedule learner deletion** requires the existing typed ID/code confirmation. The learner's server data and device caches remain during the hold; learning and synchronization are suspended, and public rankings exclude the learner without changing the saved participation choice. **Pending deletions** is available to super administrators for confirmed cancellation before the deadline. Cancellation restores access/listing and preserves records. Login-account deletion and a learner's own Settings data resets remain separate operations.
+
+The shipped hourly Cron Trigger finalizes due deletions, and API access also processes due entries. Finalization happens at or after the seven-day deadline; offline devices clear affected caches on their next updated-app connection. No manual SQL is needed. Keep the scheduled trigger enabled when deploying. Cancellation uses a per-request revision token and cannot reverse a completed deletion. Database guards reject in-flight registration/import/study writes for suspended identities. Old or offline clients cannot be forced to stop viewing previously cached content, but suspended writes are rejected by the server.
 
 ## Export and import
 

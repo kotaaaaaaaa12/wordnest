@@ -1,3 +1,5 @@
+import {managementSchema,managementGuards,finalizeRemovals,cleanupManagedSessions,publicManagementApi,adminManagementApi,learnerIdentity,learnerSuspension,requireActiveLearner,audit} from './management.js';
+import {administratorSchema,administratorSession as authenticated,administratorLogin,endAdministratorSession,administratorApi,protectAdministrator,relatedAdministrators} from './administration.js';
 import { rankingApi, rankingAdminApi, rankingSchema } from './rankings.js';
 import { accountApi, accountAdminApi, accountSchema, accountSession } from './accounts.js';
 import { validateSet } from '../public/core.js';
@@ -9,6 +11,8 @@ const reply = (data, status = 200, headers = {}) => new Response(JSON.stringify(
 async function initialize(db) {
   if (!initialized.has(db)) initialized.set(db, (async () => {
     await db.batch([
+      ...managementSchema.map(sql=>db.prepare(sql)),
+      ...administratorSchema.map(sql=>db.prepare(sql)),
       ...rankingSchema.map(sql=>db.prepare(sql)),
       ...accountSchema.map(sql=>db.prepare(sql)),
       db.prepare('CREATE TABLE IF NOT EXISTS sets (id TEXT PRIMARY KEY, title TEXT NOT NULL, words TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL, published INTEGER NOT NULL DEFAULT 1 CHECK(published IN (0,1)))'),
@@ -20,6 +24,12 @@ async function initialize(db) {
       db.prepare("UPDATE accounts SET recovery_hash='' WHERE recovery_hash<>'' AND NOT EXISTS(SELECT 1 FROM metadata WHERE key='retire-account-recovery-v3')"),
       db.prepare("INSERT OR IGNORE INTO metadata (key) VALUES ('retire-account-recovery-v3')")
     ]);
+    const adminColumns=await db.prepare('PRAGMA table_info(administrator_identities)').all();
+    if(!adminColumns.results.some(column=>column.name==='approved')){
+      try{await db.prepare('ALTER TABLE administrator_identities ADD COLUMN approved INTEGER NOT NULL DEFAULT 1').run();}
+      catch(error){const current=await db.prepare('PRAGMA table_info(administrator_identities)').all();if(!current.results.some(column=>column.name==='approved'))throw error;}
+    }
+    await db.batch(managementGuards.map(sql=>db.prepare(sql)));
     const columns=await db.prepare('PRAGMA table_info(sets)').all();
     if(!columns.results.some(column=>column.name==='published')){
       try{await db.prepare('ALTER TABLE sets ADD COLUMN published INTEGER NOT NULL DEFAULT 1 CHECK(published IN (0,1))').run();}
@@ -44,24 +54,7 @@ async function initialize(db) {
   await initialized.get(db);
 }
 async function digest(value) { return new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value))); }
-async function signingKey(password) { return crypto.subtle.importKey('raw', await digest(`wordnest-session:${password}`), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']); }
 function b64(bytes) { return btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', ''); }
-function unb64(value) { return Uint8Array.from(atob(value.replaceAll('-', '+').replaceAll('_', '/')), c => c.charCodeAt(0)); }
-async function session(password) {
-  const data = `${Math.floor(Date.now() / 1000) + SESSION_SECONDS}.${crypto.randomUUID()}`;
-  const signature = await crypto.subtle.sign('HMAC', await signingKey(password), encoder.encode(data));
-  return `${data}.${b64(new Uint8Array(signature))}`;
-}
-async function authenticated(request, env) {
-  if (!env.ADMIN_PASSWORD || env.ADMIN_PASSWORD.length < 12) return false;
-  const token = (request.headers.get('Cookie') || '').split(';').map(v => v.trim()).find(v => v.startsWith('wordnest_session='))?.slice(17);
-  if (!token) return false;
-  try {
-    const [expires, nonce, signature, extra] = token.split('.');
-    if (extra || !nonce || !signature || !/^\d+$/.test(expires) || Number(expires) <= Date.now() / 1000 || Number(expires) > Date.now() / 1000 + SESSION_SECONDS + 60) return false;
-    return crypto.subtle.verify('HMAC', await signingKey(env.ADMIN_PASSWORD), unb64(signature), encoder.encode(`${expires}.${nonce}`));
-  } catch { return false; }
-}
 function cookie(request, token = '', age = SESSION_SECONDS) {
   return `wordnest_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${age}${new URL(request.url).protocol === 'https:' ? '; Secure' : ''}`;
 }
@@ -82,15 +75,21 @@ async function body(request) {
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
   try { return JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new Error('invalidImport'); }
 }
-async function api(request, env) {
+async function api(request, env, context) {
   const url = new URL(request.url), path = url.pathname, method = request.method;
   if (!['GET', 'POST', 'PUT', 'DELETE'].includes(method)) return reply({ error: 'methodNotAllowed' }, 405);
   if (method !== 'GET' && ((request.headers.get('Origin') && request.headers.get('Origin') !== url.origin) || request.headers.get('Sec-Fetch-Site') === 'cross-site')) return reply({ error: 'forbidden' }, 403);
   if (!env.DB) return reply({ error: 'databaseMissing' }, 503);
   await initialize(env.DB);
-  const configured = Boolean(env.ADMIN_PASSWORD && env.ADMIN_PASSWORD.length >= 12);
+  await finalizeRemovals(env.DB);
+  const configured = Boolean(env.ADMIN_PASSWORD?.length >= 12 || env.SUPER_ADMIN_PASSWORD?.length >= 12);
+  const accountAccess=await accountSession(request,env.DB);
+  if(path.startsWith('/api/learner/') || path.startsWith('/api/account/sessions')){
+    const result=await publicManagementApi(request,env.DB,body,accountAccess?.id);if(result)return result;
+  }
+  if((path.startsWith('/api/account/') && method!=='GET' && path!=='/api/account/logout') || (path.startsWith('/api/ranking/') && method!=='GET'))await requireActiveLearner(env.DB,accountAccess?.id || await learnerIdentity(request,env.DB));
   if(path.startsWith('/api/account/'))return accountApi(request,env.DB,body);
-  if (path === '/api/session' && method === 'GET') return reply({ authenticated: await authenticated(request, env), configured });
+  if (path === '/api/session' && method === 'GET') {const access=await authenticated(request,env);return reply({authenticated:Boolean(access),role:access?.role || null,administratorId:access?.id || null,configured});}
   if (path === '/api/login' && method === 'POST') {
     if (!configured) return reply({ error: 'passwordSetup' }, 503);
     const data = await body(request);
@@ -100,14 +99,12 @@ async function api(request, env) {
     await env.DB.prepare('DELETE FROM login_limits WHERE expires < ?').bind(now).run();
     const limit = await env.DB.prepare('INSERT INTO login_limits (key,attempts,expires) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1 RETURNING attempts').bind(key, now + 900).first();
     if (limit.attempts > 10) return reply({ error: 'tooManyAttempts' }, 429, { 'Retry-After': '900' });
-    const supplied = typeof data.password === 'string' ? data.password : '';
-    const a = await digest(supplied), b = await digest(env.ADMIN_PASSWORD);
-    let difference = 0; for (let i = 0; i < a.length; i++) difference |= a[i] ^ b[i];
-    if (difference !== 0) return reply({ error: 'wrongPassword' }, 401);
+    const access=await administratorLogin(request,env,data);
     await env.DB.prepare('DELETE FROM login_limits WHERE key=?').bind(key).run();
-    return reply({ ok: true }, 200, { 'Set-Cookie': cookie(request, await session(env.ADMIN_PASSWORD)) });
+    context.actor={id:access.id,role:access.pending?'pending':access.role};context.action=access.pending?'administrator.request':'administrator.login';
+    return reply({ok:true,role:access.pending?null:access.role,pending:access.pending,administratorId:access.id},200,{'Set-Cookie':cookie(request,access.token)});
   }
-  if (path === '/api/logout' && method === 'POST') return reply({ ok: true }, 200, { 'Set-Cookie': cookie(request, '', 0) });
+  if(path==='/api/logout' && method==='POST'){context.actor=await authenticated(request,env);context.action='administrator.logout';await endAdministratorSession(request,env.DB);return reply({ok:true},200,{'Set-Cookie':cookie(request,'',0)});}
   if (path === '/api/sets' && method === 'GET') {
     const admin=await authenticated(request,env);
     const [rows, ordering] = await env.DB.batch([env.DB.prepare(admin?'SELECT * FROM sets ORDER BY updated_at DESC,id':'SELECT * FROM sets WHERE published=1 ORDER BY updated_at DESC,id'), env.DB.prepare('SELECT ids,revision FROM set_order WHERE id=1')]);
@@ -116,9 +113,27 @@ async function api(request, env) {
     return reply({ sets: rows.results.map(s => ({ id: s.id, title: s.title, words: JSON.parse(s.words), published: s.published===1, revision: s.revision, updatedAt: s.updated_at })), orderRevision: order.revision });
   }
   if(path==='/api/rankings' || path.startsWith('/api/ranking/'))return rankingApi(request,env.DB,body,(await accountSession(request,env.DB))?.id);
-  if (!await authenticated(request, env)) return reply({ error: 'unauthorized' }, 401);
+  const access=await authenticated(request,env);
+  if(!access)return reply({error:'unauthorized'},401);
+  context.actor=access;
+  const administration=await administratorApi(request,env,access,body);if(administration)return administration;
+  const protectedTarget=path.match(/^\/api\/admin\/(?:accounts|rankings)\/([a-f0-9]{64})(?:\/(?:password|remove|sessions))?$/);
+  if(protectedTarget && method!=='GET')await protectAdministrator(env.DB,access,protectedTarget[1]);
+  const management=await adminManagementApi(request,env.DB,access,body);if(management)return management;
+  if(path.startsWith('/api/admin/accounts/') && method==='DELETE')await requireActiveLearner(env.DB,path.split('/')[4]);
   if(path.startsWith('/api/admin/accounts/'))return accountAdminApi(request,env.DB,body);
-  if(path.startsWith('/api/admin/'))return rankingAdminApi(request,env.DB,body);
+  if(path.startsWith('/api/admin/')){
+    const response=await rankingAdminApi(request,env.DB,body);
+    if(method==='GET' && response.ok && (path==='/api/admin/rankings' || path.endsWith('/stats'))){
+      const data=await response.json(),identities=(await env.DB.prepare('SELECT i.profile_id,i.role,COALESCE(a.account_id,i.profile_id) AS canonical_id FROM administrator_identities i LEFT JOIN account_aliases a ON a.profile_id=i.profile_id WHERE i.revoked=0 AND i.approved=1 ORDER BY i.role DESC').all()).results;
+      const pending=(await env.DB.prepare('SELECT profile_id,delete_after FROM learner_removals').all()).results;
+      for(const person of data.participants || (data.participant?[data.participant]:[])){
+        const roles=identities.filter(row=>row.profile_id===person.id || row.canonical_id===person.id);
+        person.deleteAfter=pending.find(row=>row.profile_id===person.id)?.delete_after || null;
+        person.administratorRole=roles.some(row=>row.role==='super')?'super':roles.length?'admin':null;
+      }return reply(data);
+    }return response;
+  }
   if (path === '/api/sets/order' && method === 'PUT') {
     const data=await body(request);
     if(!Array.isArray(data.ids) || data.ids.length>200 || data.ids.some(id=>typeof id!=='string' || !/^[a-zA-Z0-9-]{1,80}$/.test(id)) || new Set(data.ids).size!==data.ids.length || !Number.isInteger(data.revision) || data.revision<0) return reply({error:'invalidSetOrder'},400);
@@ -161,13 +176,24 @@ async function api(request, env) {
   return reply({ error: 'notFound' }, 404);
 }
 export default {
+  async scheduled(event,env,ctx){const work=(async()=>{await initialize(env.DB);await finalizeRemovals(env.DB);await cleanupManagedSessions(env.DB);})();if(ctx?.waitUntil)ctx.waitUntil(work);else await work;},
   async fetch(request, env) {
     if (!new URL(request.url).pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
-    try { return await api(request, env); }
+    try {
+      const context={},response=await api(request,env,context);
+      if(context.actor && response.ok && request.method!=='GET'){
+        const path=new URL(request.url).pathname,target=path.match(/\/([a-f0-9]{64}|[a-f0-9-]{36})(?:\/|$)/)?.[1] || null;
+        const action=context.action || context.actor.auditAction || (path.includes('/administrators/')?'administrator.permission':path.includes('/notifications')?'notification.send':path.includes('/sessions')?'sessions.revoke':path.includes('/deletions/')?'learner.restore':path.includes('/password')?'account.password':path.includes('/accounts/')?'account.delete':path.includes('/remove')?'ranking.remove':path.includes('/rankings/')?'learner.schedule':path==='/api/sets/order'?'sets.order':request.method==='POST'?'sets.create':request.method==='PUT'?'sets.update':'sets.delete');
+        await audit(env.DB,context.actor,action,target);
+      }return response;
+    }
     catch (error) {
+      if(error.message?.includes('learnerSuspended'))return reply({error:'learnerSuspended',...(error.deleteAfter?{deleteAfter:error.deleteAfter}:{})},423);
+      if(error.message?.startsWith('management'))return reply({error:error.message,...(error.deleteAfter?{deleteAfter:error.deleteAfter}:{})},error.status || 400);
       if(error.message?.includes('learnerErased'))return reply({error:'learnerErased'},410);
       if(error.message?.includes('accountAlreadyLinked'))return reply({error:'accountAlreadyLinked'},409);
       if(error.message?.startsWith('account'))return reply({error:error.message},error.status || 400);
+      if(error.message?.startsWith('admin') || error.message==='wrongPassword')return reply({error:error.message},error.status || 400);
       const known = ['learnerConfirmIdentity', 'invalidTitle', 'invalidWords', 'invalidIpa', 'invalidIpaStyle', 'invalidVisibility', 'duplicateWord', 'invalidImport', 'jsonRequired', 'tooLarge'];
       if((error.status && error.message.startsWith('ranking')) || ['invalidRankingData','invalidRankingName','invalidRankingMessage'].includes(error.message))return reply({error:error.message},error.status || 400);
       if (known.includes(error.message)) return reply({ error: error.message }, error.status || 400);

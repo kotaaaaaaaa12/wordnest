@@ -57,7 +57,7 @@ test('administrator access lives at Settings bottom and controls Edit and its gu
     const sections=[...w.document.querySelectorAll('.guide-section')];assert.equal(sections.at(-1).getAttribute('aria-labelledby'),'guide-admin');assert.equal(sections.at(-2).getAttribute('aria-labelledby'),'guide-edit');
     assert.ok(sections.at(-2).textContent.includes('Import'));assert.equal(sections.at(-3).textContent.includes('Import'),false);
     find('#settings-language').value='ja';find('#settings-language').dispatchEvent(new w.Event('change',{bubbles:true}));
-    assert.equal(find('#admin-settings-title').textContent,'管理者モード');assert.equal(find('[data-admin-open]'),null);assert.equal(find('#admin-controls .settings-buttons').children.length,1);assert.ok(find('#guide-edit+ul').textContent.includes('管理者パスワード'));
+    assert.equal(find('#admin-settings-title').textContent,'管理者モード');assert.equal(find('[data-admin-open]'),null);assert.equal(find('#admin-controls .settings-buttons').children.length,2);assert.ok(find('#guide-edit+ul').textContent.includes('管理者パスワード'));
     await click('[data-dialog="cancel"]');await click('.nav [data-nav="edit"]');assert.equal(w.location.hash,'#/edit');assert.ok(find('.editor-toolbar'));assert.equal(find('[data-action="logout"]'),null);assert.equal(find('input[type="password"]'),null);assert.equal(find('#login-form'),null);
     await click('.nav [data-nav="guide"]');await click('[data-action="settings"]');await click('[data-admin-lock]');
     assert.equal(find('.nav [data-nav="edit"]'),null);assert.equal(find('#guide-edit'),null);assert.equal(find('#modal').open,false);

@@ -1,6 +1,55 @@
 // Release notes are listed newest first. Add each release in both UI languages.
 export const releaseHistory = [
   {
+    "version": "2.6.0",
+    "en": {
+      "title": "Administrator approvals and learner management",
+      "changes": [
+        "New administrator identities require super administrator approval when the super password is configured; existing grants are preserved. Super administrators can review operation history.",
+        "Administrators can send private notices with acknowledgement status and manage learner sessions. Account holders can review and sign out other account sessions.",
+        "Learner deletion now has a seven-day suspension period. Super administrators can cancel before the deadline; final deletion then clears server records and connected devices. Records remain during the hold."
+      ]
+    },
+    "ja": {
+      "title": "管理者の承認とユーザー管理",
+      "changes": [
+        "最高管理者パスワードの設定時は、新しい管理者の申請を最高管理者が承認します。既存の権限は維持し、最高管理者向けに操作履歴を追加しました。",
+        "個別通知の送信・確認状態の表示と、ログインセッションの管理を追加しました。アカウント利用者は自分の他のセッションをログアウトできます。",
+        "学習者の削除前に7日間の利用停止期間を設け、期限前は最高管理者が取り消せます。保留中は記録を保持し、完全削除後に接続した端末の該当記録も削除します。"
+      ]
+    }
+  },
+  {
+    "version": "2.5.0",
+    "en": {
+      "title": "Guest-compatible administrator roles",
+      "changes": [
+        "Administration identifies administrators and super administrators. A separate super administrator password enables revoking and restoring administrator access, including invalidating existing sessions. Accounts remain optional."
+      ]
+    },
+    "ja": {
+      "title": "ゲストでも利用できる管理者権限",
+      "changes": [
+        "管理画面で管理者・最高管理者を識別できます。別の最高管理者パスワードで、他の管理者の権限剥奪・復帰と既存セッションの無効化を行えます。アカウントへのログインは引き続き任意です。"
+      ]
+    }
+  },
+  {
+    "version": "2.4.0",
+    "en": {
+      "title": "Four new themes and named defaults",
+      "changes": [
+        "Added Apricot and Sage light themes, plus Ember and Plum dark themes. The existing defaults are now named Linen (Default) and Forest (Default), with their colors and saved preferences preserved."
+      ]
+    },
+    "ja": {
+      "title": "4種類のテーマと標準テーマの名前",
+      "changes": [
+        "ライトにアプリコット・セージ、ダークにエンバー・プラムを追加しました。標準テーマはリネン（Default）・フォレスト（Default）と名付け、従来の色と保存済みの設定を維持します。"
+      ]
+    }
+  },
+  {
     "version": "2.3.1",
     "en": {
       "title": "Sticky Settings close button and calmer category selection",

@@ -50,17 +50,17 @@ async function leaderboard(db,url){
   const self=url.searchParams.get('self') || '';if(self && !/^[a-f0-9]{64}$/.test(self))throw fail('invalidRankingData');
   let rows,mine,total;
   if(metric==='streak'){
-    const result=await db.prepare('SELECT id,name,streak,last_study_day,timezone FROM ranking_profiles WHERE enabled=1 AND streak>0').all();
+    const result=await db.prepare('SELECT id,name,streak,last_study_day,timezone FROM ranking_profiles WHERE enabled=1 AND NOT EXISTS(SELECT 1 FROM learner_removals d WHERE d.profile_id=ranking_profiles.id) AND streak>0').all();
     const values=result.results.filter(row=>{const today=dateInZone(row.timezone);return row.last_study_day && (Date.parse(today)-Date.parse(row.last_study_day))/86400000<=1;}).sort((a,b)=>b.streak-a.streak || a.id.localeCompare(b.id));
     let last,rank=0;const ranked=values.map((row,index)=>{if(row.streak!==last)rank=index+1;last=row.streak;return {id:row.id,name:row.name,value:row.streak,rank};});
     rows=ranked.slice(0,100);mine=ranked.find(row=>row.id===self) || null;total=ranked.length;
   }else{
     const eligible=metric==='accuracy'?'answered>=30':`${column}>0`;
-    const query=`WITH ranked AS (SELECT id,name,${column} AS value,RANK() OVER (ORDER BY ${column} DESC) AS rank FROM ranking_profiles WHERE enabled=1 AND ${eligible}) `;
+    const query=`WITH ranked AS (SELECT id,name,${column} AS value,RANK() OVER (ORDER BY ${column} DESC) AS rank FROM ranking_profiles WHERE enabled=1 AND NOT EXISTS(SELECT 1 FROM learner_removals d WHERE d.profile_id=ranking_profiles.id) AND ${eligible}) `;
     const results=await db.batch([
       db.prepare(query+'SELECT * FROM ranked ORDER BY value DESC,id LIMIT 100'),
       db.prepare(query+'SELECT * FROM ranked WHERE id=?').bind(self),
-      db.prepare(`SELECT COUNT(*) AS total FROM ranking_profiles WHERE enabled=1 AND ${eligible}`)
+      db.prepare(`SELECT COUNT(*) AS total FROM ranking_profiles WHERE enabled=1 AND NOT EXISTS(SELECT 1 FROM learner_removals d WHERE d.profile_id=ranking_profiles.id) AND ${eligible}`)
     ]);
     rows=results[0].results;mine=results[1].results[0] || null;total=results[2].results[0].total;
   }

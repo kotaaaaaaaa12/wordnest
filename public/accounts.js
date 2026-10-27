@@ -1,4 +1,4 @@
-import { categories, studyCategory, epochKey, validateStudyEntry, importStudy, applyStudyOperation, eraseGuestData } from './account-study.js?v=2.3.1-63bdb72444e14e9a';
+import { categories, studyCategory, epochKey, validateStudyEntry, importStudy, applyStudyOperation, eraseGuestData } from './account-study.js?v=2.6.0-f986a3a587463845';
 const CURRENT='wordnest-account-v1';
 const uid=()=>globalThis.crypto.randomUUID();
 const timezone=()=>Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -124,7 +124,7 @@ export class AccountClient {
   try{
    const response=await this.fetch('/api/account/'+path,{method:data===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',signal:controller.signal,keepalive,headers:{...(this.user?{'X-Wordnest-Account':this.user.id}:{}),...(data===undefined?{}:{'Content-Type':'application/json'})},...(data===undefined?{}:{body:JSON.stringify(data)})});
    const result=await response.json();if(!response.ok)throw Object.assign(new Error(result.error || 'serverError'),{erasedOperations:result.erasedOperations});return result;
-  }catch(error){if(error.message?.startsWith('account') || ['learnerErased','tooLarge','jsonRequired','invalidImport'].includes(error.message) || error.message==='invalidRankingName' || error.message==='serverError')throw error;throw new Error('networkError');}
+  }catch(error){if(error.message?.startsWith('account') || ['learnerSuspended','learnerErased','tooLarge','jsonRequired','invalidImport'].includes(error.message) || error.message==='invalidRankingName' || error.message==='serverError')throw error;throw new Error('networkError');}
   finally{clearTimeout(timeout);}
  }
  setUser(user){

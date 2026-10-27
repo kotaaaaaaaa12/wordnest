@@ -1,3 +1,4 @@
+import {rememberSession,hashIdentity,requireActiveLearner,learnerSuspension} from './management.js';
 import { scryptAsync } from '@noble/hashes/scrypt.js';
 import { rankingName } from '../public/rankings.js';
 import { emptyStudy, importStudy, applyStudyOperation, accountStudySummary } from '../public/account-study.js';
@@ -32,7 +33,7 @@ function cookie(request,token='',age=SESSION_SECONDS){return `wordnest_account=$
 function sessionToken(request){return (request.headers.get('Cookie') || '').split(';').map(value=>value.trim()).find(value=>value.startsWith('wordnest_account='))?.slice(17);}
 export async function accountSession(request,db){
  const token=sessionToken(request);if(!token || !/^[a-f0-9]{64}$/.test(token))return null;
- return db.prepare('SELECT a.id,a.login_id FROM account_sessions s JOIN accounts a ON a.id=s.account_id WHERE s.hash=? AND s.expires>? AND s.credential_hash=a.password_hash').bind(await tokenHash(token),Math.floor(Date.now()/1000)).first();
+ const row=await db.prepare('SELECT a.id,a.login_id FROM account_sessions s JOIN accounts a ON a.id=s.account_id WHERE s.hash=? AND s.expires>? AND s.credential_hash=a.password_hash').bind(await tokenHash(token),Math.floor(Date.now()/1000)).first();if(row)await rememberSession(db,request,'account',await tokenHash(token),row.id);return row;
 }
 async function deletedAccount(db,id){
  if(typeof id!=='string' || !/^[a-f0-9]{64}$/.test(id))return false;
@@ -43,6 +44,7 @@ async function issueSession(request,db,id,expectedHash){
  const token=random(),now=Math.floor(Date.now()/1000);
  const result=await db.batch([db.prepare('DELETE FROM account_sessions WHERE expires<=?').bind(now),db.prepare('INSERT INTO account_sessions (hash,account_id,expires,credential_hash) SELECT ?,id,?,password_hash FROM accounts WHERE id=? AND password_hash=?').bind(await tokenHash(token),now+SESSION_SECONDS,id,expectedHash)]);
  if(!result[1].meta.changes)throw fail('accountWrongCredentials',401);
+ await rememberSession(db,request,'account',await tokenHash(token),id);
  return cookie(request,token);
 }
 async function rateLimit(request,db,purpose,id=''){
@@ -76,6 +78,7 @@ export async function accountApi(request,db,readBody){
   if(typeof data.enabled!=='boolean')throw fail('accountInvalidData');
   let study;try{study=data.entries?importStudy(data.entries):emptyStudy();}catch{throw fail('accountInvalidData');}
   const legacy=typeof data.legacyToken==='string' && /^[a-f0-9]{64}$/.test(data.legacyToken)?await tokenHash(data.legacyToken):null;
+  await requireActiveLearner(db,legacy);
   if(legacy && await erasedLearner(db,legacy))return json({error:'accountGuestErased'},410);
   if(legacy && await db.prepare('SELECT account_id FROM account_aliases WHERE profile_id=?').bind(legacy).first())throw fail('accountAlreadyLinked',409);
   if(encoder.encode(JSON.stringify(study)).length>1800000)throw fail('accountDataTooLarge',413);
@@ -98,6 +101,7 @@ export async function accountApi(request,db,readBody){
   const supplied=typeof data.password==='string' && data.password.length<=256?data.password:'';
   const hash=await passwordHash(supplied,row?.password_salt || 'wordnest-nonexistent-account');
   if(!row || !equal(hash,row.password_hash))throw fail('accountWrongCredentials',401);
+  await requireActiveLearner(db,row.id);
   return json({user:user(row)},200,{'Set-Cookie':await issueSession(request,db,row.id,hash)});
  }
  const session=await accountSession(request,db);
@@ -133,6 +137,7 @@ export async function accountApi(request,db,readBody){
   for(const op of data.operations)if(op.type==='import' && typeof op.legacyToken==='string' && await erasedLearner(db,await tokenHash(op.legacyToken)))erasedOperations.push(op.id);
   if(erasedOperations.length)return json({error:'accountGuestErased',erasedOperations},410);
   for(const id of legacyIds){
+   await requireActiveLearner(db,id);
    const owner=await db.prepare('SELECT id AS account_id FROM accounts WHERE id=? UNION ALL SELECT account_id FROM account_aliases WHERE profile_id=?').bind(id,id).first();
    if(owner && owner.account_id!==session.id)throw fail('accountAlreadyLinked',409);
   }
@@ -185,6 +190,7 @@ export async function accountAdminApi(request,db,readBody){
   db.prepare('INSERT OR IGNORE INTO account_aliases (profile_id,account_id) SELECT id,id FROM accounts WHERE id=? AND password_hash=?').bind(row.id,row.password_hash),
   db.prepare('DELETE FROM accounts WHERE id=? AND password_hash=? RETURNING id').bind(row.id,row.password_hash),
   ...['account_sessions','account_ops'].map(table=>db.prepare(`DELETE FROM ${table} WHERE account_id=? AND NOT EXISTS(SELECT 1 FROM accounts WHERE id=?)`).bind(row.id,row.id)),
+  db.prepare('DELETE FROM managed_sessions WHERE owner_id IN (SELECT profile_id FROM account_aliases WHERE account_id=?) AND NOT EXISTS(SELECT 1 FROM accounts WHERE id=?)').bind(row.id,row.id),
   db.prepare('DELETE FROM ranking_moderation WHERE profile_id IN (SELECT profile_id FROM account_aliases WHERE account_id=?) AND NOT EXISTS(SELECT 1 FROM accounts WHERE id=?)').bind(row.id,row.id),
   db.prepare('DELETE FROM ranking_profiles WHERE id IN (SELECT profile_id FROM account_aliases WHERE account_id=?) AND NOT EXISTS(SELECT 1 FROM accounts WHERE id=?)').bind(row.id,row.id)
  ]);
