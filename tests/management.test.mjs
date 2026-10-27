@@ -16,6 +16,13 @@ test('new administrator identities require approval; pending cookies and fresh g
   assert.equal((await req(mf,'/api/admin/audit','GET',undefined,pending.cookie)).status,401);
   const current=await approved(mf,root,g);assert.equal(current.data.pending,false);assert.equal((await req(mf,'/api/session','GET',undefined,pending.cookie)).data.authenticated,false,'approval requires a new administrator sign-in');assert.equal((await req(mf,'/api/session','GET',undefined,current.cookie)).data.authenticated,true);assert.equal((await req(mf,'/api/admin/audit','GET',undefined,current.cookie)).status,403);
   const different=await guest(mf,'c','New identity');assert.equal((await req(mf,'/api/login','POST',{password:normal,guestToken:different.token})).data.pending,true);
+  const grant=(await req(mf,'/api/admin/administrators','GET',undefined,root.cookie)).data.administrators.find(row=>row.id===g.id);
+  assert.equal((await req(mf,'/api/admin/administrators/'+g.id,'POST',{revoked:true,revision:grant.revision},root.cookie)).status,200);
+  const notice=(await req(mf,'/api/learner/notifications','GET',undefined,undefined,g.token)).data.notifications.find(note=>note.kind==='admin-revoked');assert.ok(notice);assert.match(notice.messageEn,/revoked/);assert.match(notice.messageJa,/剥奪/);
+  assert.ok((await req(mf,'/api/learner/notifications','GET',undefined,undefined,g.token)).data.notifications.some(note=>note.id===notice.id),'reconnecting without acknowledgement retains the notice');
+  assert.equal((await req(mf,'/api/admin/administrators/'+g.id,'POST',{revoked:true,revision:grant.revision},root.cookie)).status,409);
+  assert.equal((await req(mf,'/api/learner/notifications','GET',undefined,undefined,g.token)).data.notifications.filter(note=>note.kind==='admin-revoked').length,1,'stale revocations cannot enqueue duplicates');
+  await req(mf,'/api/learner/notifications/'+notice.id+'/ack','POST',{},undefined,g.token);assert.equal((await req(mf,'/api/learner/notifications','GET',undefined,undefined,g.token)).data.notifications.some(note=>note.id===notice.id),false);
   const log=(await req(mf,'/api/admin/audit','GET',undefined,root.cookie)).data.entries;assert.ok(log.some(e=>e.action==='administrator.request'));assert.ok(log.some(e=>e.action==='administrator.approve'));assert.ok(!JSON.stringify(log).includes(normal));assert.ok(!JSON.stringify(log).includes(g.token));
  }finally{await mf.dispose();}
 });

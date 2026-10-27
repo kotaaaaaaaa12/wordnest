@@ -1,13 +1,13 @@
-const APP_VERSION = '2.6.0';
-import { releaseHistory } from './changelog.js?v=2.6.0-f986a3a587463845';
-import { AccountClient } from './accounts.js?v=2.6.0-f986a3a587463845';
-import { RankingClient, rankingMetrics } from './rankings.js?v=2.6.0-f986a3a587463845';
-import { FlashcardBookmarks, PersonalWords, wordIdentity, catalogWord, findCatalogWord, sourceQuestions, collectionQuestions, canMultipleChoice, quizFromPool, collectionCards } from './personal.js?v=2.6.0-f986a3a587463845';
-import { LearningTracker, localDay, studyCalendar, recentStudyDays } from './stats.js?v=2.6.0-f986a3a587463845';
-import { icon } from './icons.js?v=2.6.0-f986a3a587463845';
-import { normalizeIpa, normalizeIpaData, ipaRuns, ipaRawRuns, limitIpaText, remapIpaItalic, normalize, studyKey, studyStatus, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, balanceAnswerPositions, isCorrect, portable, parseImport } from './core.js?v=2.6.0-f986a3a587463845';
-import { messages, translator } from './i18n.js?v=2.6.0-f986a3a587463845';
-import { zipSync, unzipSync, strToU8, strFromU8 } from './vendor/fflate.js?v=2.6.0-f986a3a587463845';
+const APP_VERSION = '2.6.2';
+import { releaseHistory } from './changelog.js?v=2.6.2-b17d83728acbc4d2';
+import { AccountClient } from './accounts.js?v=2.6.2-b17d83728acbc4d2';
+import { RankingClient, rankingMetrics } from './rankings.js?v=2.6.2-b17d83728acbc4d2';
+import { FlashcardBookmarks, PersonalWords, wordIdentity, catalogWord, findCatalogWord, sourceQuestions, collectionQuestions, canMultipleChoice, quizFromPool, collectionCards } from './personal.js?v=2.6.2-b17d83728acbc4d2';
+import { LearningTracker, localDay, studyCalendar, recentStudyDays } from './stats.js?v=2.6.2-b17d83728acbc4d2';
+import { icon } from './icons.js?v=2.6.2-b17d83728acbc4d2';
+import { normalizeIpa, normalizeIpaData, ipaRuns, ipaRawRuns, limitIpaText, remapIpaItalic, normalize, studyKey, studyStatus, validateSet, questionPool, uniqueMeanings, createQuiz, createFlashcards, shuffle, balanceAnswerPositions, isCorrect, portable, parseImport } from './core.js?v=2.6.2-b17d83728acbc4d2';
+import { messages, translator } from './i18n.js?v=2.6.2-b17d83728acbc4d2';
+import { zipSync, unzipSync, strToU8, strFromU8 } from './vendor/fflate.js?v=2.6.2-b17d83728acbc4d2';
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const e = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -188,9 +188,9 @@ function render() {
   if (focusId) { const el=document.getElementById(focusId); if(el && document.activeElement!==el){el.focus({preventScroll:true});if(selection){if(el.matches('[data-field="ipa"]'))selectIpa(el,...selection);else el.setSelectionRange?.(...selection);}} }
 }
 function historyView() {
-  return `<section class="history-view"><div class="history-heading"><h1>${t('history')}</h1><span class="history-version" dir="ltr">wordnest v${e(APP_VERSION)}</span></div><p class="history-note">${t('historyIntro')}</p><div class="history-list">${releaseHistory.map(release=>{
+  return `<section class="history-view"><div class="history-heading"><h1>${t('history')}</h1><span class="history-version" dir="ltr">wordnest v${e(APP_VERSION)}</span></div><p class="history-note">${t('historyIntro')}</p><p class="history-note history-reconstruction-note">${t('historyReconstructionNote')}</p><div class="history-list">${releaseHistory.map(release=>{
     const note=release[lang] || release.en,current=release.version===APP_VERSION;
-    return `<details class="history-entry" ${current?'open':''}><summary><span class="history-entry-version" dir="ltr">v${e(release.version)}</span><span class="history-entry-title">${e(note.title)}</span>${current?`<span class="history-current">${t('historyCurrent')}</span>`:''}<span class="history-chevron">${icon('down')}</span></summary><ul>${note.changes.map(change=>`<li>${e(change)}</li>`).join('')}</ul></details>`;
+    return `<details class="history-entry" ${current?'open':''}><summary><span class="history-entry-version" dir="ltr">v${e(release.version)}</span><span class="history-entry-title">${e(note.title)}</span>${current?`<span class="history-current">${t('historyCurrent')}</span>`:''}<span class="history-chevron">${icon('down')}</span></summary>${release.reconstructed?`<p class="history-entry-reconstructed">${t('historyReconstructed')}</p>`:''}<ul>${note.changes.map(change=>`<li>${e(change)}</li>`).join('')}</ul></details>`;
   }).join('')}</div></section>`;
 }
 function learningScreen() { return !state.learnerSuspension && state.route==='home' && ['quiz','cards'].includes(state.screen); }
@@ -325,7 +325,7 @@ function queueLearnerMessage(note){
   if(showingLearnerMessage)return;
   if(modal.open){clearTimeout(learnerMessageTimer);learnerMessageTimer=setTimeout(()=>queueLearnerMessage(note),500);return;}
   showingLearnerMessage=true;
-  dialog(`<button class="icon-btn modal-close" data-learner-note-later aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t('notificationTitle')}</h2><p class="management-message" lang="${note[lang==='ja'?'messageJa':'messageEn']?lang:note.messageJa?'ja':'en'}">${e((lang==='ja'?note.messageJa:note.messageEn) || note.messageJa || note.messageEn)}</p><p class="error" id="learner-note-error" hidden></p><div class="modal-actions"><button class="btn ghost" data-learner-note-later>${t('noticeLater')}</button><button class="btn primary" data-learner-note-ack>${t('noticeConfirm')}</button></div>`,finish=>{
+  dialog(`<button class="icon-btn modal-close" data-learner-note-later aria-label="${t('close')}">${icon('close')}</button><h2 id="modal-title" tabindex="-1">${t(note.kind==='admin-revoked'?'adminRevokedTitle':'notificationTitle')}</h2><p class="management-message" lang="${note[lang==='ja'?'messageJa':'messageEn']?lang:note.messageJa?'ja':'en'}">${e((lang==='ja'?note.messageJa:note.messageEn) || note.messageJa || note.messageEn)}</p><p class="error" id="learner-note-error" hidden></p><div class="modal-actions"><button class="btn ghost" data-learner-note-later>${t('noticeLater')}</button><button class="btn primary" data-learner-note-ack>${t('noticeConfirm')}</button></div>`,finish=>{
     let busy=false;
     const later=()=>{deferredLearnerMessages.add(note.id);finish(false);};
     modal.oncancel=event=>{event.preventDefault();if(!busy)later();};

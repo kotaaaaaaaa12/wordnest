@@ -1,4 +1,4 @@
-import { categories, studyCategory, epochKey, validateStudyEntry, importStudy, applyStudyOperation, eraseGuestData } from './account-study.js?v=2.6.0-f986a3a587463845';
+import { categories, studyCategory, epochKey, validateStudyEntry, importStudy, applyStudyOperation, eraseGuestData } from './account-study.js?v=2.6.2-b17d83728acbc4d2';
 const CURRENT='wordnest-account-v1';
 const uid=()=>globalThis.crypto.randomUUID();
 const timezone=()=>Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';

@@ -24,6 +24,11 @@ async function initialize(db) {
       db.prepare("UPDATE accounts SET recovery_hash='' WHERE recovery_hash<>'' AND NOT EXISTS(SELECT 1 FROM metadata WHERE key='retire-account-recovery-v3')"),
       db.prepare("INSERT OR IGNORE INTO metadata (key) VALUES ('retire-account-recovery-v3')")
     ]);
+    const messageColumns=await db.prepare('PRAGMA table_info(learner_messages)').all();
+    if(!messageColumns.results.some(column=>column.name==='kind')){
+      try{await db.prepare("ALTER TABLE learner_messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'message'").run();}
+      catch(error){const current=await db.prepare('PRAGMA table_info(learner_messages)').all();if(!current.results.some(column=>column.name==='kind'))throw error;}
+    }
     const adminColumns=await db.prepare('PRAGMA table_info(administrator_identities)').all();
     if(!adminColumns.results.some(column=>column.name==='approved')){
       try{await db.prepare('ALTER TABLE administrator_identities ADD COLUMN approved INTEGER NOT NULL DEFAULT 1').run();}

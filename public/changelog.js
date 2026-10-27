@@ -1,5 +1,35 @@
-// Release notes are listed newest first. Add each release in both UI languages.
+// Release notes are listed newest first. Reconstructed entries use editorial version numbers, not verified release tags.
 export const releaseHistory = [
+  {
+    "version": "2.6.2",
+    "en": {
+      "title": "Earlier development history",
+      "changes": [
+        "Expanded the changelog back to the initial vocabulary quizzes, using earlier documentation and conversation records. Entries before v1.9 use reconstructed version numbers and are identified as such; release dates are not invented."
+      ]
+    },
+    "ja": {
+      "title": "初期の更新履歴を追加",
+      "changes": [
+        "古い資料と会話の記録をもとに、英単語クイズの初版まで更新履歴を追加しました。v1.9より前は履歴整理用の仮番号として注記し、確認できない公開日は記載していません。"
+      ]
+    }
+  },
+  {
+    "version": "2.6.1",
+    "en": {
+      "title": "Administrator revocation notices",
+      "changes": [
+        "Revoking administrator access sends a private notice with a dedicated dialog title. It appears on a connected visit, including after reconnecting, and stays pending until acknowledged. Learning records are preserved."
+      ]
+    },
+    "ja": {
+      "title": "管理者権限の剥奪通知",
+      "changes": [
+        "管理者権限を剥奪すると、対象者に専用の通知モーダルを表示します。再接続時も通知を取得し、確認するまでサーバーに保持します。学習記録は変更しません。"
+      ]
+    }
+  },
   {
     "version": "2.6.0",
     "en": {
@@ -691,6 +721,296 @@ export const releaseHistory = [
       "title": "全8項目のランキング",
       "changes": [
         "学習記録の8項目を比較するランキングを追加しました。参加は任意で、正答率は30問以上取り組んだ場合に掲載します。"
+      ]
+    }
+  },
+  {
+    "version": "1.8.0",
+    "reconstructed": true,
+    "en": {
+      "title": "Theme-consistent modals and completion colors",
+      "changes": [
+        "Fixed dark-theme selection colors, including Graphite's gold accent, and kept the active palette behind dialogs. Completion books and badges use distinct semantic colors across themes."
+      ]
+    },
+    "ja": {
+      "title": "ダークテーマとクリア状態の色",
+      "changes": [
+        "グラファイトの金色アクセントなど、ダークテーマの選択色を修正しました。モーダル表示時も選択したテーマを維持し、本やクリア状態の色をテーマにかかわらず識別しやすくしました。"
+      ]
+    }
+  },
+  {
+    "version": "1.7.1",
+    "reconstructed": true,
+    "en": {
+      "title": "Selective learning-data resets",
+      "changes": [
+        "Added confirmed deletion of clear status, difficult words, favorites, statistics, or all learning data from Settings, with English and Japanese labels."
+      ]
+    },
+    "ja": {
+      "title": "学習データを選んで削除",
+      "changes": [
+        "設定からクリア状況・苦手単語・お気に入り・学習記録・全学習データを選んで削除できるようにしました。確認モーダルと日本語・英語の案内を用意しました。"
+      ]
+    }
+  },
+  {
+    "version": "1.7.0",
+    "reconstructed": true,
+    "en": {
+      "title": "Administrator access in Settings",
+      "changes": [
+        "Moved administrator password entry to Settings. Edit and its Guide instructions became visible only after authentication, keeping editing controls out of the ordinary learner experience."
+      ]
+    },
+    "ja": {
+      "title": "設定からの管理者認証",
+      "changes": [
+        "管理者パスワードの入力を設定に移しました。認証後に編集タブと編集用の説明を表示し、通常の学習画面から編集操作を隠すようにしました。"
+      ]
+    }
+  },
+  {
+    "version": "1.6.1",
+    "reconstructed": true,
+    "en": {
+      "title": "More palettes and filled favorite stars",
+      "changes": [
+        "Added extra light and dark palettes, filled favorite stars in yellow, and ordered the main tabs as Practice, Statistics, Guide, and Edit before Rankings was introduced."
+      ]
+    },
+    "ja": {
+      "title": "テーマの追加とお気に入りの星",
+      "changes": [
+        "ライト・ダークの追加テーマを用意し、お気に入りの星を黄色で塗りつぶす表示にしました。ランキング追加前のタブ順を学習・学習記録・説明・編集に整えました。"
+      ]
+    }
+  },
+  {
+    "version": "1.6.0",
+    "reconstructed": true,
+    "en": {
+      "title": "Difficult words, favorites, and search",
+      "changes": [
+        "Added study collections by set or across sets. Two consecutive misses, skips, or timeouts register a difficult question; three consecutive correct answers in any quiz remove it. Added favorite words and cross-set search, with localized page titles."
+      ]
+    },
+    "ja": {
+      "title": "苦手単語・お気に入り・単語検索",
+      "changes": [
+        "セット別・セット横断で学習できる機能を追加しました。同じ問題の不正解・スキップ・時間切れが2回続くと苦手に登録し、通常セットも含めて3回連続正解すると解除します。お気に入り・横断検索と、言語やタブに合わせたページタイトルにも対応しました。"
+      ]
+    }
+  },
+  {
+    "version": "1.5.0",
+    "reconstructed": true,
+    "en": {
+      "title": "Learning statistics and editor tools",
+      "changes": [
+        "Added total and average study time, attempted and correct questions, accuracy, card flips, and current/longest streaks. Averages use study days only. Set creation and transfers moved into authenticated Edit."
+      ]
+    },
+    "ja": {
+      "title": "学習記録と編集機能の整理",
+      "changes": [
+        "総学習時間・学習日のみで割る1日平均・問題数・正解数・正答率・カードをめくった回数・連続日数・最長連続日数を追加しました。作成・インポート・エクスポートは認証後の編集画面にまとめました。"
+      ]
+    }
+  },
+  {
+    "version": "1.4.1",
+    "reconstructed": true,
+    "en": {
+      "title": "Perfect first-pass clears",
+      "changes": [
+        "Further restricted clears to a perfect original All round without retries. Updated Guide explanations to match that rule."
+      ]
+    },
+    "ja": {
+      "title": "リトライなしの一発クリア",
+      "changes": [
+        "「すべて」の最初のラウンドで、一度も間違えず全問正解した場合だけをクリアとするようにしました。リトライは対象外とし、説明も更新しました。"
+      ]
+    }
+  },
+  {
+    "version": "1.4.0",
+    "reconstructed": true,
+    "en": {
+      "title": "Full-set clear requirements",
+      "changes": [
+        "Restricted set clears to rounds started with All. Short or custom rounds no longer granted the same clear status as a complete set."
+      ]
+    },
+    "ja": {
+      "title": "全問出題時だけのクリア判定",
+      "changes": [
+        "クリア記録の対象を「すべて」を選んで開始したクイズに限定しました。少数の問題やカスタム出題では、セット全体を解いた場合と同じクリア扱いにしません。"
+      ]
+    }
+  },
+  {
+    "version": "1.3.2",
+    "reconstructed": true,
+    "en": {
+      "title": "Bilingual Guide and wording",
+      "changes": [
+        "Added a Guide tab between Practice and Edit at that stage. Instructions followed the interface language, and Japanese editor copy was changed to a neutral, lightly polite style."
+      ]
+    },
+    "ja": {
+      "title": "説明タブと日本語表記",
+      "changes": [
+        "当時の学習・編集タブの間に説明タブを追加し、画面の言語に合わせて使い方を表示しました。編集画面の日本語も通常の軽い敬語に整えました。"
+      ]
+    }
+  },
+  {
+    "version": "1.3.1",
+    "reconstructed": true,
+    "en": {
+      "title": "Direction-specific clear indicators",
+      "changes": [
+        "Unified the initial book icon color, then distinguished EN → JP, JP → EN, and both-direction clears through color and status indicators."
+      ]
+    },
+    "ja": {
+      "title": "出題方向ごとのクリア表示",
+      "changes": [
+        "本のアイコンの初期色を統一し、EN → JP・JP → EN・両方のクリア状態を色と状態表示で区別するようにしました。"
+      ]
+    }
+  },
+  {
+    "version": "1.3.0",
+    "reconstructed": true,
+    "en": {
+      "title": "Simpler study screens",
+      "changes": [
+        "Removed promotional headings and introductory slogans. The word-set list starts near the top of the page, and flashcards expand to keep long meanings readable."
+      ]
+    },
+    "ja": {
+      "title": "シンプルな学習画面",
+      "changes": [
+        "宣伝用の見出しや長い導入文を削除し、単語セットを画面の上寄りに表示しました。単語カードの長い意味も見切れないように表示領域を調整しました。"
+      ]
+    }
+  },
+  {
+    "version": "1.2.1",
+    "reconstructed": true,
+    "en": {
+      "title": "Retry only missed questions",
+      "changes": [
+        "Added a results action to retry missed questions rather than restarting the whole set. Later releases refined timing and the clear-status rules."
+      ]
+    },
+    "ja": {
+      "title": "間違えた問題のリトライ",
+      "changes": [
+        "クイズ終了後に、間違えた問題だけをやり直せるようにしました。制限時間やクリア条件は、その後の更新でも調整しています。"
+      ]
+    }
+  },
+  {
+    "version": "1.2.0",
+    "reconstructed": true,
+    "en": {
+      "title": "Icons and timed quizzes",
+      "changes": [
+        "Refreshed SVG icons and reduced lingering selection highlights. Quizzes gained a 15-second question limit with a shrinking, color-changing bar and a seconds display."
+      ]
+    },
+    "ja": {
+      "title": "アイコンとクイズの時間制限",
+      "changes": [
+        "SVGアイコンと選択後に残るハイライトを調整しました。クイズに1問15秒の制限を設け、色が変わりながら減るバーと残り秒数を表示します。"
+      ]
+    }
+  },
+  {
+    "version": "1.1.1",
+    "reconstructed": true,
+    "en": {
+      "title": "Delete and reorder sets",
+      "changes": [
+        "Added word-set deletion and saved display ordering in Edit, so shared sets could be maintained as the collection grew."
+      ]
+    },
+    "ja": {
+      "title": "セットの削除と並び替え",
+      "changes": [
+        "編集画面から単語セットを削除し、表示順を保存できるようにしました。セットが増えても一覧を整理できます。"
+      ]
+    }
+  },
+  {
+    "version": "1.1.0",
+    "reconstructed": true,
+    "en": {
+      "title": "Flashcard study",
+      "changes": [
+        "Added flashcards in both directions. Cards flip on tap and support next/previous swipes; study setup offers original, reverse, or random order."
+      ]
+    },
+    "ja": {
+      "title": "単語カードの追加",
+      "changes": [
+        "両方向の単語カードを追加しました。タップで裏返し、左右のスワイプで前後に移動できます。開始時に登録順・逆順・ランダムを選べます。"
+      ]
+    }
+  },
+  {
+    "version": "1.0.2",
+    "reconstructed": true,
+    "en": {
+      "title": "A cleaner start and light/dark modes",
+      "changes": [
+        "Removed the example set and creation controls from Practice, moved transfers out of the study view, and added light/dark appearance. Modal focus styling was reduced."
+      ]
+    },
+    "ja": {
+      "title": "学習画面の整理とライト・ダーク",
+      "changes": [
+        "学習画面のサンプルや作成用ボタンを整理し、インポート・エクスポートを学習画面から移しました。ライト・ダーク表示に対応し、モーダルのフォーカス表示も調整しました。"
+      ]
+    }
+  },
+  {
+    "version": "1.0.1",
+    "reconstructed": true,
+    "en": {
+      "title": "Shared storage and protected editing",
+      "changes": [
+        "Added password-protected editing and shared word sets stored in D1 for Cloudflare Workers. Sets could be imported or exported individually as JSON, or together in a ZIP."
+      ]
+    },
+    "ja": {
+      "title": "共有保存と編集・入出力",
+      "changes": [
+        "Cloudflare Workers向けにD1への共有保存と、パスワードで保護した編集機能を用意しました。単語セットをJSONで扱い、複数セットのZIP入出力にも対応しました。"
+      ]
+    }
+  },
+  {
+    "version": "1.0.0",
+    "reconstructed": true,
+    "en": {
+      "title": "Initial vocabulary quizzes",
+      "changes": [
+        "Introduced word sets with English words, Japanese meanings, optional explanations, and titles. EN → JP used four choices, while JP → EN accepted a typed English answer.",
+        "Study setup offered 5, 10, 15, All, or a custom count, with shuffled questions without repetition and distractors drawn from other entries. English/Japanese interface text, answer sound effects, and a perfect-score confetti celebration were part of the initial feature set."
+      ]
+    },
+    "ja": {
+      "title": "英単語クイズの初版",
+      "changes": [
+        "英単語・日本語の意味・任意の解説・タイトルを持つ単語セットを用意しました。EN → JPは4択、JP → ENは英単語の入力で回答します。",
+        "出題数は5・10・15・すべて・カスタムから選び、同じ問題を重複させず、他の単語からダミー解答を用意します。日本語・英語の画面表示、正誤の効果音と全問正解時の紙吹雪も初期の機能に含めました。"
       ]
     }
   }

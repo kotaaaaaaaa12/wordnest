@@ -15,7 +15,7 @@ const source=(await readFile('public/app.js','utf8')).replace(/^import .*;\n/gm,
 const {version}=JSON.parse(await readFile('package.json','utf8'));
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 test('release notes have paired languages, unique descending versions, and the current package release',()=>{
-  assert.equal(releaseHistory[0].version,version);
+  assert.equal(releaseHistory[0].version,version);assert.ok(releaseHistory.some(release=>release.version==='1.0.0' && release.reconstructed));assert.ok(releaseHistory.filter(release=>release.reconstructed).length>=18);
   assert.equal(new Set(releaseHistory.map(release=>release.version)).size,releaseHistory.length);
   for(const [index,release] of releaseHistory.entries()){
     assert.match(release.version,/^\d+\.\d+\.\d+$/);
@@ -50,7 +50,7 @@ test('Changelog is public below Guide, opens on deep links despite set-loading f
       assert.equal(find('.history-version').textContent,`wordnest v${version}`);
       assert.equal(w.document.querySelectorAll('.history-entry').length,releaseHistory.length);
       assert.equal(w.document.querySelectorAll('.history-entry[open]').length,1);
-      assert.equal(find('.history-entry-title').textContent,releaseHistory[0][lang].title);
+      assert.equal(find('.history-entry-title').textContent,releaseHistory[0][lang].title);assert.equal(find('.history-reconstruction-note').textContent,messages[lang].historyReconstructionNote);assert.equal(w.document.querySelectorAll('.history-entry-reconstructed').length,releaseHistory.filter(release=>release.reconstructed).length);
       const older=w.document.querySelectorAll('.history-entry')[1];older.open=true;assert.ok(older.textContent.includes(releaseHistory[1][lang].changes[0]));older.open=false;
       await click('[data-action="settings"]');find('#theme-choice').value='dark';find('#theme-choice').dispatchEvent(new w.Event('change',{bubbles:true}));find('#dark-palette').value='graphite';find('#dark-palette').dispatchEvent(new w.Event('change',{bubbles:true}));
       const other=lang==='en'?'ja':'en';find('#settings-language').value=other;find('#settings-language').dispatchEvent(new w.Event('change',{bubbles:true}));await click('[data-dialog="cancel"]');

@@ -1,7 +1,7 @@
 const encoder=new TextEncoder(),day=86400000;
 export const managementSchema=[
  'CREATE TABLE IF NOT EXISTS management_audit (id INTEGER PRIMARY KEY AUTOINCREMENT,actor_id TEXT,actor_role TEXT,action TEXT NOT NULL,target_id TEXT,created_at TEXT NOT NULL)',
- 'CREATE TABLE IF NOT EXISTS learner_messages (id TEXT PRIMARY KEY,profile_id TEXT NOT NULL,message_ja TEXT NOT NULL,message_en TEXT NOT NULL,created_at TEXT NOT NULL,acknowledged_at TEXT)',
+ 'CREATE TABLE IF NOT EXISTS learner_messages (id TEXT PRIMARY KEY,profile_id TEXT NOT NULL,message_ja TEXT NOT NULL,message_en TEXT NOT NULL,created_at TEXT NOT NULL,acknowledged_at TEXT,kind TEXT NOT NULL DEFAULT \'message\')',
  'CREATE INDEX IF NOT EXISTS learner_message_owner ON learner_messages(profile_id,created_at)',
  'CREATE TABLE IF NOT EXISTS learner_removals (profile_id TEXT PRIMARY KEY,requested_at TEXT NOT NULL,delete_after TEXT NOT NULL,requested_by TEXT NOT NULL,nonce TEXT NOT NULL)',
  "CREATE TABLE IF NOT EXISTS managed_sessions (id TEXT PRIMARY KEY,kind TEXT NOT NULL,session_key TEXT NOT NULL,owner_id TEXT NOT NULL,label TEXT NOT NULL,created_at TEXT NOT NULL,last_seen TEXT NOT NULL,UNIQUE(kind,session_key))"
@@ -93,7 +93,7 @@ export async function publicManagementApi(request,db,readBody,accountId){
   return managementJson({error:'notFound'},404);
  }
  if(path==='/api/learner/notifications' && method==='GET'){
-  const rows=await db.prepare('SELECT id,message_ja AS messageJa,message_en AS messageEn,created_at AS createdAt FROM learner_messages WHERE (profile_id=? OR profile_id IN (SELECT profile_id FROM account_aliases WHERE account_id=?)) AND acknowledged_at IS NULL ORDER BY created_at,id LIMIT 20').bind(id,id).all();return managementJson({notifications:rows.results});
+  const rows=await db.prepare('SELECT id,kind,message_ja AS messageJa,message_en AS messageEn,created_at AS createdAt FROM learner_messages WHERE (profile_id=? OR profile_id IN (SELECT profile_id FROM account_aliases WHERE account_id=?)) AND acknowledged_at IS NULL ORDER BY created_at,id LIMIT 20').bind(id,id).all();return managementJson({notifications:rows.results});
  }
  const ack=path.match(/^\/api\/learner\/notifications\/([a-f0-9-]{36})\/ack$/);
  if(ack && method==='POST'){
@@ -133,7 +133,7 @@ export async function adminManagementApi(request,db,actor,readBody){
   if(method==='DELETE')return managementJson({ok:true,count:await revokeSessions(db,id,request,{includeAdmin:true})});
  }
  if(kind==='notifications'){
-  if(method==='GET')return managementJson({notifications:(await db.prepare('SELECT id,message_ja AS messageJa,message_en AS messageEn,created_at AS createdAt,acknowledged_at AS acknowledgedAt FROM learner_messages WHERE profile_id=? ORDER BY created_at DESC LIMIT 20').bind(id).all()).results});
+  if(method==='GET')return managementJson({notifications:(await db.prepare('SELECT id,kind,message_ja AS messageJa,message_en AS messageEn,created_at AS createdAt,acknowledged_at AS acknowledgedAt FROM learner_messages WHERE profile_id=? ORDER BY created_at DESC LIMIT 20').bind(id).all()).results});
   if(method==='POST'){
    const data=await readBody(request),clean=value=>{if(value===undefined)return '';if(typeof value!=='string' || value.length>1000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value))throw managementFail('managementInvalid');return value.trim();};
    const ja=clean(data?.messageJa),en=clean(data?.messageEn);if(!ja && !en)throw managementFail('managementInvalid');
