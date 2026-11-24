@@ -2,7 +2,7 @@ import { messages, translator } from './i18n.js?v=2.6.2-b17d83728acbc4d2';
 
 // Address of the companion Wordnest app that this deployment links to.
 // Replace it with the deployed address of the companion app when it is available.
-const COMPANION_URL = 'https://github.com/kotaaaaaaaaa12/wordnest2';
+const COMPANION_URL = 'wordnest2.what-the-fuck.men';
 
 // Interface text for the companion link, registered in the shared i18n catalogue.
 Object.assign(messages.en, {
